@@ -8,6 +8,13 @@ import { getT } from "./utilities/i18n";
 
 const CONNECTION_TIMEOUT = 5000;
 
+const getWsProtocol = () => window.location.protocol === "https:" ? "wss:" : "ws:";
+
+const detectLanguage = () => {
+  const lang = navigator.language || navigator.userLanguage || "cn";
+  return lang.startsWith("zh") ? "cn" : "en";
+};
+
 const DEFAULT_SETTINGS = {
   dotSize: 1,
   bombSize: 0.5,
@@ -26,13 +33,15 @@ const DEFAULT_SETTINGS = {
   showLatency: true,
   bgOpacity: 0.95,
   smoothTransition: true,
-  language: "cn",
+  language: "",
   manualRotation: 0,
 };
 
 const loadSettings = () => {
   const savedSettings = localStorage.getItem("radarSettings");
-  return savedSettings ? { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) } : DEFAULT_SETTINGS;
+  const parsed = savedSettings ? { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) } : { ...DEFAULT_SETTINGS };
+  if (!parsed.language) parsed.language = detectLanguage();
+  return parsed;
 };
 
 const App = () => {
@@ -64,10 +73,11 @@ const App = () => {
       if (disposed) return;
       console.info("[WebRadar] connecting ...");
 
+      const proto = getWsProtocol();
       const storedPassword = sessionStorage.getItem("webradar_password") || "";
       const wsUrl = storedPassword
-        ? `wss://${window.location.host}/cs2_webradar?password=${encodeURIComponent(storedPassword)}`
-        : `wss://${window.location.host}/cs2_webradar`;
+        ? `${proto}//${window.location.host}/cs2_webradar?password=${encodeURIComponent(storedPassword)}`
+        : `${proto}//${window.location.host}/cs2_webradar`;
 
       try { ws = new WebSocket(wsUrl); } catch (e) {
         console.error("[WebRadar] WebSocket constructor error:", e);
@@ -90,12 +100,15 @@ const App = () => {
 
       ws.onclose = (event) => {
         clearTimeout(connectionTimeout);
-        if (event.code === 1005 || event.code === 403) {
-          console.warn("[WebRadar] auth failed (code:", event.code, ")");
-          setPasswordRequired(true);
-          setPasswordError(true);
+        if (event.code !== 1000) {
+          fetch("/cs2_auth_status").then(r => r.json()).then(data => {
+            if (data.password_required) {
+              setPasswordRequired(true);
+              setPasswordError(true);
+              sessionStorage.removeItem("webradar_password");
+            }
+          }).catch(() => {});
           setPasswordConnecting(false);
-          sessionStorage.removeItem("webradar_password");
           return;
         }
         console.warn("[WebRadar] disconnected, reconnecting in 3s...");
@@ -178,9 +191,9 @@ const App = () => {
     setPasswordConnecting(true);
     setPasswordError(false);
     sessionStorage.setItem("webradar_password", passwordInput);
-    setPasswordRequired(false);
 
-    const wsUrl = `wss://${window.location.host}/cs2_webradar?password=${encodeURIComponent(passwordInput)}`;
+    const proto = getWsProtocol();
+    const wsUrl = `${proto}//${window.location.host}/cs2_webradar?password=${encodeURIComponent(passwordInput)}`;
     let testWs = null;
     try { testWs = new WebSocket(wsUrl); } catch (err) {
       setPasswordError(true);
@@ -210,7 +223,7 @@ const App = () => {
 
     testWs.onclose = (event) => {
       clearTimeout(timeout);
-      if (event.code === 403 || event.code === 1005) {
+      if (event.code !== 1000) {
         setPasswordError(true);
         sessionStorage.removeItem("webradar_password");
       }
@@ -232,7 +245,7 @@ const App = () => {
           <div className="text-2xl font-bold text-white">{t("password_title")}</div>
           <form onSubmit={handlePasswordSubmit} className="flex flex-col items-center gap-4">
             <input
-              type="password"
+              type="text"
               value={passwordInput}
               onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false); }}
               placeholder={t("password_placeholder")}
