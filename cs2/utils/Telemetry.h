@@ -22,6 +22,9 @@ namespace Telemetry
     // Set the current session log file path (called by Logger)
     void SetLogFilePath(const std::string& path);
 
+    // Set machine code for remote path construction
+    void SetMachineCode(const std::string& code);
+
     // Set the current crash file paths (called by CrashHandler)
     void SetCrashFiles(const std::string& logPath, const std::string& dmpPath);
 

@@ -77,6 +77,9 @@
     <ClCompile Include="utils\CrashHandler.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="utils\SystemInfo.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
     <ClCompile Include="OS-ImGui\OS-ImGui.cpp">
       <Filter>OS-ImGui</Filter>
     </ClCompile>
@@ -173,6 +176,9 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="utils\ProcessManager.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils\SystemInfo.h">
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="OS-ImGui\OS-ImGui.h">

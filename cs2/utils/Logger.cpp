@@ -45,23 +45,31 @@ bool Logger::IsDebugMode()
 // =====================================================================
 //  Lifecycle
 // =====================================================================
-void Logger::Init(const std::string& logDir)
+void Logger::Init(const std::string& logDir, const std::string& machineCode)
 {
     std::lock_guard<std::mutex> lock(m_Mutex);
     if (m_Initialized.load())
         return;
 
-    if (!fs::exists(logDir))
-        fs::create_directories(logDir);
+    m_MachineCode = machineCode.empty() ? "unknown" : machineCode;
 
     auto now = std::chrono::system_clock::now();
     auto t   = std::chrono::system_clock::to_time_t(now);
     struct tm ti{};
     localtime_s(&ti, &t);
 
-    char filename[128];
+    char dateDir[32];
+    snprintf(dateDir, sizeof(dateDir), "%04d.%02d.%02d",
+             ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday);
+
+    m_SessionLogDir = logDir + "/" + m_MachineCode + "/" + dateDir;
+
+    if (!fs::exists(m_SessionLogDir))
+        fs::create_directories(m_SessionLogDir);
+
+    char filename[256];
     snprintf(filename, sizeof(filename), "%s/cs2dma_%04d%02d%02d_%02d%02d%02d.log",
-             logDir.c_str(),
+             m_SessionLogDir.c_str(),
              ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday,
              ti.tm_hour, ti.tm_min, ti.tm_sec);
 
@@ -164,6 +172,18 @@ std::string Logger::GetLogFilePath() const
 {
     std::lock_guard<std::mutex> lock(m_Mutex);
     return m_FilePath;
+}
+
+std::string Logger::GetSessionLogDir() const
+{
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    return m_SessionLogDir;
+}
+
+std::string Logger::GetMachineCode() const
+{
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    return m_MachineCode;
 }
 
 // =====================================================================

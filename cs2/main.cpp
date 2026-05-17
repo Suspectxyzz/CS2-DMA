@@ -6,6 +6,7 @@
 #include "utils/Logger.h"
 #include "utils/CrashHandler.h"
 #include "utils/Telemetry.h"
+#include "utils/SystemInfo.h"
 
 #ifndef NTSTATUS
 typedef long NTSTATUS;
@@ -370,8 +371,12 @@ void main(HMODULE module) {
 	}
 
 	timeBeginPeriod(1);
-	Logger::Get().Init("logs");
+
+	std::string machineCode = SystemInfo::GetMachineCode();
+
+	Logger::Get().Init("logs", machineCode);
 	CrashHandler::Install("logs");
+	Telemetry::SetMachineCode(machineCode);
 	Telemetry::Init();
 
 	LOG_INFO("DMA", "CS2-DMA starting...");

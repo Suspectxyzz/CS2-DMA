@@ -43,7 +43,7 @@ public:
     static Logger& Get();
 
     // Lifecycle
-    void Init(const std::string& logDir = "logs");
+    void Init(const std::string& logDir = "logs", const std::string& machineCode = "");
     void Shutdown();
 
     // Debug mode — controls whether TRACE/DEBUG level logs are emitted
@@ -64,6 +64,12 @@ public:
     // Current log file path (for crash handler reference)
     std::string GetLogFilePath() const;
 
+    // Session log directory (e.g., "logs/A1B2C3D4/2026.05.17")
+    std::string GetSessionLogDir() const;
+
+    // Machine code used for log directory
+    std::string GetMachineCode() const;
+
 private:
     Logger() = default;
     ~Logger();
@@ -81,6 +87,8 @@ private:
     mutable std::mutex  m_Mutex;
     std::ofstream       m_File;
     std::string         m_FilePath;
+    std::string         m_SessionLogDir;
+    std::string         m_MachineCode;
     std::atomic<bool>   m_Initialized{ false };
 
     static inline std::atomic<bool> s_DebugMode{ false };

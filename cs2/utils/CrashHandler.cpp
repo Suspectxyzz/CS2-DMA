@@ -45,6 +45,14 @@ namespace fs = std::filesystem;
 // =====================================================================
 static std::string g_CrashDir = "logs";
 
+static std::string GetCrashDir()
+{
+    std::string sessionDir = Logger::Get().GetSessionLogDir();
+    if (!sessionDir.empty())
+        return sessionDir;
+    return g_CrashDir;
+}
+
 // =====================================================================
 //  Helpers
 // =====================================================================
@@ -71,9 +79,9 @@ static std::string CrashFilePrefix()
     struct tm ti{};
     localtime_s(&ti, &t);
 
-    char buf[64];
+    char buf[128];
     snprintf(buf, sizeof(buf), "%s/crash_%04d%02d%02d_%02d%02d%02d",
-             g_CrashDir.c_str(),
+             GetCrashDir().c_str(),
              ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday,
              ti.tm_hour, ti.tm_min, ti.tm_sec);
     return buf;
@@ -487,8 +495,9 @@ LONG WINAPI CrashHandler::SehFilter(EXCEPTION_POINTERS* pExInfo)
     std::string dmpPath = prefix + ".dmp";
 
     // Ensure crash dir exists
-    if (!fs::exists(g_CrashDir))
-        fs::create_directories(g_CrashDir);
+    std::string crashDir = GetCrashDir();
+    if (!fs::exists(crashDir))
+        fs::create_directories(crashDir);
 
     // Write MiniDump first (most critical)
     bool dmpOk = WriteMiniDump(dmpPath, pExInfo);
@@ -535,8 +544,9 @@ void CrashHandler::TerminateHandler()
     std::string prefix = CrashFilePrefix();
     std::string logPath = prefix + "_terminate.log";
 
-    if (!fs::exists(g_CrashDir))
-        fs::create_directories(g_CrashDir);
+    std::string crashDir = GetCrashDir();
+    if (!fs::exists(crashDir))
+        fs::create_directories(crashDir);
 
     WriteCrashReport(logPath, nullptr);
 
