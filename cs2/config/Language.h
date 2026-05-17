@@ -92,6 +92,12 @@ public:
 	std::string header_pending;
 	std::string header_savededitor;
 	std::string header_spectator;
+	std::string header_bomb;
+	std::string visuals_bombesp;
+	std::string visuals_bombplanted;
+	std::string visuals_bombdefusing;
+	std::string visuals_bombcarrier;
+	std::string visuals_bombdropped;
 
 	// Visuals Extra
 	std::string visuals_thickness;
@@ -244,6 +250,7 @@ public:
 
 	// Hotkey Bindings
 	std::string hotkey_none;
+	std::string hotkey_cleartip;
 	std::string hotkey_header_esp;
 	std::string hotkey_header_features;
 	std::string hotkey_header_actions;
@@ -269,26 +276,27 @@ public:
 		this->tab_settings = "Settings";
 		this->tab_config = "Config";
 		this->tab_grenade = "Grenade";
-		this->tab_fusion = "Fusion";
+		this->tab_fusion = "Crosshair";
 		this->tab_hotkeys = "Hotkeys";
 
 		this->visuals_showbox = "Show Box";
 		this->visuals_boxcolor = "Box Color";
 		this->visuals_boxtype = "Box Type";
-		this->visuals_showbone = "Bones";
+		this->visuals_showbone = "Show Bones";
 		this->visuals_bonecolor = "Bones Color";
-		this->visuals_showeyeray = "Eye Ray";
+		this->visuals_showeyeray = "Show Eye Ray";
 		this->visuals_eyeraycolor = "Eye Ray Color";
-		this->visuals_showbar = "Health Bar";
-		this->visuals_weaponesp = "Weapon";
-		this->visuals_distance = "Distance";
-		this->visuals_name = "Name";
-		this->visuals_line = "Lines to Player";
-		this->visuals_linecolor = "Lines color";
+		this->visuals_showbar = "Show Health Bar";
+		this->visuals_barpos = "Bar Position";
+		this->visuals_weaponesp = "Show Weapon";
+		this->visuals_distance = "Show Distance";
+		this->visuals_name = "Show Name";
+		this->visuals_line = "Snapline";
+		this->visuals_linecolor = "Snapline Color";
 
-		this->utilities_teamcheck = "Team Check";
+		this->utilities_teamcheck = "Hide Teammates";
 		this->utilities_closehack = "Close Software";
-		this->utilities_reloadhack = "Reload Game (Click if not working)";
+		this->utilities_reloadhack = "Reconnect";
 		this->utilities_language = "Select Language";
 		this->utilities_help = "Help";
 
@@ -337,7 +345,7 @@ public:
 		this->grenade_angle = "Angle";
 		this->grenade_recorded_at = "Recorded at";
 
-		this->header_playerbox = "Player Box / ESP";
+		this->header_playerbox = "Player Box";
 		this->header_skeleton = "Skeleton / Eye Ray";
 		this->header_health = "Health & Armor";
 		this->header_info = "Info & Text";
@@ -348,6 +356,12 @@ public:
 		this->header_pending = "Pending Throws";
 		this->header_savededitor = "Saved Throws Editor";
 		this->header_spectator = "Spectator List";
+		this->header_bomb = "C4 / Bomb";
+		this->visuals_bombesp = "Show Bomb ESP";
+		this->visuals_bombplanted = "Planted";
+		this->visuals_bombdefusing = "Defusing";
+		this->visuals_bombcarrier = "Carrier";
+		this->visuals_bombdropped = "Dropped";
 
 		this->visuals_thickness = "Thickness";
 		this->visuals_rounding = "Rounding";
@@ -462,6 +476,7 @@ public:
 		this->webradar_password = "Password";
 
 		this->hotkey_none = "None";
+		this->hotkey_cleartip = "Right-click to clear";
 		this->hotkey_header_esp = "ESP Toggles";
 		this->hotkey_header_features = "Feature Toggles";
 		this->hotkey_header_actions = "Actions";
@@ -473,18 +488,18 @@ public:
 		this->hotkey_action_labels[5] = "Distance";
 		this->hotkey_action_labels[6] = "Eye Ray";
 		this->hotkey_action_labels[7] = "Snapline";
-		this->hotkey_action_labels[8] = "Bomb ESP";
+		this->hotkey_action_labels[8] = "C4 ESP";
 		this->hotkey_action_labels[9] = "Projectile ESP";
 		this->hotkey_action_labels[10] = "Spectator List";
-		this->hotkey_action_labels[11] = "Team Check";
+		this->hotkey_action_labels[11] = "Hide Teammates";
 		this->hotkey_action_labels[12] = "Web Radar";
 		this->hotkey_action_labels[13] = "Safe Zone";
-		this->hotkey_action_labels[14] = "Crosshair";
-		this->hotkey_action_labels[15] = "Reload Game";
+		this->hotkey_action_labels[14] = "Crosshair Overlay";
+		this->hotkey_action_labels[15] = "Reconnect";
 
 		this->header_crosshair = "Crosshair Overlay";
 		this->crosshair_enable = "Enable Crosshair";
-		this->crosshair_size = "Arm Length";
+		this->crosshair_size = "Size";
 		this->crosshair_thickness = "Thickness";
 		this->crosshair_gap = "Gap";
 		this->crosshair_style = "Style";
@@ -518,7 +533,7 @@ public:
 		this->tab_settings = u8"\u8bbe\u7f6e";
 		this->tab_config = u8"\u914d\u7f6e";
 		this->tab_grenade = u8"\u6295\u63b7\u7269";
-		this->tab_fusion = u8"\u878d\u5408\u5668\u4f18\u5316";
+		this->tab_fusion = u8"\u51c6\u661f";
 		this->tab_hotkeys = u8"\u5feb\u6377\u952e";
 
 		this->visuals_showbox = u8"\u663e\u793a\u900f\u89c6\u6846";
@@ -529,16 +544,17 @@ public:
 		this->visuals_showeyeray = u8"\u663e\u793a\u89c6\u7ebf";
 		this->visuals_eyeraycolor = u8"\u89c6\u7ebf\u989c\u8272";
 		this->visuals_showbar = u8"\u663e\u793a\u751f\u547d\u6761";
+		this->visuals_barpos = u8"\u8840\u6761\u4f4d\u7f6e";
 		this->visuals_weaponesp = u8"\u663e\u793a\u6b66\u5668";
 		this->visuals_distance = u8"\u663e\u793a\u8ddd\u79bb";
 		this->visuals_name = u8"\u663e\u793a\u540d\u79f0";
-		this->visuals_line = u8"\u663e\u793a\u6307\u5411\u73a9\u5bb6\u7684\u7ebf";
-		this->visuals_linecolor = u8"\u7ebf\u989c\u8272";
+		this->visuals_line = u8"\u6307\u793a\u7ebf";
+		this->visuals_linecolor = u8"\u6307\u793a\u7ebf\u989c\u8272";
 
-		this->utilities_teamcheck = u8"\u961f\u4f0d\u68c0\u67e5";
+		this->utilities_teamcheck = u8"\u9690\u85cf\u53cb\u519b";
 		this->utilities_closehack = u8"\u5173\u95ed\u8f6f\u4ef6";
 		this->utilities_language = u8"\u9009\u62e9\u8bed\u8a00";
-		this->utilities_reloadhack = u8"\u91cd\u65b0\u8bfb\u53d6\u6e38\u620f(\u65e0\u6548\u65f6\u70b9\u6211)";
+		this->utilities_reloadhack = u8"\u91cd\u65b0\u8fde\u63a5";
 		this->utilities_help = u8"\u5e2e\u52a9";
 
 		this->config_newconfig = u8"\u914d\u7f6e\u540d\u79f0";
@@ -580,7 +596,7 @@ public:
 		this->grenade_throw_type = u8"\u6295\u63b7\u7c7b\u578b";
 		this->grenade_save_throws = u8"\u4fdd\u5b58\u5230\u6587\u4ef6";
 		this->grenade_delete = u8"\u5220\u9664";
-		this->grenade_clear_all = u8"\u6e05\u7a81\u6240\u6709";
+		this->grenade_clear_all = u8"\u6e05\u7a7a\u6240\u6709";
 		this->grenade_no_pending = u8"\u6ca1\u6709\u5f85\u547d\u540d\u70b9\u4f4d";
 		this->grenade_position = u8"\u4f4d\u7f6e";
 		this->grenade_angle = u8"\u89d2\u5ea6";
@@ -590,13 +606,19 @@ public:
 		this->header_skeleton = u8"\u9aa8\u9abc / \u89c6\u7ebf";
 		this->header_health = u8"\u751f\u547d\u503c & \u62a4\u7532";
 		this->header_info = u8"\u4fe1\u606f & \u6587\u5b57";
-		this->header_snapline = u8"\u5c04\u7ebf";
+		this->header_snapline = u8"\u6307\u793a\u7ebf";
 		this->header_general = u8"\u5e38\u89c4";
 		this->header_system = u8"\u7cfb\u7edf";
 		this->header_recording = u8"\u5f55\u5236 / \u5feb\u6377\u952e";
 		this->header_pending = u8"\u5f85\u547d\u540d\u6295\u63b7\u70b9";
 		this->header_savededitor = u8"\u5df2\u4fdd\u5b58\u6295\u63b7\u70b9\u7f16\u8f91";
 		this->header_spectator = u8"\u89c2\u4f17\u5217\u8868";
+		this->header_bomb = u8"C4 \u70b8\u5f39";
+		this->visuals_bombesp = u8"\u663e\u793a\u70b8\u5f39ESP";
+		this->visuals_bombplanted = u8"\u5df2\u5b89\u88c5";
+		this->visuals_bombdefusing = u8"\u62c6\u9664\u4e2d";
+		this->visuals_bombcarrier = u8"\u643a\u5e26\u8005";
+		this->visuals_bombdropped = u8"\u5df2\u6389\u843d";
 
 		this->visuals_thickness = u8"\u7c97\u7ec6";
 		this->visuals_rounding = u8"\u5706\u89d2";
@@ -711,6 +733,7 @@ public:
 		this->webradar_password = u8"\u5bc6\u7801";
 
 		this->hotkey_none = u8"\u65e0";
+		this->hotkey_cleartip = u8"\u53f3\u952e\u6e05\u9664";
 		this->hotkey_header_esp = u8"ESP \u5f00\u5173";
 		this->hotkey_header_features = u8"\u529f\u80fd\u5f00\u5173";
 		this->hotkey_header_actions = u8"\u64cd\u4f5c";
@@ -721,19 +744,19 @@ public:
 		this->hotkey_action_labels[4] = u8"\u73a9\u5bb6\u540d\u79f0";
 		this->hotkey_action_labels[5] = u8"\u8ddd\u79bb";
 		this->hotkey_action_labels[6] = u8"\u89c6\u7ebf";
-		this->hotkey_action_labels[7] = u8"\u5c04\u7ebf";
-		this->hotkey_action_labels[8] = u8"\u70b8\u5f39 ESP";
+		this->hotkey_action_labels[7] = u8"\u6307\u793a\u7ebf";
+		this->hotkey_action_labels[8] = u8"C4 ESP";
 		this->hotkey_action_labels[9] = u8"\u6295\u63b7\u7269 ESP";
 		this->hotkey_action_labels[10] = u8"\u89c2\u4f17\u5217\u8868";
-		this->hotkey_action_labels[11] = u8"\u961f\u4f0d\u68c0\u67e5";
+		this->hotkey_action_labels[11] = u8"\u9690\u85cf\u53cb\u519b";
 		this->hotkey_action_labels[12] = u8"\u7f51\u9875\u96f7\u8fbe";
-		this->hotkey_action_labels[13] = u8"\u5b89\u5168\u533a";
-		this->hotkey_action_labels[14] = u8"\u51c6\u661f";
-		this->hotkey_action_labels[15] = u8"\u91cd\u65b0\u52a0\u8f7d";
+		this->hotkey_action_labels[13] = u8"\u51c6\u661f\u5b89\u5168\u533a";
+		this->hotkey_action_labels[14] = u8"\u51c6\u661f\u8986\u76d6\u5c42";
+		this->hotkey_action_labels[15] = u8"\u91cd\u65b0\u8fde\u63a5";
 
 		this->header_crosshair = u8"\u51c6\u661f\u8986\u76d6\u5c42";
 		this->crosshair_enable = u8"\u542f\u7528\u51c6\u661f";
-		this->crosshair_size = u8"\u81c2\u957f";
+		this->crosshair_size = u8"\u5927\u5c0f";
 		this->crosshair_thickness = u8"\u7c97\u7ec6";
 		this->crosshair_gap = u8"\u95f4\u8ddd";
 		this->crosshair_style = u8"\u6837\u5f0f";

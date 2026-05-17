@@ -115,7 +115,6 @@ namespace OSImGui
         ImGui::InvisibleButton(str_id, ImVec2(Width, Height));
         if (ImGui::IsItemClicked())
             *v = !(*v);
-        // 组件移动动画
         float t = *v ? 1.0f : 0.f;
         ImGuiContext& g = *GImGui;
         float AnimationSpeed = 0.08f;
@@ -124,16 +123,14 @@ namespace OSImGui
             float T_Animation = ImSaturate(g.LastActiveIdTimer / AnimationSpeed);
             t = *v ? (T_Animation) : (1.0f - T_Animation);
         }
-        // 鼠标悬停颜色
-        ImU32 Color;
-        if (ImGui::IsItemHovered())
-            Color = ImGui::GetColorU32(ImLerp(ImVec4(0.65f, 0.12f, 0.12f, 1.0f), ImVec4(0.16f, 0.39f, 0.18f, 1.000f), t));
-        else
-            Color = ImGui::GetColorU32(ImLerp(ImVec4(0.76f, 0.14f, 0.14f, 1.0f), ImVec4(0.17f, 0.45f, 0.18f, 1.000f), t));
-        // 组件绘制
+        ImVec4 trackOff = ImGui::IsItemHovered() ? ImVec4(0.22f, 0.22f, 0.29f, 1.0f) : ImVec4(0.165f, 0.165f, 0.227f, 1.0f);
+        ImVec4 trackOn  = ImGui::IsItemHovered() ? ImVec4(0.608f, 0.490f, 1.0f, 1.0f) : ImVec4(0.486f, 0.361f, 0.988f, 1.0f);
+        ImU32 Color = ImGui::GetColorU32(ImLerp(trackOff, trackOn, t));
         DrawList->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + Width, p.y + Height), Color, Height);
-        DrawList->AddCircleFilled(ImVec2(p.x + Radius + t * (Width - Radius * 2) + (t == 0 ? 2 : -2), p.y + Radius + 2), Radius, IM_COL32(255, 255, 255, 255), 360);
-        DrawList->AddCircle(ImVec2(p.x + Radius + t * (Width - Radius * 2) + (t == 0 ? 2 : -2), p.y + Radius + 2), Radius, IM_COL32(20, 20, 20, 80), 360, 1);
+        float knobX = p.x + Radius + t * (Width - Radius * 2) + (t == 0 ? 2 : -2);
+        float knobY = p.y + Radius + 2;
+        DrawList->AddCircleFilled(ImVec2(knobX + 1, knobY + 1), Radius, IM_COL32(0, 0, 0, 60), 24);
+        DrawList->AddCircleFilled(ImVec2(knobX, knobY), Radius, IM_COL32(255, 255, 255, 255), 24);
 
         ImGui::SameLine();
         ImGui::Text(str_id);
@@ -150,25 +147,22 @@ namespace OSImGui
         ImGui::InvisibleButton(str_id, ImVec2(Width, Height));
         if (ImGui::IsItemClicked())
             *v = !(*v);
-        // 组件移动动画
         float t = *v ? 1.0f : 0.f;
         ImGuiContext& g = *GImGui;
-        float AnimationSpeed = 0.15f;
+        float AnimationSpeed = 0.12f;
         if (g.LastActiveId == g.CurrentWindow->GetID(str_id))
         {
             float T_Animation = ImSaturate(g.LastActiveIdTimer / AnimationSpeed);
             t = *v ? (T_Animation) : (1.0f - T_Animation);
         }
-        // 鼠标悬停颜色
-        ImU32 Color;
-        if (ImGui::IsItemHovered())
-            Color = ImGui::GetColorU32(ImLerp(ImVec4(0.08f, 0.18f, 0.21f, 1.0f), ImVec4(0.10f, 0.48f, 0.68f, 1.000f), t));
-        else
-            Color = ImGui::GetColorU32(ImLerp(ImVec4(0.12f, 0.22f, 0.25f, 1.0f), ImVec4(0.14f, 0.52f, 0.72f, 1.000f), t));
-        // 组件绘制
-        DrawList->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + Width, p.y + Height), Color, 360);
-        DrawList->AddCircleFilled(ImVec2(p.x + Radius + 2 + t * (Width - (Radius + 2) * 2), p.y + Radius + 2), Radius + 2, IM_COL32(255, 255, 255, 255), 360);
-        DrawList->AddCircleFilled(ImVec2(p.x + Radius + t * (Width - Radius * 2) + (t == 0 ? 2 : -2), p.y + Radius + 2), Radius, IM_COL32(230, 230, 230, 255), 360);
+        ImVec4 trackOff = ImGui::IsItemHovered() ? ImVec4(0.22f, 0.22f, 0.29f, 1.0f) : ImVec4(0.165f, 0.165f, 0.227f, 1.0f);
+        ImVec4 trackOn  = ImGui::IsItemHovered() ? ImVec4(0.608f, 0.490f, 1.0f, 1.0f) : ImVec4(0.486f, 0.361f, 0.988f, 1.0f);
+        ImU32 Color = ImGui::GetColorU32(ImLerp(trackOff, trackOn, t));
+        DrawList->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + Width, p.y + Height), Color, Height);
+        float knobX = p.x + Radius + t * (Width - Radius * 2) + (t == 0 ? 2 : -2);
+        float knobY = p.y + Radius + 2;
+        DrawList->AddCircleFilled(ImVec2(knobX + 1, knobY + 1), Radius, IM_COL32(0, 0, 0, 60), 24);
+        DrawList->AddCircleFilled(ImVec2(knobX, knobY), Radius, IM_COL32(255, 255, 255, 255), 24);
         if (*v)
             DrawList->AddText(ImVec2(p.x + 45, p.y + 2), ImColor{ 255,255,255,255 }, str_id);
         else
@@ -182,13 +176,10 @@ namespace OSImGui
         ImDrawList* DrawList = ImGui::GetWindowDrawList();
         float Height = ImGui::GetFrameHeight();
         float Width = Height;
-        float Left = 8;
-        float Right = Left * 1.5f;
         ImGui::InvisibleButton(str_id, ImVec2(Width, Height));
 
         if (ImGui::IsItemClicked())
             *v = !(*v);
-        // 组件移动动画
         float t = *v ? 1.0f : 0.f;
         ImGuiContext& g = *GImGui;
         float AnimationSpeed = 0.12f;
@@ -197,25 +188,18 @@ namespace OSImGui
             float T_Animation = ImSaturate(g.LastActiveIdTimer / AnimationSpeed);
             t = *v ? (T_Animation) : (1.0f - T_Animation);
         }
-        // 鼠标悬停颜色
-        ImU32 Color;
-        ImU32 TickColor1, TickColor2;
-        if (ImGui::IsItemHovered())
-            Color = ImGui::GetColorU32(ImLerp(ImVec4(0.75f, 0.75f, 0.75f, 1.0f), ImVec4(0.05f, 0.85f, 0.25f, 1.000f), t));
-        else
-            Color = ImGui::GetColorU32(ImLerp(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), ImVec4(0.1f, 0.9f, 0.3f, 1.000f), t));
+        ImVec4 boxOff = ImGui::IsItemHovered() ? ImVec4(0.22f, 0.22f, 0.29f, 1.0f) : ImVec4(0.165f, 0.165f, 0.227f, 1.0f);
+        ImVec4 boxOn  = ImGui::IsItemHovered() ? ImVec4(0.608f, 0.490f, 1.0f, 1.0f) : ImVec4(0.486f, 0.361f, 0.988f, 1.0f);
+        ImU32 Color = ImGui::GetColorU32(ImLerp(boxOff, boxOn, t));
 
-        TickColor1 = IM_COL32(255, 255, 255, 255 * t);
-        TickColor2 = IM_COL32(180, 180, 180, 255 * (1 - t));
+        ImU32 TickColor1 = IM_COL32(255, 255, 255, (int)(255 * t));
+        ImU32 TickColor2 = IM_COL32(180, 180, 180, (int)(255 * (1 - t)));
 
         float Size = Width;
         float Scale = (float)(Size) / 20.0f;
-        // 底色
         DrawList->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + Width, p.y + Height), Color, 5, 15);
-        // 选中勾
         DrawList->AddLine(ImVec2(p.x + 3 * Scale, p.y + Size / 2 - 2 * Scale), ImVec2(p.x + Size / 2 - 1 * Scale, p.y + Size - 5 * Scale), TickColor1, 3 * Scale);
         DrawList->AddLine(ImVec2(p.x + Size - 3 * Scale - 1, p.y + 3 * Scale + 1), ImVec2(p.x + Size / 2 - 1 * Scale, p.y + Size - 5 * Scale), TickColor1, 3 * Scale);
-        // 未选中勾
         DrawList->AddLine(ImVec2(p.x + 3 * Scale, p.y + Size / 2 - 2 * Scale), ImVec2(p.x + Size / 2 - 1 * Scale, p.y + Size - 5 * Scale), TickColor2, 3 * Scale);
         DrawList->AddLine(ImVec2(p.x + Size - 3 * Scale - 1, p.y + 3 * Scale + 1), ImVec2(p.x + Size / 2 - 1 * Scale, p.y + Size - 5 * Scale), TickColor2, 3 * Scale);
         ImGui::SameLine();
@@ -232,7 +216,6 @@ namespace OSImGui
 
         if (ImGui::IsItemClicked())
             *v = !(*v);
-        // 组件动画
         float t = *v ? 1.0f : 0.f;
         ImGuiContext& g = *GImGui;
         float AnimationSpeed = 0.12f;
@@ -241,17 +224,14 @@ namespace OSImGui
             float T_Animation = ImSaturate(g.LastActiveIdTimer / AnimationSpeed);
             t = *v ? (T_Animation) : (1.0f - T_Animation);
         }
-        // bg 0.74 0.72 0.81-> 0.69 0.77 0.76
-        ImU32 BgColor;
-        if (ImGui::IsItemHovered())
-            BgColor = ImGui::GetColorU32(ImVec4(0.69f, 0.69f, 0.69f, 1.0f));
-        else
-            BgColor = ImGui::GetColorU32(ImVec4(0.74f, 0.74f, 0.74f, 1.0f));
-        DrawList->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + Width, p.y + Width), BgColor);
+        ImVec4 boxOff = ImGui::IsItemHovered() ? ImVec4(0.22f, 0.22f, 0.29f, 1.0f) : ImVec4(0.165f, 0.165f, 0.227f, 1.0f);
+        ImVec4 boxOn  = ImGui::IsItemHovered() ? ImVec4(0.608f, 0.490f, 1.0f, 1.0f) : ImVec4(0.486f, 0.361f, 0.988f, 1.0f);
+        ImU32 BgColor = ImGui::GetColorU32(ImLerp(boxOff, boxOn, t));
+        DrawList->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + Width, p.y + Width), BgColor, 3);
 
         ImU32 FrColor;
-        FrColor = ImGui::GetColorU32(ImVec4(0.f, 0.f, 0.f, 0.5f * t));
-        DrawList->AddRectFilled(ImVec2(p.x + Width / 5, p.y + Width / 5), ImVec2(p.x + Width - Width / 5, p.y + Width - Width / 5), FrColor);
+        FrColor = ImGui::GetColorU32(ImVec4(1.f, 1.f, 1.f, 0.7f * t));
+        DrawList->AddRectFilled(ImVec2(p.x + Width / 5, p.y + Width / 5), ImVec2(p.x + Width - Width / 5, p.y + Width - Width / 5), FrColor, 2);
 
         ImGui::SameLine();
         ImGui::Text(str_id);

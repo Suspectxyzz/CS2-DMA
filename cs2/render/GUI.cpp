@@ -2,6 +2,7 @@
 #include "Render.h"
 #include "GrenadeHelper.h"
 #include "WebRadar.h"
+#include "UITheme.h"
 #include "../config/ConfigMenu.h"
 #include "../config/ConfigSaver.h"
 #include "../utils/Logger.h"
@@ -9,114 +10,106 @@
 #include <thread>
 
 // ============================================================================
-// Color Scheme: Dark Purple-Blue Accent
-// Background: #141419 | Card: #1a1a24 | Accent: #7c5cfc | Active: #9b7dff
+// Color Scheme: Dark Purple-Blue Accent (UITheme)
+// Background: #0F0F14 | Surface: #16161E | Accent: #7c5cfc | Active: #9b7dff
 // ============================================================================
 
 static void setStyles() {
 	ImGuiStyle* style = &ImGui::GetStyle();
 
-	style->WindowPadding = ImVec2(8, 8);
-	style->WindowRounding = 6.0f;
-	style->FramePadding = ImVec2(6, 4);
-	style->FrameRounding = 4.0f;
-	style->ItemSpacing = ImVec2(8, 6);
-	style->ItemInnerSpacing = ImVec2(6, 4);
+	style->WindowPadding = UITheme::WindowPadding;
+	style->WindowRounding = UITheme::RadiusLG;
+	style->FramePadding = UITheme::FramePadding;
+	style->FrameRounding = UITheme::RadiusSM;
+	style->ItemSpacing = UITheme::ItemSpacing;
+	style->ItemInnerSpacing = UITheme::ItemInnerSpacing;
 	style->IndentSpacing = 16.0f;
 	style->ScrollbarSize = 12.0f;
-	style->ScrollbarRounding = 6.0f;
+	style->ScrollbarRounding = UITheme::RadiusMD;
 	style->GrabMinSize = 6.0f;
-	style->GrabRounding = 3.0f;
-	style->TabRounding = 4.0f;
-	style->ChildRounding = 4.0f;
-	style->PopupRounding = 4.0f;
+	style->GrabRounding = UITheme::RadiusSM;
+	style->TabRounding = UITheme::RadiusSM;
+	style->ChildRounding = UITheme::RadiusSM;
+	style->PopupRounding = UITheme::RadiusSM;
 
-	// Main background
-	style->Colors[ImGuiCol_WindowBg]           = ImVec4(0.078f, 0.078f, 0.098f, 1.00f);
+	style->Colors[ImGuiCol_WindowBg]           = UITheme::Background;
 	style->Colors[ImGuiCol_ChildBg]            = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-	style->Colors[ImGuiCol_PopupBg]            = ImVec4(0.09f, 0.09f, 0.11f, 0.98f);
-	style->Colors[ImGuiCol_Border]             = ImVec4(0.20f, 0.20f, 0.28f, 0.50f);
+	style->Colors[ImGuiCol_PopupBg]            = ImVec4(0.07f, 0.07f, 0.09f, 0.98f);
+	style->Colors[ImGuiCol_Border]             = UITheme::Border;
 	style->Colors[ImGuiCol_BorderShadow]       = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-	// Text
-	style->Colors[ImGuiCol_Text]               = ImVec4(0.88f, 0.88f, 0.92f, 1.00f);
-	style->Colors[ImGuiCol_TextDisabled]        = ImVec4(0.40f, 0.40f, 0.48f, 1.00f);
+	style->Colors[ImGuiCol_Text]               = UITheme::TextPrimary;
+	style->Colors[ImGuiCol_TextDisabled]        = UITheme::TextDisabled;
 
-	// Frame (inputs, combos)
-	style->Colors[ImGuiCol_FrameBg]            = ImVec4(0.11f, 0.11f, 0.15f, 1.00f);
-	style->Colors[ImGuiCol_FrameBgHovered]     = ImVec4(0.16f, 0.16f, 0.22f, 1.00f);
-	style->Colors[ImGuiCol_FrameBgActive]      = ImVec4(0.20f, 0.20f, 0.28f, 1.00f);
+	style->Colors[ImGuiCol_FrameBg]            = UITheme::FrameBg;
+	style->Colors[ImGuiCol_FrameBgHovered]     = UITheme::FrameBgHovered;
+	style->Colors[ImGuiCol_FrameBgActive]      = UITheme::FrameBgActive;
 
-	// Title
-	style->Colors[ImGuiCol_TitleBg]            = ImVec4(0.078f, 0.078f, 0.098f, 1.00f);
-	style->Colors[ImGuiCol_TitleBgActive]      = ImVec4(0.078f, 0.078f, 0.098f, 1.00f);
-	style->Colors[ImGuiCol_TitleBgCollapsed]   = ImVec4(0.078f, 0.078f, 0.098f, 0.75f);
+	style->Colors[ImGuiCol_TitleBg]            = UITheme::Background;
+	style->Colors[ImGuiCol_TitleBgActive]      = UITheme::Background;
+	style->Colors[ImGuiCol_TitleBgCollapsed]   = ImVec4(UITheme::Background.x, UITheme::Background.y, UITheme::Background.z, 0.75f);
 
-	// Button - Accent purple
-	style->Colors[ImGuiCol_Button]             = ImVec4(0.486f, 0.361f, 0.988f, 0.60f);
-	style->Colors[ImGuiCol_ButtonHovered]      = ImVec4(0.608f, 0.490f, 1.00f, 0.80f);
-	style->Colors[ImGuiCol_ButtonActive]       = ImVec4(0.486f, 0.361f, 0.988f, 1.00f);
+	style->Colors[ImGuiCol_Button]             = UITheme::AccentBg60;
+	style->Colors[ImGuiCol_ButtonHovered]      = ImVec4(UITheme::AccentHover.x, UITheme::AccentHover.y, UITheme::AccentHover.z, 0.80f);
+	style->Colors[ImGuiCol_ButtonActive]       = UITheme::Accent;
 
-	// Header (collapsing headers)
-	style->Colors[ImGuiCol_Header]             = ImVec4(0.14f, 0.14f, 0.19f, 1.00f);
-	style->Colors[ImGuiCol_HeaderHovered]      = ImVec4(0.486f, 0.361f, 0.988f, 0.40f);
-	style->Colors[ImGuiCol_HeaderActive]       = ImVec4(0.486f, 0.361f, 0.988f, 0.60f);
+	style->Colors[ImGuiCol_Header]             = UITheme::Surface;
+	style->Colors[ImGuiCol_HeaderHovered]      = UITheme::AccentBg40;
+	style->Colors[ImGuiCol_HeaderActive]       = UITheme::AccentBg60;
 
-	// Tabs
-	style->Colors[ImGuiCol_Tab]                = ImVec4(0.11f, 0.11f, 0.15f, 1.00f);
-	style->Colors[ImGuiCol_TabHovered]         = ImVec4(0.486f, 0.361f, 0.988f, 0.60f);
-	style->Colors[ImGuiCol_TabActive]          = ImVec4(0.486f, 0.361f, 0.988f, 0.80f);
+	style->Colors[ImGuiCol_Tab]                = UITheme::Surface;
+	style->Colors[ImGuiCol_TabHovered]         = UITheme::AccentBg60;
+	style->Colors[ImGuiCol_TabActive]          = UITheme::AccentBg80;
 
-	// Scrollbar
-	style->Colors[ImGuiCol_ScrollbarBg]        = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+	style->Colors[ImGuiCol_ScrollbarBg]        = ImVec4(0.06f, 0.06f, 0.08f, 1.00f);
 	style->Colors[ImGuiCol_ScrollbarGrab]      = ImVec4(0.30f, 0.30f, 0.38f, 0.60f);
 	style->Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.50f, 0.80f);
-	style->Colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.486f, 0.361f, 0.988f, 1.00f);
+	style->Colors[ImGuiCol_ScrollbarGrabActive]  = UITheme::Accent;
 
-	// Checkbox / Slider
-	style->Colors[ImGuiCol_CheckMark]          = ImVec4(0.608f, 0.490f, 1.00f, 1.00f);
-	style->Colors[ImGuiCol_SliderGrab]         = ImVec4(0.486f, 0.361f, 0.988f, 0.80f);
-	style->Colors[ImGuiCol_SliderGrabActive]   = ImVec4(0.608f, 0.490f, 1.00f, 1.00f);
+	style->Colors[ImGuiCol_CheckMark]          = UITheme::AccentHover;
+	style->Colors[ImGuiCol_SliderGrab]         = UITheme::AccentBg80;
+	style->Colors[ImGuiCol_SliderGrabActive]   = UITheme::AccentHover;
 
-	// Separator
-	style->Colors[ImGuiCol_Separator]          = ImVec4(0.20f, 0.20f, 0.28f, 0.50f);
-	style->Colors[ImGuiCol_SeparatorHovered]   = ImVec4(0.486f, 0.361f, 0.988f, 0.60f);
-	style->Colors[ImGuiCol_SeparatorActive]    = ImVec4(0.486f, 0.361f, 0.988f, 1.00f);
+	style->Colors[ImGuiCol_Separator]          = UITheme::Border;
+	style->Colors[ImGuiCol_SeparatorHovered]   = UITheme::AccentBg60;
+	style->Colors[ImGuiCol_SeparatorActive]    = UITheme::Accent;
 
-	// Resize grip
 	style->Colors[ImGuiCol_ResizeGrip]         = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-	style->Colors[ImGuiCol_ResizeGripHovered]  = ImVec4(0.486f, 0.361f, 0.988f, 0.40f);
-	style->Colors[ImGuiCol_ResizeGripActive]   = ImVec4(0.486f, 0.361f, 0.988f, 0.80f);
+	style->Colors[ImGuiCol_ResizeGripHovered]  = UITheme::AccentBg40;
+	style->Colors[ImGuiCol_ResizeGripActive]   = UITheme::AccentBg80;
 
-	// Plot
 	style->Colors[ImGuiCol_PlotLines]          = ImVec4(0.40f, 0.39f, 0.38f, 0.63f);
-	style->Colors[ImGuiCol_PlotLinesHovered]   = ImVec4(0.608f, 0.490f, 1.00f, 1.00f);
-	style->Colors[ImGuiCol_PlotHistogram]      = ImVec4(0.486f, 0.361f, 0.988f, 0.80f);
-	style->Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.608f, 0.490f, 1.00f, 1.00f);
-	style->Colors[ImGuiCol_TextSelectedBg]     = ImVec4(0.486f, 0.361f, 0.988f, 0.30f);
+	style->Colors[ImGuiCol_PlotLinesHovered]   = UITheme::AccentHover;
+	style->Colors[ImGuiCol_PlotHistogram]      = UITheme::AccentBg80;
+	style->Colors[ImGuiCol_PlotHistogramHovered] = UITheme::AccentHover;
+	style->Colors[ImGuiCol_TextSelectedBg]     = UITheme::AccentBg20;
 
-	style->Colors[ImGuiCol_MenuBarBg]          = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
-
-	// Frame pacing handled by DXGI waitable swap chain object (VSync)
+	style->Colors[ImGuiCol_MenuBarBg]          = ImVec4(0.08f, 0.07f, 0.10f, 1.00f);
 }
 
 // ============================================================================
 // Helper: Draw a styled nav button (left sidebar)
 // ============================================================================
-static bool NavButton(const char* label, bool active, float width, float height = 32.0f) {
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+static bool NavButton(const char* label, bool active, float width, float height = 28.0f) {
 	if (active) {
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.486f, 0.361f, 0.988f, 0.80f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.608f, 0.490f, 1.00f, 0.90f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.486f, 0.361f, 0.988f, 1.00f));
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, UITheme::RadiusSM);
+		ImGui::PushStyleColor(ImGuiCol_Button, UITheme::AccentBg60);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(UITheme::AccentHover.x, UITheme::AccentHover.y, UITheme::AccentHover.z, 0.90f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, UITheme::Accent);
+		ImGui::PushStyleColor(ImGuiCol_Text, UITheme::TextWhite);
 	} else {
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, UITheme::RadiusSM);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.20f, 0.28f, 0.60f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.486f, 0.361f, 0.988f, 0.40f));
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.72f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.20f, 0.28f, 0.50f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, UITheme::AccentBg40);
+		ImGui::PushStyleColor(ImGuiCol_Text, UITheme::TextSecondary);
 	}
 	bool clicked = ImGui::Button(label, ImVec2(width, height));
+	if (active) {
+		ImVec2 p = ImGui::GetItemRectMin();
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->AddRectFilled(ImVec2(p.x, p.y + 4), ImVec2(p.x + 3, p.y + height - 4), ImGui::ColorConvertFloat4ToU32(UITheme::Accent), 2.0f);
+	}
 	ImGui::PopStyleColor(4);
 	ImGui::PopStyleVar();
 	return clicked;
@@ -126,13 +119,13 @@ static bool NavButton(const char* label, bool active, float width, float height 
 // Helper: Section header with accent line
 // ============================================================================
 static void SectionHeader(const char* label) {
-	ImGui::Spacing();
 	ImVec2 p = ImGui::GetCursorScreenPos();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
-	dl->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + 3, p.y + 16), ImColor(0.486f, 0.361f, 0.988f, 1.0f), 2.0f);
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 10);
-	ImGui::TextColored(ImVec4(0.88f, 0.88f, 0.95f, 1.0f), "%s", label);
-	ImGui::Spacing();
+	dl->AddRectFilled(ImVec2(p.x, p.y + 1), ImVec2(p.x + 4, p.y + 18), ImGui::ColorConvertFloat4ToU32(UITheme::Accent), 2.0f);
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 12);
+	ImGui::TextColored(UITheme::TextPrimary, "%s", label);
+	ImVec2 afterText = ImGui::GetCursorScreenPos();
+	dl->AddRectFilled(ImVec2(afterText.x + 4, afterText.y - 1), ImVec2(afterText.x + ImGui::GetContentRegionAvail().x, afterText.y), ImGui::ColorConvertFloat4ToU32(UITheme::BorderSubtle), 0.0f);
 }
 
 // ============================================================================
@@ -263,25 +256,25 @@ static void DrawTab_Visuals() {
 		}
 	}
 
-	if (ImGui::CollapsingHeader("C4 / Bomb", ImGuiTreeNodeFlags_DefaultOpen)) {
-		Gui.MyCheckBox("Bomb ESP", &MenuConfig::ShowBombESP);
+	if (ImGui::CollapsingHeader(lang.header_bomb.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.visuals_bombesp.c_str(), &MenuConfig::ShowBombESP);
 		if (MenuConfig::ShowBombESP) {
 			ImGui::SameLine(0, 16);
 			ImGui::ColorEdit4("##bombplanted", reinterpret_cast<float*>(&MenuConfig::BombPlantedColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("Planted");
+			ImGui::TextDisabled("%s", lang.visuals_bombplanted.c_str());
 			ImGui::SameLine(0, 12);
 			ImGui::ColorEdit4("##bombdefuse", reinterpret_cast<float*>(&MenuConfig::BombDefusingColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("Defusing");
+			ImGui::TextDisabled("%s", lang.visuals_bombdefusing.c_str());
 
 			ImGui::ColorEdit4("##bombcarrier", reinterpret_cast<float*>(&MenuConfig::BombCarrierColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("Carrier");
+			ImGui::TextDisabled("%s", lang.visuals_bombcarrier.c_str());
 			ImGui::SameLine(0, 12);
 			ImGui::ColorEdit4("##bombdropped", reinterpret_cast<float*>(&MenuConfig::BombDroppedColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("Dropped");
+			ImGui::TextDisabled("%s", lang.visuals_bombdropped.c_str());
 		}
 	}
 
@@ -337,11 +330,11 @@ static void DrawTab_Radar() {
 		bool running = g_webRadarRunning.load();
 		int clients = g_webRadarClientCount.load();
 		if (running) {
-			ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Online");
+			ImGui::TextColored(UITheme::Success, "Online");
 			ImGui::SameLine(0, 16);
 			ImGui::Text("%s: %d", lang.webradar_clients.c_str(), clients);
 		} else {
-			ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.5f, 1.0f), "%s", lang.webradar_not_running.c_str());
+			ImGui::TextColored(UITheme::Danger, "%s", lang.webradar_not_running.c_str());
 		}
 
 		// ---- Local / LAN Access ----
@@ -350,7 +343,7 @@ static void DrawTab_Radar() {
 		// Build local access URL
 		char localUrl[256];
 		snprintf(localUrl, sizeof(localUrl), "http://localhost:%d", MenuConfig::WebRadarPort);
-		ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "%s", localUrl);
+		ImGui::TextColored(UITheme::Info, "%s", localUrl);
 		ImGui::SameLine(0, 8);
 		if (ImGui::SmallButton((lang.webradar_copy_url + "##local").c_str())) {
 			ImGui::SetClipboardText(localUrl);
@@ -363,7 +356,7 @@ static void DrawTab_Radar() {
 			snprintf(lanUrl, sizeof(lanUrl), "http://%s:%d", localIP.c_str(), MenuConfig::WebRadarPort);
 		}
 		if (lanUrl[0]) {
-			ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", lanUrl);
+			ImGui::TextColored(UITheme::Success, "%s", lanUrl);
 			ImGui::SameLine(0, 8);
 			if (ImGui::SmallButton((lang.webradar_copy_url + "##lan").c_str())) {
 				ImGui::SetClipboardText(lanUrl);
@@ -392,7 +385,7 @@ static void DrawTab_Radar() {
 
 		// Popup: installation failed
 		if (ImGui::BeginPopup("##tunnel_fail")) {
-			ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.5f, 1.0f), "%s", lang.webradar_tunnel_install_fail.c_str());
+			ImGui::TextColored(UITheme::Danger, "%s", lang.webradar_tunnel_install_fail.c_str());
 			ImGui::EndPopup();
 		}
 
@@ -406,17 +399,17 @@ static void DrawTab_Radar() {
 			}
 
 			if (installState == CfInstallState::Installing) {
-				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.5f, 1.0f), "%s", lang.webradar_tunnel_installing.c_str());
+				ImGui::TextColored(UITheme::Warning, "%s", lang.webradar_tunnel_installing.c_str());
 			} else if (tunnelReady && !tunnelURL.empty()) {
 				ImGui::Text("%s:", lang.webradar_tunnel_url.c_str());
 				ImGui::SameLine(0, 4);
-				ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.7f, 1.0f), "%s", tunnelURL.c_str());
+				ImGui::TextColored(UITheme::Success, "%s", tunnelURL.c_str());
 				ImGui::SameLine(0, 8);
 				if (ImGui::SmallButton((lang.webradar_copy_url + "##tunnel_url").c_str())) {
 					ImGui::SetClipboardText(tunnelURL.c_str());
 				}
 			} else {
-				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.5f, 1.0f), "%s", lang.webradar_tunnel_starting.c_str());
+				ImGui::TextColored(UITheme::Warning, "%s", lang.webradar_tunnel_starting.c_str());
 			}
 		}
 	}
@@ -522,18 +515,18 @@ static void DrawTab_Settings() {
 		ImGui::Text("%s:", lang.settings_menuhotkey.c_str());
 		ImGui::SameLine();
 		if (MenuConfig::IsListeningForMenuKey) {
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.3f, 0.3f, 0.9f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-			ImGui::Button(lang.grenade_pressanykey.c_str(), ImVec2(130, 0));
-			ImGui::PopStyleColor(3);
-		} else {
-			if (ImGui::Button(MenuConfig::MenuHotKeyName, ImVec2(130, 0))) {
-				MenuConfig::IsListeningForMenuKey = true;
-			}
+			ImGui::PushStyleColor(ImGuiCol_Button, UITheme::DangerBg90);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UITheme::Danger);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, UITheme::DangerBg80);
+		ImGui::Button(lang.grenade_pressanykey.c_str(), ImVec2(130, 0));
+		ImGui::PopStyleColor(3);
+	} else {
+		if (ImGui::Button(MenuConfig::MenuHotKeyName, ImVec2(130, 0))) {
+			MenuConfig::IsListeningForMenuKey = true;
 		}
-		ImGui::SameLine();
-		ImGui::TextColored(ImVec4(0.78f, 0.78f, 0.4f, 1.0f), "%s", lang.grenade_hotkeytip.c_str());
+	}
+	ImGui::SameLine();
+	ImGui::TextColored(UITheme::Warning, "%s", lang.grenade_hotkeytip.c_str());
 
 		ImGui::Spacing();
 		Gui.MyCheckBox(lang.settings_perfmonitor.c_str(), &MenuConfig::ShowPerfMonitor);
@@ -560,9 +553,9 @@ static void DrawTab_Settings() {
 		}
 
 		ImGui::Spacing();
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.20f, 0.20f, 0.80f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.30f, 0.30f, 0.90f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.20f, 0.20f, 1.00f));
+		ImGui::PushStyleColor(ImGuiCol_Button, UITheme::DangerBg80);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UITheme::DangerBg90);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, UITheme::Danger);
 		if (ImGui::Button(lang.utilities_closehack.c_str(), ImVec2(160, 28))) {
 			TerminateProcess(GetCurrentProcess(), 0);
 		}
@@ -585,9 +578,9 @@ static void HotkeyButton(int actionIndex) {
 	ImGui::PushID(actionIndex);
 
 	if (hk.isListening) {
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.3f, 0.3f, 0.9f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_Button, UITheme::DangerBg90);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UITheme::Danger);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, UITheme::DangerBg80);
 		if (ImGui::Button(lang.grenade_pressanykey.c_str(), ImVec2(130, 0))) {
 			hk.isListening = false;
 		}
@@ -617,7 +610,7 @@ static void HotkeyButton(int actionIndex) {
 			hk.isListening = true;
 		}
 		if (hk.vkCode && ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Right-click to clear");
+			ImGui::SetTooltip("%s", lang.hotkey_cleartip.c_str());
 		}
 		if (hk.vkCode && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
 			hk.vkCode = 0;
@@ -656,7 +649,7 @@ static void DrawTab_Hotkeys() {
 	}
 
 	ImGui::Spacing();
-	ImGui::TextColored(ImVec4(0.78f, 0.78f, 0.4f, 1.0f), "%s", lang.grenade_hotkeytip.c_str());
+	ImGui::TextColored(UITheme::Warning, "%s", lang.grenade_hotkeytip.c_str());
 }
 
 // ============================================================================
@@ -750,7 +743,7 @@ static void DrawTab_Grenade() {
 			ImGui::SameLine(0, 16);
 			ImGui::Text("%s: %d", lang.grenade_availablethrows.c_str(), (int)GrenadeHelper::CurrentThrows->size());
 		} else {
-			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", lang.grenade_nomapdata.c_str());
+			ImGui::TextColored(UITheme::Danger, "%s", lang.grenade_nomapdata.c_str());
 		}
 
 		// Legend
@@ -770,9 +763,9 @@ static void DrawTab_Grenade() {
 		ImGui::Text("%s:", lang.grenade_record_hotkey.c_str());
 		ImGui::SameLine();
 		if (GrenadeHelper::IsListeningForKey) {
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.3f, 0.3f, 0.9f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_Button, UITheme::DangerBg90);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UITheme::Danger);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, UITheme::DangerBg80);
 			if (ImGui::Button(lang.grenade_pressanykey.c_str(), ImVec2(130, 0))) {
 				GrenadeHelper::IsListeningForKey = false;
 			}
@@ -798,7 +791,7 @@ static void DrawTab_Grenade() {
 			if (ProcessMgr.is_key_down(VK_ESCAPE)) GrenadeHelper::IsListeningForKey = false;
 		}
 
-		ImGui::TextColored(ImVec4(0.78f, 0.78f, 0.4f, 1.0f), "%s", lang.grenade_hotkeytip.c_str());
+		ImGui::TextColored(UITheme::Warning, "%s", lang.grenade_hotkeytip.c_str());
 
 		ImGui::Spacing();
 		ImGui::Checkbox(lang.grenade_autosave.c_str(), &GrenadeHelper::AutoSave);
@@ -815,7 +808,7 @@ static void DrawTab_Grenade() {
 		ImGui::Text("%s: %d", lang.grenade_pending_throws.c_str(), (int)GrenadeHelper::PendingThrows.size());
 
 		if (GrenadeHelper::PendingThrows.empty()) {
-			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", lang.grenade_no_pending.c_str());
+			ImGui::TextColored(UITheme::TextSecondary, "%s", lang.grenade_no_pending.c_str());
 		} else {
 			static int selectedThrow = -1;
 			static char throwName[128] = "";
@@ -867,8 +860,8 @@ static void DrawTab_Grenade() {
 				}
 			}
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.20f, 0.20f, 0.80f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.30f, 0.30f, 0.90f));
+			ImGui::PushStyleColor(ImGuiCol_Button, UITheme::DangerBg80);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UITheme::DangerBg90);
 			if (ImGui::Button(lang.grenade_delete.c_str(), ImVec2(70, 25))) {
 				if (selectedThrow >= 0) {
 					GrenadeHelper::DeletePendingThrow(selectedThrow);
@@ -891,7 +884,7 @@ static void DrawTab_Grenade() {
 				}
 			}
 			ImGui::SameLine();
-			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "-> %s.json", GrenadeHelper::CurrentMap.c_str());
+			ImGui::TextColored(UITheme::TextSecondary, "-> %s.json", GrenadeHelper::CurrentMap.c_str());
 		}
 	}
 
@@ -964,7 +957,7 @@ static void DrawTab_Grenade() {
 				// Edit form
 				if (selectedSavedThrow >= 0 && selectedSavedThrow < (int)throws.size()) {
 					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.4f, 0.78f, 1.0f, 1.0f), "%s #%d", lang.grenade_editthrow.c_str(), selectedSavedThrow + 1);
+					ImGui::TextColored(UITheme::Info, "%s #%d", lang.grenade_editthrow.c_str(), selectedSavedThrow + 1);
 
 					ImGui::SetNextItemWidth(200);
 					ImGui::InputText((lang.grenade_name_label + "##saved").c_str(), editName, sizeof(editName));
@@ -999,8 +992,8 @@ static void DrawTab_Grenade() {
 							editPosX, editPosY, editPosZ, editPitch, editYaw);
 					}
 					ImGui::SameLine();
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.20f, 0.20f, 0.80f));
-					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.30f, 0.30f, 0.90f));
+					ImGui::PushStyleColor(ImGuiCol_Button, UITheme::DangerBg80);
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UITheme::DangerBg90);
 					if (ImGui::Button((lang.grenade_delete + "##saved").c_str(), ImVec2(80, 25))) {
 						GrenadeHelper::DeleteThrow(selectedMap, selectedSavedThrow);
 						if (selectedSavedThrow >= (int)throws.size())
@@ -1010,7 +1003,7 @@ static void DrawTab_Grenade() {
 				}
 			}
 		} else {
-			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", lang.grenade_nomaps.c_str());
+			ImGui::TextColored(UITheme::TextSecondary, "%s", lang.grenade_nomaps.c_str());
 		}
 	}
 }
@@ -1030,19 +1023,19 @@ void Cheats::Menu()
 		IsMenuInit = true;
 	}
 
-	// --- Collapsed mode: small draggable square ---
+	// --- Collapsed mode: small draggable circle ---
 	if (MenuCollapsed) {
 		ImGui::SetNextWindowPos(CollapsedPos, ImGuiCond_Once);
-		ImGui::SetNextWindowSize(ImVec2(36, 36));
+		ImGui::SetNextWindowSize(ImVec2(40, 40));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.486f, 0.361f, 0.988f, 0.90f));
-		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.608f, 0.490f, 1.00f, 0.80f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 20.0f);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(UITheme::Accent.x, UITheme::Accent.y, UITheme::Accent.z, 0.90f));
+		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(UITheme::AccentHover.x, UITheme::AccentHover.y, UITheme::AccentHover.z, 0.80f));
 		ImGui::Begin("##CollapsedMenu", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse);
 		CollapsedPos = ImGui::GetWindowPos();
 		ImVec2 wp = ImGui::GetWindowPos();
 		ImDrawList* dl = ImGui::GetWindowDrawList();
-		dl->AddText(ImVec2(wp.x + 10, wp.y + 8), ImColor(1.0f, 1.0f, 1.0f, 1.0f), "C2");
+		dl->AddText(ImVec2(wp.x + 11, wp.y + 10), ImColor(1.0f, 1.0f, 1.0f, 1.0f), "C2");
 		if (ImGui::IsWindowHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
 			MenuCollapsed = false;
 		}
@@ -1056,36 +1049,31 @@ void Cheats::Menu()
 	ImGui::Begin("CS2 DMA", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar);
 	ImGui::SetWindowSize(ImVec2(globalVars::windowx, globalVars::windowy));
 	{
-		// ========== Title bar area ==========
 		ImVec2 winPos = ImGui::GetWindowPos();
 		ImDrawList* dl = ImGui::GetWindowDrawList();
 
-		// Accent line at top (also acts as double-click zone to collapse)
 		ImVec2 titleBarMin = ImVec2(winPos.x, winPos.y);
 		ImVec2 titleBarMax = ImVec2(winPos.x + globalVars::windowx, winPos.y + 28);
 		dl->AddRectFilled(
 			ImVec2(winPos.x, winPos.y),
 			ImVec2(winPos.x + globalVars::windowx, winPos.y + 3),
-			ImColor(0.486f, 0.361f, 0.988f, 1.0f)
+			ImGui::ColorConvertFloat4ToU32(UITheme::Accent)
 		);
 
-		// Double-click title bar to collapse
 		if (ImGui::IsMouseHoveringRect(titleBarMin, titleBarMax) && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
 			CollapsedPos = winPos;
 			MenuCollapsed = true;
 		}
 
-		// Title text
 		ImGui::SetCursorPos(ImVec2(12, 8));
-		ImGui::TextColored(ImVec4(0.608f, 0.490f, 1.00f, 1.0f), "CS2 / DMA");
+		ImGui::TextColored(UITheme::TextAccent, "CS2 / DMA");
 		ImGui::SameLine(globalVars::windowx - 220);
-		ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.5f, 1.0f), "by github");
+		ImGui::TextColored(UITheme::TextMuted, "by github");
 		ImGui::SameLine(0, 4);
-		ImGui::TextColored(ImVec4(0.608f, 0.490f, 1.00f, 1.0f), "chao-shushu");
+		ImGui::TextColored(UITheme::TextAccent, "chao-shushu");
 
 		ImGui::SetCursorPosY(28);
 		ImGui::Separator();
-		ImGui::Spacing();
 
 		float navWidth = 150.0f;
 		float contentWidth = globalVars::windowx - navWidth - 24;
@@ -1095,30 +1083,27 @@ void Cheats::Menu()
 		ImGui::BeginChild("##NavPanel", ImVec2(navWidth, contentHeight), false);
 		{
 			float btnW = navWidth - 8;
-			ImGui::Spacing();
 
+			ImGui::TextColored(UITheme::TextDisabled, "  ESP");
 			if (NavButton(lang.tab_visuals.c_str(), active_tab == 0, btnW)) active_tab = 0;
-			ImGui::Spacing();
 			if (NavButton(lang.tab_radar.c_str(), active_tab == 1, btnW)) active_tab = 1;
-			ImGui::Spacing();
-			if (NavButton(lang.tab_settings.c_str(), active_tab == 2, btnW)) active_tab = 2;
-			ImGui::Spacing();
-			if (NavButton(lang.tab_config.c_str(), active_tab == 3, btnW)) active_tab = 3;
-			ImGui::Spacing();
+
+			ImGui::TextColored(UITheme::TextDisabled, "  TOOLS");
 			if (NavButton(lang.tab_grenade.c_str(), active_tab == 4, btnW)) active_tab = 4;
-			ImGui::Spacing();
 			if (NavButton(lang.tab_fusion.c_str(), active_tab == 5, btnW)) active_tab = 5;
-			ImGui::Spacing();
 			if (NavButton(lang.tab_hotkeys.c_str(), active_tab == 6, btnW)) active_tab = 6;
 
-			// Star reminder + Language selector at bottom
+			ImGui::TextColored(UITheme::TextDisabled, "  SYSTEM");
+			if (NavButton(lang.tab_settings.c_str(), active_tab == 2, btnW)) active_tab = 2;
+			if (NavButton(lang.tab_config.c_str(), active_tab == 3, btnW)) active_tab = 3;
+
 			float remainHeight = ImGui::GetContentRegionAvail().y;
 			if (remainHeight > 60) {
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + remainHeight - 56);
 			}
 			ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.0f, 1.0f), "\xe2\x98\x85");
 			ImGui::SameLine(0, 4);
-			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 0.9f), "Star on GitHub");
+			ImGui::TextColored(UITheme::TextSecondary, "Star on GitHub");
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 				ImGui::SetTooltip("https://github.com/chao-shushu/CS2-DMA");
@@ -1143,12 +1128,13 @@ void Cheats::Menu()
 		// ========== Vertical separator ==========
 		{
 			ImVec2 cp = ImGui::GetCursorScreenPos();
-			dl->AddRectFilled(ImVec2(cp.x - 4, cp.y), ImVec2(cp.x - 2, cp.y + contentHeight), ImColor(0.20f, 0.20f, 0.28f, 0.50f));
+			dl->AddRectFilled(ImVec2(cp.x - 4, cp.y), ImVec2(cp.x - 2, cp.y + contentHeight), ImGui::ColorConvertFloat4ToU32(UITheme::BorderSubtle));
 		}
 
 		// ========== Right Content Panel ==========
 		ImGui::BeginChild("##ContentPanel", ImVec2(contentWidth, contentHeight), false);
 		{
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, UITheme::ContentPadding);
 			switch (active_tab) {
 			case 0: DrawTab_Visuals(); break;
 			case 1: DrawTab_Radar(); break;
@@ -1159,9 +1145,8 @@ void Cheats::Menu()
 			case 6: DrawTab_Hotkeys(); break;
 			default: break;
 			}
+			ImGui::PopStyleVar();
 
-			// Detect any widget value change and mark config dirty for immediate save
-			// Track active→inactive transition: user just finished editing a widget
 			{
 				static bool wasAnyActive = false;
 				bool anyActive = ImGui::IsAnyItemActive();
