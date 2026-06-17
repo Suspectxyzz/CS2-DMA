@@ -50,6 +50,7 @@ void Cheats::Run()
 			case AppState::DMA_FAILED:       statusText = lang.status_dma_failed.c_str(); break;
 			case AppState::SEARCHING_GAME:   statusText = lang.status_searching.c_str(); break;
 			case AppState::INITIALIZING_GAME:statusText = lang.status_init_game.c_str(); break;
+			case AppState::WAITING_DECRYPT:  statusText = lang.status_waiting_decrypt.c_str(); break;
 			default:                         statusText = lang.status_unknown.c_str(); break;
 			}
 
@@ -228,10 +229,13 @@ void Cheats::Run()
 
 			if (MenuConfig::ShowPlayerName && !(inSafeZone && MenuConfig::SafeZoneSkipName))
 			{
+				std::string displayName = Entity.Controller.PlayerName;
+				if (Entity.Pawn.FlashDuration > 0.f)
+					displayName += " [FLASH]";
 				if (MenuConfig::HealthBarType == 1)
-					Gui.StrokeText(Entity.Controller.PlayerName, Vec2(Rect.x + Rect.z / 2, Rect.y - 13 - MenuConfig::NameFontSize), MenuConfig::NameColor, MenuConfig::NameFontSize, true);
+					Gui.StrokeText(displayName, Vec2(Rect.x + Rect.z / 2, Rect.y - 13 - MenuConfig::NameFontSize), MenuConfig::NameColor, MenuConfig::NameFontSize, true);
 				else
-					Gui.StrokeText(Entity.Controller.PlayerName, Vec2(Rect.x + Rect.z / 2, Rect.y - MenuConfig::NameFontSize), MenuConfig::NameColor, MenuConfig::NameFontSize, true);
+					Gui.StrokeText(displayName, Vec2(Rect.x + Rect.z / 2, Rect.y - MenuConfig::NameFontSize), MenuConfig::NameColor, MenuConfig::NameFontSize, true);
 			}
 		}
 

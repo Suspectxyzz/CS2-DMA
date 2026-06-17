@@ -53,6 +53,7 @@ public:
 	Vec2 AimPunchAngle;
 	int Health;
 	int Armor = 0;
+	float FlashDuration = 0.f;
 	int TeamID;
 	int Fov;
 	DWORD64 bSpottedByMask;

@@ -214,10 +214,43 @@ public:
 
 		if (this->HANDLE) return true;
 
-		LPSTR args[] = { (LPSTR)"",(LPSTR)"-device", (LPSTR)"FPGA",(LPSTR)"-norefresh" };
+		// Build args dynamically based on mmap file presence
+		std::string device = "fpga://algo=0";
+		char modulePath[MAX_PATH];
+		GetModuleFileNameA(NULL, modulePath, MAX_PATH);
+		std::string mmapPath = modulePath;
+		auto lastSlash = mmapPath.rfind('\\');
+		if (lastSlash != std::string::npos)
+			mmapPath = mmapPath.substr(0, lastSlash + 1);
+		mmapPath += "mmap.txt";
 
-		this->HANDLE = VMMDLL_Initialize(4, args);
+		bool hasMmap = (GetFileAttributesA(mmapPath.c_str()) != INVALID_FILE_ATTRIBUTES);
+		if (hasMmap) {
+			LPSTR args[] = { (LPSTR)"", (LPSTR)"-device", (LPSTR)device.c_str(), (LPSTR)"-memmap", (LPSTR)"-norefresh" };
+			this->HANDLE = VMMDLL_Initialize(5, args);
+		} else {
+			LPSTR args[] = { (LPSTR)"", (LPSTR)"-device", (LPSTR)device.c_str(), (LPSTR)"-norefresh" };
+			this->HANDLE = VMMDLL_Initialize(4, args);
+		}
 
+		if (this->HANDLE) {
+			// Check FPGA firmware version and clean registers if >= 4.7
+			ULONG64 verMajor = 0, verMinor = 0;
+			VMMDLL_ConfigGet(this->HANDLE, LC_OPT_FPGA_VERSION_MAJOR, &verMajor);
+			VMMDLL_ConfigGet(this->HANDLE, LC_OPT_FPGA_VERSION_MINOR, &verMinor);
+			LOG_INFO("ProcessMgr", "FPGA firmware version: {}.{}", (DWORD)verMajor, (DWORD)verMinor);
+			if (verMajor > 4 || (verMajor == 4 && verMinor >= 7)) {
+				ULONG64 lcHandleVal = 0;
+				VMMDLL_ConfigGet(this->HANDLE, VMMDLL_OPT_CORE_LEECHCORE_HANDLE, &lcHandleVal);
+				if (lcHandleVal) {
+					::HANDLE hLC = (::HANDLE)lcHandleVal;
+					// Clear FPGA config register 0x60 (CMD register) with mask 0xFFFF
+					BYTE data[4] = { 0x00, 0x00, 0xFF, 0xFF }; // data=0x0000, mask=0xFFFF
+					LcCommand(hLC, LC_CMD_FPGA_CFGREGCFG_MARKWR | 0x60, 4, data, NULL, NULL);
+					LOG_INFO("ProcessMgr", "FPGA register cleanup performed (fw >= 4.7)");
+				}
+			}
+		}
 		return this->HANDLE != 0;
 
 	}
@@ -243,85 +276,64 @@ public:
 
 
 		ProcessID = 0;
-
 		Attached = false;
 
-
-
 		BOOL refreshOk = VMMDLL_ConfigSet(this->HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-
 		LOG_DEBUG("ProcessMgr", "Attach: ConfigSet REFRESH_ALL returned {}", refreshOk ? "true" : "false");
 
-		SIZE_T pcPIDs = 0;
+		// Try direct PID lookup first (simpler, faster)
+		DWORD pid = 0;
+		if (VMMDLL_PidGetFromName(this->HANDLE, (LPSTR)ProcessName.c_str(), &pid) && pid != 0) {
+			ProcessID = pid;
+			LOG_DEBUG("ProcessMgr", "Attach: PidGetFromName found PID={}", ProcessID);
+		} else {
+			// Fallback: enumerate all processes
+			SIZE_T pcPIDs = 0;
+			BOOL pidListOk = VMMDLL_PidList(this->HANDLE, nullptr, &pcPIDs);
+			LOG_DEBUG("ProcessMgr", "Attach: PidList count={}, ok={}", (int)pcPIDs, pidListOk ? "true" : "false");
 
-		BOOL pidListOk = VMMDLL_PidList(this->HANDLE, nullptr, &pcPIDs);
-
-		LOG_DEBUG("ProcessMgr", "Attach: PidList count={}, ok={}", (int)pcPIDs, pidListOk ? "true" : "false");
-
-
-
-		if (!pidListOk || pcPIDs == 0) {
-
-			LOG_WARNING("ProcessMgr", "Attach: PidList failed or empty");
-
-			return FAILE_PROCESSID;
-
-		}
-
-
-
-		DWORD* pPIDs = (DWORD*)new char[pcPIDs * 4];
-
-		VMMDLL_PidList(this->HANDLE, pPIDs, &pcPIDs);
-
-
-
-		for (int i = 0; i < pcPIDs; i++)
-
-		{
-
-			VMMDLL_PROCESS_INFORMATION ProcessInformation = { 0 };
-
-			ProcessInformation.magic = VMMDLL_PROCESS_INFORMATION_MAGIC;
-
-			ProcessInformation.wVersion = VMMDLL_PROCESS_INFORMATION_VERSION;
-
-			SIZE_T pcbProcessInformation = sizeof(VMMDLL_PROCESS_INFORMATION);
-
-			VMMDLL_ProcessGetInformation(this->HANDLE, pPIDs[i], &ProcessInformation, &pcbProcessInformation);
-
-
-
-			if (strcmp(ProcessInformation.szName, ProcessName.c_str()) == 0) {
-
-				ProcessID = pPIDs[i];
-
-				break;
-
+			if (!pidListOk || pcPIDs == 0) {
+				LOG_WARNING("ProcessMgr", "Attach: PidList failed or empty");
+				return FAILE_PROCESSID;
 			}
 
+			DWORD* pPIDs = (DWORD*)new char[pcPIDs * 4];
+			VMMDLL_PidList(this->HANDLE, pPIDs, &pcPIDs);
+
+			for (int i = 0; i < pcPIDs; i++)
+			{
+				VMMDLL_PROCESS_INFORMATION ProcessInformation = { 0 };
+				ProcessInformation.magic = VMMDLL_PROCESS_INFORMATION_MAGIC;
+				ProcessInformation.wVersion = VMMDLL_PROCESS_INFORMATION_VERSION;
+				SIZE_T pcbProcessInformation = sizeof(VMMDLL_PROCESS_INFORMATION);
+				VMMDLL_ProcessGetInformation(this->HANDLE, pPIDs[i], &ProcessInformation, &pcbProcessInformation);
+
+				if (strcmp(ProcessInformation.szName, ProcessName.c_str()) == 0) {
+					ProcessID = pPIDs[i];
+					break;
+				}
+			}
+
+			delete[] pPIDs;
 		}
-
-
-
-		delete[] pPIDs;
-
-
 
 		if (ProcessID == 0) {
-
-			LOG_DEBUG("ProcessMgr", "Attach: '{}' not found in {} processes", ProcessName, (int)pcPIDs);
-
+			LOG_DEBUG("ProcessMgr", "Attach: '{}' not found", ProcessName);
 			return FAILE_PROCESSID;
-
 		}
 
-
+		// Verify client.dll is accessible (module decryption check)
+		PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
+		BOOL moduleOk = VMMDLL_Map_GetModuleFromNameU(this->HANDLE, ProcessID, (LPSTR)"client.dll", &pModuleEntry, NULL);
+		if (!moduleOk || !pModuleEntry) {
+			LOG_WARNING("ProcessMgr", "Attach: client.dll not accessible (not decrypted yet), PID={}", ProcessID);
+			ProcessID = 0;
+			return FAILE_MODULE;
+		}
+		VMMDLL_MemFree(pModuleEntry);
 
 		Attached = true;
-
 		LOG_INFO("ProcessMgr", "Attach: '{}' found, PID={}", ProcessName, ProcessID);
-
 		return SUCCEED;
 
 	}

@@ -222,6 +222,7 @@ public:
 	std::string status_dma_failed;
 	std::string status_searching;
 	std::string status_init_game;
+	std::string status_waiting_decrypt;
 	std::string status_unknown;
 
 	// Projectile ESP
@@ -524,6 +525,7 @@ public:
 		this->status_dma_failed = "DMA Connection Failed!";
 		this->status_searching = "Searching for cs2.exe...";
 		this->status_init_game = "Initializing game data...";
+		this->status_waiting_decrypt = "Waiting for module decryption...";
 		this->status_unknown = "Unknown state";
 	}
 
@@ -781,6 +783,7 @@ public:
 		this->status_dma_failed = u8"DMA\u8fde\u63a5\u5931\u8d25!";
 		this->status_searching = u8"\u641c\u7d22cs2.exe\u4e2d...";
 		this->status_init_game = u8"\u521d\u59cb\u5316\u6e38\u620f\u6570\u636e\u4e2d...";
+		this->status_waiting_decrypt = u8"\u7b49\u5f85\u6a21\u5757\u89e3\u5bc6\u4e2d...";
 		this->status_unknown = u8"\u672a\u77e5\u72b6\u6001";
 	}
 };

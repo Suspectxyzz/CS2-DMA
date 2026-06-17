@@ -42,8 +42,12 @@ VOID ConnectionThread()
 				LOG_INFO("Connection", "Found cs2.exe (PID: {}) after {} attempts", ProcessMgr.ProcessID, searchAttempts);
 				searchAttempts = 0;
 				globalVars::gameState.store(AppState::INITIALIZING_GAME);
+			} else if (status == FAILE_MODULE) {
+				LOG_WARNING("Connection", "cs2.exe found but client.dll not decrypted, waiting...");
+				searchAttempts = 0;
+				globalVars::gameState.store(AppState::WAITING_DECRYPT);
 			} else {
-				Sleep(1000);
+				Sleep(3000);
 			}
 			break;
 		}
@@ -55,6 +59,17 @@ VOID ConnectionThread()
 				// Post-init validation: refresh DMA + verify data is actually accessible
 				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
 				Sleep(500);
+				// Verify client.dll is accessible (decryption check)
+				PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
+				BOOL moduleOk = VMMDLL_Map_GetModuleFromNameU(ProcessMgr.HANDLE, ProcessMgr.ProcessID, (LPSTR)"client.dll", &pModuleEntry, NULL);
+				if (moduleOk && pModuleEntry) {
+					VMMDLL_MemFree(pModuleEntry);
+				} else {
+					LOG_WARNING("Connection", "client.dll not accessible after InitAddress, waiting for decryption...");
+					initValidateRetries++;
+					globalVars::gameState.store(AppState::WAITING_DECRYPT);
+					break;
+				}
 				DWORD64 testCtrl = 0;
 				if (ProcessMgr.ReadMemory(gGame.GetLocalControllerAddress(), testCtrl) && testCtrl != 0) {
 					LOG_INFO("Connection", "Game addresses initialized and validated (ctrl=0x{:X})", testCtrl);
@@ -63,7 +78,7 @@ VOID ConnectionThread()
 				} else if (initValidateRetries < 10) {
 					initValidateRetries++;
 					LOG_DEBUG("Connection", "Validation failed (ctrl=0x{:X}), retry {}/10", testCtrl, initValidateRetries);
-					Sleep(2000);
+					Sleep(3000);
 					// Stay in INITIALIZING_GAME — next loop will re-run InitAddress
 				} else {
 					LOG_WARNING("Connection", "Validation failed after 10 retries, entering RUNNING anyway");
@@ -74,6 +89,22 @@ VOID ConnectionThread()
 				LOG_WARNING("Connection", "Failed to init addresses, retrying...");
 				ProcessMgr.Detach();
 				globalVars::gameState.store(AppState::SEARCHING_GAME);
+			}
+			break;
+		}
+		case AppState::WAITING_DECRYPT:
+		{
+			LOG_DEBUG("Connection", "Waiting for client.dll decryption...");
+			VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+			Sleep(3000);
+			PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
+			BOOL moduleOk = VMMDLL_Map_GetModuleFromNameU(ProcessMgr.HANDLE, ProcessMgr.ProcessID, (LPSTR)"client.dll", &pModuleEntry, NULL);
+			if (moduleOk && pModuleEntry) {
+				VMMDLL_MemFree(pModuleEntry);
+				LOG_INFO("Connection", "client.dll decrypted, resuming initialization");
+				globalVars::gameState.store(AppState::INITIALIZING_GAME);
+			} else {
+				LOG_WARNING("Connection", "client.dll still not accessible, keep waiting...");
 			}
 			break;
 		}
@@ -151,6 +182,7 @@ VOID DataThread()
 		int armor;
 		Vec2 viewAngle;
 		Vec3 cameraPos;
+		float flashDuration;
 	};
 	static ScatterBuf scatterBuf[MAX_ENTITIES];
 	ScatterBuf localBuf{};
@@ -589,6 +621,7 @@ VOID DataThread()
 							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::Pos, &buf.pos, sizeof(Vec3));
 							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::CurrentHealth, &buf.health, sizeof(int));
 							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::PawnArmor, &buf.armor, sizeof(int));
+							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::flFlashDuration, &buf.flashDuration, sizeof(float));
 							if (needBones && ce.sceneNodeAddr != 0)
 								ProcessMgr.AddScatterReadRequest(handle, ce.sceneNodeAddr + Offset::BoneArray, &freshBoneArrays[i], sizeof(DWORD64));
 							if (needViewAngle)
@@ -608,6 +641,7 @@ VOID DataThread()
 							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::Pos, &localBuf.pos, sizeof(Vec3));
 							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::CurrentHealth, &localBuf.health, sizeof(int));
 							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::PawnArmor, &localBuf.armor, sizeof(int));
+							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::flFlashDuration, &localBuf.flashDuration, sizeof(float));
 							if (needViewAngle)
 								ProcessMgr.AddScatterReadRequest(handle, lp + Offset::angEyeAngles, &localBuf.viewAngle, sizeof(Vec2));
 							ProcessMgr.ExecuteReadScatter(handle);
@@ -659,6 +693,7 @@ VOID DataThread()
 						ce.entity.Pawn.Pos = buf.pos;
 						ce.entity.Pawn.Health = buf.health;
 						ce.entity.Pawn.Armor = (buf.armor >= 0 && buf.armor <= 100) ? buf.armor : 0;
+						ce.entity.Pawn.FlashDuration = buf.flashDuration;
 						ce.entity.Pawn.ScreenPosValid = true; // render thread will refine via W2S
 
 						if (needViewAngle)
@@ -685,6 +720,7 @@ VOID DataThread()
 					localPlayer.Pawn.Pos = localBuf.pos;
 					localPlayer.Pawn.Health = localBuf.health;
 					localPlayer.Pawn.Armor = (localBuf.armor >= 0 && localBuf.armor <= 100) ? localBuf.armor : 0;
+					localPlayer.Pawn.FlashDuration = localBuf.flashDuration;
 					if (needViewAngle)
 						localPlayer.Pawn.ViewAngle = localBuf.viewAngle;
 				}
