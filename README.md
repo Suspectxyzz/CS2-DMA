@@ -54,10 +54,12 @@ During the development phase, your feedback and feature suggestions are needed. 
 
 
 ### Web Radar
-- Built-in WebSocket server
-- Uses [cs2_webradar](https://github.com/clauadv/cs2_webradar) frontend
-- Any LAN device can view real-time radar via browser
-- **Remote Sharing** — LAN IP display + one-click copy, Cloudflare tunnel one-click start/stop (auto-install cloudflared, auto-capture public URL, Job Object process tree management); no server needed
+- Built-in WebSocket server (default port 22006, configurable in menu)
+- Frontend assets embedded into cs2.exe — single-file deployment, no extra files
+- Three-tier transport fallback: WebSocket → SSE → HTTP polling
+- **LAN Access** — Toggle Web Radar in the menu, then any LAN device can view real-time radar via browser (menu shows local IP + one-click copy URL)
+- **Public Access (built-in Cloudflare Tunnel)** — One-click start/stop cloudflared quick tunnel from the menu, auto-captures public URL (requires cloudflared installed: `winget install Cloudflare.cloudflared`)
+- **Other Public Access** — See [Public Access Setup](#public-access-setup) below (ngrok / frp / port forwarding)
 <img width="840" height="517" alt="image" src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" />
 <img width="773" height="457" alt="image" src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" />
 
@@ -139,7 +141,7 @@ CS2-DMA/
 | Tab | Description |
 |-----|-------------|
 | **Visuals** | Box, bone, health bar, armor bar, weapon, distance, name, eye ray, snaplines, spectator list, etc. |
-| **Radar** | Web Radar toggle, port, broadcast interval, remote sharing (Cloudflare tunnel) |
+| **Radar** | Web Radar toggle, port, broadcast interval, LAN URL display & copy, Cloudflare tunnel one-click start/stop, radar calibration (rotation/scale/offset) |
 | **Grenade** | Grenade helper toggle, record positions, edit/delete |
 | **Fusion** | Crosshair overlay (4 styles + enemy color change), crosshair safe zone |
 | **Hotkeys** | Custom key bindings for 16 actions (ESP toggles, feature toggles, reload game) |
@@ -323,6 +325,79 @@ Global settings are stored in the program directory in JSON format:
 | `en` | `""` / `en` / `ch` | UI language (auto-detect / English / Chinese); default empty string triggers auto-detection via `GetUserDefaultUILanguage()` |
 
 Feature configs are saved in `saved/configs/`, with support for multiple profiles via the menu.
+
+---
+
+## Public Access Setup
+
+Web Radar listens on `0.0.0.0:22006` by default, accessible from any LAN device. To access it from the internet, use one of the following methods.
+
+### Option 1: Built-in Cloudflare Tunnel (recommended, free, one-click)
+
+The program has built-in cloudflared quick tunnel management — no manual command-line needed.
+
+1. Install cloudflared (one-time only):
+```bat
+winget install Cloudflare.cloudflared
+```
+
+2. In cs2.exe menu → Radar tab → "Public Access (Cloudflare Tunnel)" → check "Enable Tunnel"
+3. The program auto-starts cloudflared and captures the public URL, displayed in the menu (one-click copy)
+4. Open that URL in any browser to view the radar
+5. Uncheck to stop the tunnel
+
+> cloudflared process auto-terminates when cs2.exe exits (Job Object managed), no leftover processes.
+> Temporary domains change on each restart. For a fixed domain, refer to the [Cloudflare Tunnel docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to bind your own domain.
+
+### Option 2: ngrok (free tier, simple)
+
+1. Register at [ngrok.com](https://ngrok.com/) and download `ngrok.exe`
+2. Configure authtoken:
+
+```bat
+ngrok config add-authtoken YOUR_TOKEN
+```
+
+3. Expose the port:
+
+```bat
+ngrok http 22006
+```
+
+4. Terminal shows a public URL like `https://xxxx.ngrok-free.app`
+
+### Option 3: frp (self-hosted, requires a server with public IP)
+
+1. Deploy [frps](https://github.com/fatedier/frp) (server) on your public server
+2. Deploy frpc (client) on the machine running cs2.exe, configure `frpc.toml`:
+
+```toml
+serverAddr = "YOUR_SERVER_PUBLIC_IP"
+serverPort = 7000
+
+[[proxies]]
+name = "webradar"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22006
+remotePort = 22006
+```
+
+3. Start frpc, then access `http://YOUR_SERVER_PUBLIC_IP:22006`
+
+### Option 4: Router Port Forwarding (requires public IP)
+
+1. Log into your router admin page, find "Port Forwarding / Virtual Server"
+2. Add rule: external port `22006` → internal IP (LAN IP of the cs2.exe machine) → internal port `22006` → protocol TCP
+3. Access `http://YOUR_PUBLIC_IP:22006`
+
+> Note: This requires your ISP to provide a public IP. Some ISPs require requesting a public IP or using DDNS.
+
+### Security Tips
+
+- Once exposed publicly, anyone with the URL can access your radar. It's recommended to set the **Origin Allowlist** in the cs2.exe menu to restrict allowed source domains
+- Close the tunnel/forwarding when done to avoid prolonged exposure
+- Free temporary domains from cloudflared / ngrok change on each restart
 
 ---
 

@@ -35,6 +35,8 @@ const DEFAULT_SETTINGS = {
   smoothTransition: true,
   language: "",
   manualRotation: 0,
+  autozoom: false,
+  vertIndicator: "none",
 };
 
 const loadSettings = () => {
@@ -52,6 +54,7 @@ const App = () => {
   const [bombData, setBombData] = useState();
   const [projectiles, setProjectiles] = useState([]);
   const [spectators, setSpectators] = useState([]);
+  const [calibration, setCalibration] = useState(null);
   const [settings, setSettings] = useState(loadSettings());
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -87,6 +90,7 @@ const App = () => {
         setBombData(parsedData.m_bomb);
         setProjectiles(parsedData.m_projectiles || []);
         setSpectators(parsedData.m_spectators || []);
+        setCalibration(parsedData.m_calibration || null);
 
         const map = parsedData.m_map;
         if (map !== "invalid" && map !== currentMapRef.current) {
@@ -412,6 +416,7 @@ const App = () => {
               projectiles={projectiles}
               settings={settings}
               mapRotation={mapRotation}
+              calibration={calibration}
               t={t}
             />
           )) || (

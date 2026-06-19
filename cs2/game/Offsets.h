@@ -55,6 +55,15 @@ namespace Offset
 	inline DWORD vecAbsOrigin;
 	inline DWORD ModelStateOffset;
 	inline DWORD ModelNameOffset;
+	// ESP gap-closure stage 1: extended tactical offsets
+	inline DWORD bIsScoped;              // C_CSPlayerPawn::m_bIsScoped
+	inline DWORD bIsDefusing;            // C_CSPlayerPawn::m_bIsDefusing
+	inline DWORD vecVelocity;            // C_BaseEntity::m_vecVelocity
+	inline DWORD iClip1;                 // C_BasePlayerWeapon::m_iClip1
+	inline DWORD iPing;                  // CBasePlayerController::m_iPing
+	inline DWORD AttributeManager;       // C_EconEntity::m_AttributeManager
+	inline DWORD Item;                   // C_AttributeContainer::m_Item
+	inline DWORD iItemDefinitionIndex;   // C_EconItemView::m_iItemDefinitionIndex
 	// C_PlantedC4
 	inline DWORD BombTicking;
 	inline DWORD C4Blow;

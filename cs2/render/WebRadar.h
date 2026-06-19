@@ -7,6 +7,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include "../game/map_registry.h"
 
 // Forward-declare SOCKET to avoid including winsock2.h here
 // (winsock2.h must come before windows.h; GUI.cpp includes windows.h first)
@@ -134,31 +135,30 @@ inline std::atomic<bool> g_webRadarRunning{ false };
 inline RuntimeStatsSnapshot g_webRadarStats;
 inline std::mutex g_webRadarStatsMutex;
 
-// Cloudflare tunnel state (updated by Start/StopCloudflareTunnel)
-inline std::atomic<bool> g_cloudflareTunnelRunning{ false };
-inline std::string g_cloudflareTunnelURL;   // guarded by g_cloudflareTunnelMutex
-inline std::mutex g_cloudflareTunnelMutex;
-
-// Installation state for cloudflared auto-install
-enum class CfInstallState {
-	None,           // no install in progress
-	Installing,     // winget install running
-	Success,        // installed successfully
-	Failed,         // installation failed
-};
-inline std::atomic<CfInstallState> g_cfInstallState{ CfInstallState::None };
-
 // Get first LAN IPv4 address of this machine (for GUI display).
 // Returns empty string on failure. Implemented in WebRadar.cpp.
 std::string GetLocalIP();
 
-// Cloudflare tunnel management (implemented in WebRadar.cpp)
-// Starts cloudflared quick tunnel pointing at the given port.
-// If cloudflared not found, auto-installs via winget, then starts.
-// Returns false only if install fails. URL is captured asynchronously.
+// ---- Cloudflare Tunnel (quick tunnel) ----
+// Exposes the local WebRadar port to the internet via cloudflared.
+// StartCloudflareTunnel returns false if cloudflared.exe is not in PATH.
+// URL is captured asynchronously — poll GetCloudflareTunnelURL() until non-empty.
 bool StartCloudflareTunnel(int port);
 void StopCloudflareTunnel();
+bool IsCloudflareTunnelRunning();
+std::string GetCloudflareTunnelURL();   // empty if not ready yet
+bool IsCloudflaredInstalled();          // checks PATH for cloudflared.exe
+
+// Cloudflare tunnel state (updated by Start/Stop, read by GUI)
+inline std::atomic<bool> g_cloudflareTunnelRunning{ false };
+inline std::string g_cloudflareTunnelURL;        // guarded by g_cloudflareTunnelMutex
+inline std::mutex g_cloudflareTunnelMutex;
 
 // Thread function — reads GameSnapshot, serializes to JSON, broadcasts via WebSocket.
 // Declared here, implemented in WebRadar.cpp, started from main.cpp alongside other threads.
 VOID WebRadarThread();
+
+// Task 19: Set the current radar calibration (called from GUI thread).
+// The serializer reads this via GetRadarCalibrationSafe() and appends it
+// to the JSON payload as "m_calibration".
+void SetRadarCalibration(const std::string& mapName, const radar::RadarCalibrationRecord& record);

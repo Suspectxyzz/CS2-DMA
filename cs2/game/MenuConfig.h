@@ -78,12 +78,13 @@ namespace MenuConfig
 	inline bool ShowWebRadar = false;
 	inline int  WebRadarPort = 22006;
 	inline int  WebRadarInterval = 50; // ms between broadcasts (20 FPS)
-	inline bool WebRadarCloudflareTunnel = false;
 	inline bool WebRadarPasswordEnabled = false;
 	inline std::string WebRadarPassword = "123456";
 	// Task 10: Origin whitelist for /api/* paths (comma-separated).
 	// Empty = allow all origins. Example: "http://localhost:5173,https://example.com"
 	inline std::string WebRadarOriginAllowlist;
+	// Cloudflare quick tunnel toggle (public access). Off by default.
+	inline bool WebRadarCloudflareTunnel = false;
 
 	inline bool TeamCheck = true;
 
@@ -142,6 +143,12 @@ namespace MenuConfig
 	// ======== Debug Log ========
 	inline bool  DebugLog = false;
 
+	// ======== ESP Render Quality (stage 2) ========
+	// Snapshot interpolation + velocity extrapolation for player positions.
+	inline bool  InterpolationEnabled = true;
+	// Bone reliability check + 150ms persistence to suppress flicker.
+	inline bool  BoneReliabilityEnabled = true;
+
 	// ======== Safe Zone (Crosshair Cutout) ========
 	inline bool  SafeZoneEnabled = false;
 	inline float SafeZoneRadius = 100.f;
@@ -178,6 +185,57 @@ namespace MenuConfig
 
 	// ======== Performance Monitor ========
 	inline bool  ShowPerfMonitor = false;
+
+	// ======== ESP gap-closure stage 3a: Offscreen Arrows (Task 7) ========
+	inline bool    ShowOffscreenArrows = false;
+	inline ImColor OffscreenArrowColor = ImColor(255, 255, 255, 200);
+	inline float   OffscreenArrowSize = 12.f;
+
+	// ======== ESP gap-closure stage 3a: Player Flags (Task 8) ========
+	inline bool    ShowPlayerFlags = false;
+	inline bool    FlagBlindEnabled = true;
+	inline ImColor FlagBlindColor = ImColor(255, 255, 0, 255);
+	inline bool    FlagScopedEnabled = true;
+	inline ImColor FlagScopedColor = ImColor(0, 255, 255, 255);
+	inline bool    FlagDefusingEnabled = true;
+	inline ImColor FlagDefusingColor = ImColor(255, 100, 100, 255);
+	inline bool    FlagKitEnabled = true;
+	inline ImColor FlagKitColor = ImColor(100, 255, 100, 255);
+	inline bool    FlagMoneyEnabled = true;
+	inline ImColor FlagMoneyColor = ImColor(100, 255, 100, 255);
+	inline float   FlagFontSize = 12.f;
+
+	// ======== ESP gap-closure stage 3a: Visibility Coloring (Task 9) ========
+	inline bool    VisibilityColoring = false;
+	inline ImColor VisibleColor = ImColor(0, 255, 0, 255);
+	inline ImColor HiddenColor = ImColor(255, 0, 0, 255);
+
+	// ======== ESP gap-closure stage 3a: Sound ESP (Task 10) ========
+	inline bool    ShowSoundESP = false;
+	inline ImColor SoundESPColor = ImColor(0, 150, 255, 200);
+
+	// ======== ESP gap-closure stage 3b: C4 Bomb Timer Overlay (Task 11) ========
+	inline bool    ShowBombTimer = false;
+	inline float   BombTimerX = -1.f;   // -1 = default center
+	inline float   BombTimerY = -1.f;
+
+	// ======== ESP gap-closure stage 3b: World ESP (Task 12) ========
+	// Note: dropped-weapon scanning is deferred; this toggle currently
+	// drives the grenade effect timers (Smoke/Inferno/Decoy) overlay.
+	inline bool    ShowWorldESP = false;
+	inline bool    ShowWorldProjectileTimers = true;
+	inline ImColor WorldESPColor = ImColor(255, 255, 255, 200);
+
+	// ======== ESP gap-closure stage 3b: Weapon Ammo ESP (Task 13) ========
+	inline bool    ShowWeaponAmmo = false;
+	inline float   WeaponAmmoFontSize = 12.f;
+	inline ImColor WeaponAmmoColor = ImColor(255, 255, 255, 255);
+	inline ImColor WeaponLowAmmoColor = ImColor(255, 50, 50, 255);
+
+	// ======== ESP gap-closure stage 3b: Bar Value Labels (Task 14) ========
+	inline bool    ShowHealthText = false;
+	inline bool    ShowArmorText = false;
+	inline float   BarLabelFontSize = 11.f;
 
 	// ======== Text Customization ========
 	inline ImColor NameColor = ImColor(255, 255, 255, 255);

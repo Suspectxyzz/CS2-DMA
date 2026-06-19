@@ -71,6 +71,7 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::GameSceneNode = SafeGetUint64(fields, "m_pGameSceneNode");
 			Offset::fFlags = SafeGetUint64(fields, "m_fFlags");
 			Offset::OwnerEntity = SafeGetUint64(fields, "m_hOwnerEntity");
+			Offset::vecVelocity = SafeGetUint64(fields, "m_vecVelocity");
 			LOG_INFO("Offsets", "C_BaseEntity: Health=0x{:X} TeamID=0x{:X} GameSceneNode=0x{:X} fFlags=0x{:X}",
 				Offset::Health, Offset::TeamID, Offset::GameSceneNode, Offset::fFlags);
 		}
@@ -83,6 +84,7 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::MoneyService = SafeGetUint64(fields, "m_pInGameMoneyServices");
 			Offset::PlayerPawn = SafeGetUint64(fields, "m_hPlayerPawn");
 			Offset::CompTeammateColor = SafeGetUint64(fields, "m_iCompTeammateColor");
+			Offset::iPing = SafeGetUint64(fields, "m_iPing");
 			LOG_INFO("Offsets", "CCSPlayerController: Armor=0x{:X} IsAlive=0x{:X} PlayerPawn=0x{:X} MoneyService=0x{:X}",
 				Offset::Armor, Offset::IsAlive, Offset::PlayerPawn, Offset::MoneyService);
 		}
@@ -126,8 +128,10 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::AimPunchServices = SafeGetUint64(fields, "m_pAimPunchServices");
 			Offset::iIDEntIndex = SafeGetUint64(fields, "m_iIDEntIndex");
 			Offset::PawnArmor = SafeGetUint64(fields, "m_ArmorValue");
-			LOG_DEBUG("Offsets", "C_CSPlayerPawn: EyeAngles=0x{:X} PawnArmor=0x{:X}",
-				Offset::angEyeAngles, Offset::PawnArmor);
+			Offset::bIsScoped = SafeGetUint64(fields, "m_bIsScoped");
+			Offset::bIsDefusing = SafeGetUint64(fields, "m_bIsDefusing");
+			LOG_DEBUG("Offsets", "C_CSPlayerPawn: EyeAngles=0x{:X} PawnArmor=0x{:X} Scoped=0x{:X} Defusing=0x{:X}",
+				Offset::angEyeAngles, Offset::PawnArmor, Offset::bIsScoped, Offset::bIsDefusing);
 
 			// Calculate bSpottedByMask
 			uint64_t m_entitySpottedState = SafeGetUint64(fields, "m_entitySpottedState");
@@ -220,6 +224,30 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::ProjSpawnTime = SafeGetUint64(fields, "m_flSpawnTime");
 			Offset::ProjInitialVelocity = SafeGetUint64(fields, "m_vInitialVelocity");
 			Offset::ProjBounces = SafeGetUint64(fields, "m_nBounces");
+		}
+
+		// C_BasePlayerWeapon (active weapon ammo clip)
+		if (classes.HasMember("C_BasePlayerWeapon") && classes["C_BasePlayerWeapon"].HasMember("fields")) {
+			const auto& fields = classes["C_BasePlayerWeapon"]["fields"];
+			Offset::iClip1 = SafeGetUint64(fields, "m_iClip1");
+		}
+
+		// C_EconEntity (weapon item definition chain)
+		if (classes.HasMember("C_EconEntity") && classes["C_EconEntity"].HasMember("fields")) {
+			const auto& fields = classes["C_EconEntity"]["fields"];
+			Offset::AttributeManager = SafeGetUint64(fields, "m_AttributeManager");
+		}
+
+		// C_AttributeContainer
+		if (classes.HasMember("C_AttributeContainer") && classes["C_AttributeContainer"].HasMember("fields")) {
+			const auto& fields = classes["C_AttributeContainer"]["fields"];
+			Offset::Item = SafeGetUint64(fields, "m_Item");
+		}
+
+		// C_EconItemView (weapon item id for icon mapping)
+		if (classes.HasMember("C_EconItemView") && classes["C_EconItemView"].HasMember("fields")) {
+			const auto& fields = classes["C_EconItemView"]["fields"];
+			Offset::iItemDefinitionIndex = SafeGetUint64(fields, "m_iItemDefinitionIndex");
 		}
 	}
 

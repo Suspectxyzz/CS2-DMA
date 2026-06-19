@@ -64,7 +64,24 @@ const DEFAULT_SETTINGS = {
   showLatency: true, bgOpacity: 0.95,
   smoothTransition: true, language: "cn",
   manualRotation: 0,
+  autozoom: false, vertIndicator: "none",
 };
+
+// Multi-option button group (for vertIndicator: none / color / scale)
+const OptionGroup = ({ label, value, options, onChange }) => (
+  <div className="flex items-center justify-between py-1.5 px-1">
+    <span className="text-radar-secondary text-sm">{label}</span>
+    <div className="flex gap-1">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`px-2.5 py-0.5 rounded text-xs transition-colors ${value === opt.value ? "bg-radar-secondary text-white" : "bg-radar-secondary/20 text-radar-secondary hover:bg-radar-secondary/30"}`}
+        >{opt.label}</button>
+      ))}
+    </div>
+  </div>
+);
 
 const SettingsButton = ({ settings, onSettingsChange, t }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -136,6 +153,17 @@ const SettingsButton = ({ settings, onSettingsChange, t }) => {
               <Toggle label={t("showBombTimer")} checked={s.showBombTimer ?? true} onChange={set("showBombTimer")} />
               <Toggle label={t("showLatency")} checked={s.showLatency ?? true} onChange={set("showLatency")} />
               <Toggle label={t("smoothing")} checked={s.smoothTransition ?? true} onChange={set("smoothTransition")} />
+              <Toggle label={t("autozoom")} checked={s.autozoom ?? false} onChange={set("autozoom")} />
+              <OptionGroup
+                label={t("vertIndicator")}
+                value={s.vertIndicator ?? "none"}
+                onChange={set("vertIndicator")}
+                options={[
+                  { value: "none", label: t("vertNone") },
+                  { value: "color", label: t("vertColor") },
+                  { value: "scale", label: t("vertScale") },
+                ]}
+              />
               <Slider label={t("bgOpacity")} value={s.bgOpacity ?? 0.95} min={0} max={1} step={0.05} suffix="" onChange={set("bgOpacity")} />
             </Section>
 

@@ -18,4 +18,10 @@ namespace intervals {
 	constexpr int64_t kWorldScanMedUs = 90000;       // 90ms  - entities 1200-2000
 	constexpr int64_t kWorldScanLowUs = 120000;      // 120ms - entities > 2000
 	constexpr int64_t kPeriodicRefreshUs = 100000;   // 100ms - periodic refresh (was frameCounter % 50)
+	// ESP gap-closure stage 1: extended tactical field refresh intervals
+	constexpr int64_t kPlayerMoneyAuxUs = 500000;     // 500ms - money (controller-side, shared with WR)
+	constexpr int64_t kPlayerStatusAuxUs = 100000;     // 100ms - scoped/defusing/velocity status
+	constexpr int64_t kPlayerDefuserAuxUs = 500000;    // 500ms - defuser kit presence
+	constexpr int64_t kPlayerEyeAuxUs = 100000;        // 100ms - eye yaw / view angle
+	constexpr int64_t kPlayerVisibilityAuxUs = 200000; // 200ms - visibility (spotted mask) refresh
 }

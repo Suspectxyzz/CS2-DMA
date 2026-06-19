@@ -18,6 +18,14 @@
 
 
 
+// ESP gap-closure stage 2: quintic (smootherstep) easing for snapshot interpolation.
+// Produces a C1-continuous curve that eases position transitions between snapshots.
+static float QuinticEase(float t)
+{
+	return t * t * t * (t * (t * 6.f - 15.f) + 10.f);
+}
+
+
 void Cheats::Run()
 {
 	static bool firstRun = true;
@@ -91,11 +99,54 @@ void Cheats::Run()
 		}
 
 		// Re-project all entities: world coords → screen coords with fresh matrix
+		//
+		// ESP gap-closure stage 2: snapshot interpolation + velocity extrapolation.
+		// renderPos = lerp(PrevPos, Pos, QuinticEase(alpha)) + Velocity * extrapolationSec
+		// - alpha advances 0→1 across one snapshot interval (smooths position jumps)
+		// - extrapolationSec kicks in after the interval, capped at 80ms, using Velocity
+		// - PrevPos == (0,0,0) (first frame) skips interpolation and uses Pos directly
+		const bool interpOn = MenuConfig::InterpolationEnabled;
+		const int64_t nowUs = std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+		const int64_t captureUs = snap.CaptureTimeUs;
+		static int64_t s_prevCaptureUs = 0;
+		int64_t intervalUs = (s_prevCaptureUs > 0 && captureUs > s_prevCaptureUs)
+			? (captureUs - s_prevCaptureUs) : 16000;
+		if (captureUs != s_prevCaptureUs) s_prevCaptureUs = captureUs;
+
+		float lerpT = 1.f;
+		float extrapolationSec = 0.f;
+		if (interpOn && captureUs > 0) {
+			int64_t elapsedUs = nowUs - captureUs;
+			float alpha = std::clamp((float)elapsedUs / (float)intervalUs, 0.f, 1.f);
+			lerpT = QuinticEase(alpha);
+			int64_t excessUs = elapsedUs - intervalUs;
+			if (excessUs > 0)
+				extrapolationSec = std::min(0.08f, (float)excessUs / 1000000.f);
+		}
+
 		for (auto& Entity : snap.Entities) {
 			if (Entity.Pawn.Health <= 0 || !Entity.Pawn.ScreenPosValid) continue;
 
+			// Interpolated + extrapolated render position (falls back to Pos when off).
+			Vec3 renderPos = Entity.Pawn.Pos;
+			if (interpOn) {
+				const Vec3& prevPos = Entity.Pawn.PrevPos;
+				bool prevValid = (prevPos.x != 0.f || prevPos.y != 0.f || prevPos.z != 0.f);
+				if (prevValid) {
+					renderPos.x = prevPos.x + (Entity.Pawn.Pos.x - prevPos.x) * lerpT;
+					renderPos.y = prevPos.y + (Entity.Pawn.Pos.y - prevPos.y) * lerpT;
+					renderPos.z = prevPos.z + (Entity.Pawn.Pos.z - prevPos.z) * lerpT;
+				}
+				if (extrapolationSec > 0.f) {
+					renderPos.x += Entity.Pawn.Velocity.x * extrapolationSec;
+					renderPos.y += Entity.Pawn.Velocity.y * extrapolationSec;
+					renderPos.z += Entity.Pawn.Velocity.z * extrapolationSec;
+				}
+			}
+
 			Vec2 footScreen;
-			Entity.Pawn.ScreenPosValid = CView::WorldToScreen(freshMatrix, Entity.Pawn.Pos, footScreen);
+			Entity.Pawn.ScreenPosValid = CView::WorldToScreen(freshMatrix, renderPos, footScreen);
 			Entity.Pawn.ScreenPos = footScreen;
 
 			for (int j = 0; j < Entity.Pawn.BoneData.BonePosCount; j++) {
@@ -115,6 +166,10 @@ void Cheats::Run()
 			szCenter = { ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f };
 		}
 
+		// Task 10: Sound ESP needs a millisecond timestamp to compare against SoundUntilMs.
+		const uint64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+
 		for (int i = 0; i < EntityListSnapshot.size(); i++)
 		{
 			const CEntity& Entity = EntityListSnapshot[i];
@@ -123,6 +178,21 @@ void Cheats::Run()
 
 			if (MenuConfig::TeamCheck && Entity.Controller.TeamID == LocalPlayerSnapshot.Controller.TeamID)
 				continue;
+
+			// Task 7: Offscreen arrow ESP — drawn before the ScreenPosValid skip so
+			// enemies outside the view frustum still get a directional indicator.
+			if (MenuConfig::ShowOffscreenArrows && !Entity.Pawn.ScreenPosValid)
+			{
+				if (std::isfinite(Entity.Pawn.Pos.x) && std::isfinite(Entity.Pawn.Pos.y) && std::isfinite(Entity.Pawn.Pos.z))
+				{
+					ImDrawList* dl = ImGui::GetBackgroundDrawList();
+					ImVec2 ds = ImGui::GetIO().DisplaySize;
+					Render::DrawOffscreenArrow(dl, Entity.Pawn.Pos, LocalPlayerSnapshot.Pawn.Pos,
+						LocalPlayerSnapshot.Pawn.ViewAngle.y, ds.x, ds.y,
+						ImGui::ColorConvertFloat4ToU32(MenuConfig::OffscreenArrowColor.Value),
+						MenuConfig::OffscreenArrowSize);
+				}
+			}
 
 			if (!Entity.Pawn.ScreenPosValid) continue;
 			if (!std::isfinite(Entity.Pawn.ScreenPos.x) || !std::isfinite(Entity.Pawn.ScreenPos.y)) continue;
@@ -178,13 +248,36 @@ void Cheats::Run()
 
 			if (MenuConfig::ShowBoxESP && !(inSafeZone && MenuConfig::SafeZoneSkipBox))
 			{
+				// Task 9: Visibility coloring — pick box color based on spotted mask
+				// and screen visibility. Falls back to BoxColor when disabled.
+				bool isVisibleNow = (Entity.Pawn.bSpottedByMask != 0) || Entity.Pawn.ScreenPosValid;
+				ImColor entityCol = MenuConfig::VisibilityColoring
+					? (isVisibleNow ? MenuConfig::VisibleColor : MenuConfig::HiddenColor)
+					: MenuConfig::BoxColor;
+
 				if (MenuConfig::BoxFilled)
-					Render::DrawBoxFill(Rect, MenuConfig::BoxColor, MenuConfig::BoxFillAlpha);
+					Render::DrawBoxFill(Rect, entityCol, MenuConfig::BoxFillAlpha);
 
 				if (MenuConfig::BoxType == 2)
-					Render::DrawCornerBox(Rect, MenuConfig::BoxColor, MenuConfig::BoxThickness, MenuConfig::CornerLength);
+					Render::DrawCornerBox(Rect, entityCol, MenuConfig::BoxThickness, MenuConfig::CornerLength);
 				else
-					Gui.Rectangle({ Rect.x,Rect.y }, { Rect.z,Rect.w }, MenuConfig::BoxColor, MenuConfig::BoxThickness, MenuConfig::BoxRounding);
+					Gui.Rectangle({ Rect.x,Rect.y }, { Rect.z,Rect.w }, entityCol, MenuConfig::BoxThickness, MenuConfig::BoxRounding);
+			}
+
+			// Task 8: Player status flags — Blind/Scoped/Defusing/Kit/Money stacked
+			// vertically to the right of the 2D box.
+			if (MenuConfig::ShowPlayerFlags && !(inSafeZone && MenuConfig::SafeZoneSkipBox))
+				Render::DrawPlayerFlags(ImGui::GetBackgroundDrawList(), Entity,
+					ImVec2(Rect.x, Rect.y), ImVec2(Rect.x + Rect.z, Rect.y + Rect.w),
+					MenuConfig::FlagFontSize);
+
+			// Task 10: Sound ESP — expanding ripple at the player's feet when a
+			// shot was fired within the last 420ms.
+			if (MenuConfig::ShowSoundESP && Entity.Pawn.SoundUntilMs > nowMs)
+			{
+				Render::DrawSoundESP(ImGui::GetBackgroundDrawList(), Entity.Pawn.ScreenPos,
+					nowMs, Entity.Pawn.SoundUntilMs,
+					ImGui::ColorConvertFloat4ToU32(MenuConfig::SoundESPColor.Value));
 			}
 
 			if (MenuConfig::ShowHealthBar && !(inSafeZone && MenuConfig::SafeZoneSkipHealthBar))
@@ -221,8 +314,49 @@ void Cheats::Run()
 			if (MenuConfig::ShowArmorBar && !(inSafeZone && MenuConfig::SafeZoneSkipArmorBar))
 				Render::DrawArmorBar(Entity.Pawn.Armor, Rect, MenuConfig::ArmorBarColor, MenuConfig::ArmorBarWidth, MenuConfig::ArmorBarType);
 
+			// Task 14: Bar value labels — numeric tag above health/armor bars.
+			// Only drawn for the vertical bar variants (type 0) to avoid
+			// overlap with the horizontal/top bar layouts.
+			if ((MenuConfig::ShowHealthText || MenuConfig::ShowArmorText) &&
+			    !(inSafeZone && (MenuConfig::SafeZoneSkipHealthBar || MenuConfig::SafeZoneSkipArmorBar)))
+			{
+				ImDrawList* labelDL = ImGui::GetBackgroundDrawList();
+				float screenW = ImGui::GetIO().DisplaySize.x;
+
+				if (MenuConfig::ShowHealthText && MenuConfig::ShowHealthBar &&
+				    MenuConfig::HealthBarType == 0 && Entity.Pawn.Health < 100)
+				{
+					float hpRatio = std::clamp((float)Entity.Pawn.Health / 100.f, 0.f, 1.f);
+					ImU32 hpCol = IM_COL32((int)(255 * (1.f - hpRatio)), (int)(255 * hpRatio), 0, 255);
+					ImVec2 hpBarPos(Rect.x - MenuConfig::HealthBarWidth - 3.f, Rect.y);
+					Render::DrawBarLabel(labelDL, hpBarPos, MenuConfig::HealthBarWidth,
+					                     Entity.Pawn.Health, hpCol, MenuConfig::BarLabelFontSize, screenW);
+				}
+
+				if (MenuConfig::ShowArmorText && MenuConfig::ShowArmorBar &&
+				    MenuConfig::ArmorBarType == 0 && Entity.Pawn.Armor > 0 && Entity.Pawn.Armor < 100)
+				{
+					ImU32 apCol = ImGui::ColorConvertFloat4ToU32(MenuConfig::ArmorBarColor.Value);
+					ImVec2 apBarPos(Rect.x + Rect.z + 2.f, Rect.y);
+					Render::DrawBarLabel(labelDL, apBarPos, MenuConfig::ArmorBarWidth,
+					                     Entity.Pawn.Armor, apCol, MenuConfig::BarLabelFontSize, screenW);
+				}
+			}
+
 			if (MenuConfig::ShowWeaponESP && !(inSafeZone && MenuConfig::SafeZoneSkipWeapon))
 				Gui.StrokeText(Entity.Pawn.WeaponName, Vec2(Rect.x, Rect.y + Rect.w), MenuConfig::WeaponColor, MenuConfig::WeaponFontSize);
+
+			// Task 13: Weapon ammo ESP — "Ammo XX/YY" + LOW warning below weapon name.
+			if (MenuConfig::ShowWeaponAmmo && !(inSafeZone && MenuConfig::SafeZoneSkipWeapon))
+			{
+				int maxClip = Render::WeaponMaxClip(Entity.Pawn.WeaponName);
+				ImVec2 ammoPos(Rect.x, Rect.y + Rect.w + MenuConfig::WeaponFontSize + 2.f);
+				Render::DrawWeaponAmmo(ImGui::GetBackgroundDrawList(), ammoPos,
+				                       Entity.Pawn.AmmoClip, maxClip,
+				                       MenuConfig::WeaponAmmoFontSize,
+				                       ImGui::ColorConvertFloat4ToU32(MenuConfig::WeaponAmmoColor.Value),
+				                       ImGui::ColorConvertFloat4ToU32(MenuConfig::WeaponLowAmmoColor.Value));
+			}
 
 			if (MenuConfig::ShowDistance && !(inSafeZone && MenuConfig::SafeZoneSkipDistance))
 				Render::DrawDistance(LocalPlayerSnapshot, Entity, Rect);
@@ -243,9 +377,38 @@ void Cheats::Run()
 		if (MenuConfig::ShowBombESP)
 			Render::DrawBombESP(snap.Bomb, freshMatrix);
 
+		// Task 11: C4 bomb timer overlay — draggable center window with C4
+		// countdown + defuse progress bars. Only shown while planted & ticking.
+		if (MenuConfig::ShowBombTimer &&
+		    snap.Bomb.isPlanted && !snap.Bomb.isDefused && snap.Bomb.blowTime > 0.f)
+		{
+			// Infer defuse total (5s with kit, 10s without) once when defuse starts.
+			static float s_defuseTotalSec = 10.f;
+			static bool  s_prevDefusing = false;
+			if (snap.Bomb.isDefusing) {
+				if (!s_prevDefusing)
+					s_defuseTotalSec = (snap.Bomb.defuseTime > 5.5f) ? 10.f : 5.f;
+				s_prevDefusing = true;
+			} else {
+				s_prevDefusing = false;
+			}
+
+			ImVec2 ds = ImGui::GetIO().DisplaySize;
+			Render::DrawBombTimerOverlay(ImGui::GetBackgroundDrawList(),
+			                             ds.x, ds.y,
+			                             snap.Bomb.blowTime, 40.f,
+			                             snap.Bomb.isDefusing, snap.Bomb.defuseTime, s_defuseTotalSec);
+		}
+
 		// Grenade Projectile ESP
 		if (MenuConfig::ShowProjectileESP && !snap.Projectiles.empty())
 			Render::DrawProjectileESP(snap.Projectiles, freshMatrix, LocalPlayerSnapshot.Pawn.Pos);
+
+		// Task 12: World ESP — grenade effect timers (Smoke/Inferno/Decoy).
+		// Dropped-weapon scanning is deferred; this overlay only draws the
+		// lingering effect countdown above active smoke/fire/decoy spots.
+		if (MenuConfig::ShowWorldESP && !snap.Projectiles.empty())
+			Render::DrawWorldESP(ImGui::GetBackgroundDrawList(), snap.Projectiles, freshMatrix, 0);
 
 		// Crosshair overlay: drawn on top of ESP, below safe zone mask
 		if (MenuConfig::CrosshairEnabled) {

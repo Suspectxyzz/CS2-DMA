@@ -72,6 +72,9 @@ struct GameSnapshot
 	BombData Bomb;
 	std::vector<GrenadeProjectile> Projectiles;
 	std::vector<SpectatorInfo> Spectators;
+	// ESP gap-closure stage 2: capture timestamp (microseconds since steady_clock epoch)
+	// used by the render loop for snapshot interpolation + velocity extrapolation.
+	int64_t CaptureTimeUs = 0;
 };
 
 namespace Cheats

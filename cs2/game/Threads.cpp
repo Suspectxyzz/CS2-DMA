@@ -238,12 +238,13 @@ VOID DataThread()
 	};
 
 	int64_t lastDiscoveryUs = 0;
-	int64_t lastControllerRefreshUs = 0;
-	int64_t lastWeaponUpdateUs = 0;
-	int64_t lastWrExtraUs = 0;
-	int64_t lastWrSlowUs = 0;
-	int64_t lastProjectileScanUs = 0;
-	int64_t lastPeriodicRefreshUs = 0;
+		int64_t lastControllerRefreshUs = 0;
+		int64_t lastWeaponUpdateUs = 0;
+		int64_t lastWrExtraUs = 0;
+		int64_t lastWrSlowUs = 0;
+		int64_t lastProjectileScanUs = 0;
+		int64_t lastPeriodicRefreshUs = 0;
+		int64_t lastPlayerStatusAuxUs = 0;
 
 	int frameCounter = 0; // retained for logging only
 
@@ -279,7 +280,9 @@ VOID DataThread()
 			                  MenuConfig::ShowHealthBar || MenuConfig::ShowWeaponESP ||
 			                  MenuConfig::ShowPlayerName || MenuConfig::ShowDistance ||
 			                  MenuConfig::ShowEyeRay || MenuConfig::ShowLineToEnemy ||
-			                  MenuConfig::ShowHeadDot || MenuConfig::ShowArmorBar;
+			                  MenuConfig::ShowHeadDot || MenuConfig::ShowArmorBar ||
+			                  MenuConfig::ShowOffscreenArrows || MenuConfig::ShowSoundESP ||
+			                  MenuConfig::ShowPlayerFlags;
 			bool needEntityPipeline = anyESPDraw || MenuConfig::ShowWebRadar || MenuConfig::ShowSpectatorList;
 			bool anyFeature = needEntityPipeline || MenuConfig::ShowProjectileESP || MenuConfig::ShowPerfMonitor;
 
@@ -296,7 +299,7 @@ VOID DataThread()
 
 			// Get2DBox uses head bone → bones required for any ESP drawing
 			bool needBones = anyESPDraw;
-			bool needViewAngle = MenuConfig::ShowEyeRay || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled;
+			bool needViewAngle = MenuConfig::ShowEyeRay || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled || MenuConfig::ShowOffscreenArrows;
 			bool needCameraPos = MenuConfig::ShowEyeRay;
 			bool needWeapon = MenuConfig::ShowWeaponESP || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled;
 
@@ -818,8 +821,9 @@ VOID DataThread()
 						ce.entity.Pawn.Health = 0;
 						ce.entity.Pawn.ScreenPosValid = false;
 					} else {
-						ce.entity.Pawn.Pos = buf.pos;
-						ce.entity.Pawn.Health = buf.health;
+					ce.entity.Pawn.PrevPos = ce.entity.Pawn.Pos;
+					ce.entity.Pawn.Pos = buf.pos;
+					ce.entity.Pawn.Health = buf.health;
 						ce.entity.Pawn.Armor = (buf.armor >= 0 && buf.armor <= 100) ? buf.armor : 0;
 						ce.entity.Pawn.FlashDuration = buf.flashDuration;
 						ce.entity.Pawn.ScreenPosValid = true; // render thread will refine via W2S
@@ -844,15 +848,104 @@ VOID DataThread()
 				}
 
 				// Apply local player scatter results
-				if (IsValidPos(localBuf.pos)) {
-					localPlayer.Pawn.Pos = localBuf.pos;
-					localPlayer.Pawn.Health = localBuf.health;
-					localPlayer.Pawn.Armor = (localBuf.armor >= 0 && localBuf.armor <= 100) ? localBuf.armor : 0;
-					localPlayer.Pawn.FlashDuration = localBuf.flashDuration;
-					if (needViewAngle)
-						localPlayer.Pawn.ViewAngle = localBuf.viewAngle;
+			if (IsValidPos(localBuf.pos)) {
+				localPlayer.Pawn.PrevPos = localPlayer.Pawn.Pos;
+				localPlayer.Pawn.Pos = localBuf.pos;
+				localPlayer.Pawn.Health = localBuf.health;
+				localPlayer.Pawn.Armor = (localBuf.armor >= 0 && localBuf.armor <= 100) ? localBuf.armor : 0;
+				localPlayer.Pawn.FlashDuration = localBuf.flashDuration;
+				if (needViewAngle)
+					localPlayer.Pawn.ViewAngle = localBuf.viewAngle;
+			}
+
+			// ------- 5b. Extended tactical fields (scoped/defusing/velocity/ping, ~100ms) -------
+			if ((now - lastPlayerStatusAuxUs) >= intervals::kPlayerStatusAuxUs) {
+				lastPlayerStatusAuxUs = now;
+				constexpr int STATUS_BATCH = 4;
+				uint8_t scopedBuf[MAX_ENTITIES]{};
+				uint8_t defusingBuf[MAX_ENTITIES]{};
+				Vec3 velocityBuf[MAX_ENTITIES];
+				int pingBuf[MAX_ENTITIES]{};
+				DWORD shotsBuf[MAX_ENTITIES]{};
+				static DWORD lastShotsFired[MAX_ENTITIES];
+				uint8_t localScoped = 0, localDefusing = 0;
+				Vec3 localVelocity{};
+				int localPing = 0;
+
+				for (int batchStart = 0; batchStart < count; batchStart += STATUS_BATCH) {
+					int batchEnd = (batchStart + STATUS_BATCH < count) ? batchStart + STATUS_BATCH : count;
+					VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+					if (!h) continue;
+					for (int i = batchStart; i < batchEnd; i++) {
+						auto& ce = entityCache[i];
+						if (ce.pawnAddr == 0 || ce.entity.Pawn.Health <= 0) continue;
+						if (Offset::bIsScoped)
+							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::bIsScoped, &scopedBuf[i], sizeof(uint8_t));
+						if (Offset::bIsDefusing)
+							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::bIsDefusing, &defusingBuf[i], sizeof(uint8_t));
+						if (Offset::vecVelocity)
+							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::vecVelocity, &velocityBuf[i], sizeof(Vec3));
+						if (Offset::iPing)
+							ProcessMgr.AddScatterReadRequest(h, ce.controllerAddr + Offset::iPing, &pingBuf[i], sizeof(int));
+						if (MenuConfig::ShowSoundESP && Offset::iShotsFired)
+							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::iShotsFired, &shotsBuf[i], sizeof(DWORD));
+				}
+				if (batchStart == 0 && localPlayer.Pawn.Address != 0 && localPlayer.Pawn.Health > 0) {
+						if (Offset::bIsScoped)
+							ProcessMgr.AddScatterReadRequest(h, localPlayer.Pawn.Address + Offset::bIsScoped, &localScoped, sizeof(uint8_t));
+						if (Offset::bIsDefusing)
+							ProcessMgr.AddScatterReadRequest(h, localPlayer.Pawn.Address + Offset::bIsDefusing, &localDefusing, sizeof(uint8_t));
+						if (Offset::vecVelocity)
+							ProcessMgr.AddScatterReadRequest(h, localPlayer.Pawn.Address + Offset::vecVelocity, &localVelocity, sizeof(Vec3));
+						if (Offset::iPing && localPlayer.Controller.Address != 0)
+							ProcessMgr.AddScatterReadRequest(h, localPlayer.Controller.Address + Offset::iPing, &localPing, sizeof(int));
+					}
+					ProcessMgr.ExecuteReadScatter(h);
+					VMMDLL_Scatter_CloseHandle(h);
+				}
+
+				for (int i = 0; i < count; i++) {
+					auto& ce = entityCache[i];
+					if (ce.pawnAddr == 0 || ce.entity.Pawn.Health <= 0) continue;
+					if (Offset::bIsScoped)
+						ce.entity.Pawn.Scoped = scopedBuf[i] != 0;
+					if (Offset::bIsDefusing)
+						ce.entity.Pawn.Defusing = defusingBuf[i] != 0;
+					if (Offset::vecVelocity)
+						ce.entity.Pawn.Velocity = velocityBuf[i];
+					if (Offset::iPing)
+						ce.entity.Pawn.Ping = pingBuf[i];
+					// Task 10: Sound ESP — fire ripple when ShotsFired increases.
+					if (MenuConfig::ShowSoundESP && Offset::iShotsFired) {
+						if (shotsBuf[i] > lastShotsFired[i]) {
+							uint64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+								std::chrono::steady_clock::now().time_since_epoch()).count();
+							ce.entity.Pawn.SoundUntilMs = nowMs + 420;
+						}
+						lastShotsFired[i] = shotsBuf[i];
+					}
+					// HasBomb: infer from weapon list (c4 carrier)
+					ce.entity.Pawn.HasBomb = false;
+					for (const auto& w : ce.entity.Pawn.WeaponList) {
+						if (w == "c4") { ce.entity.Pawn.HasBomb = true; break; }
+					}
+				}
+				if (localPlayer.Pawn.Address != 0 && localPlayer.Pawn.Health > 0) {
+					if (Offset::bIsScoped)
+						localPlayer.Pawn.Scoped = localScoped != 0;
+					if (Offset::bIsDefusing)
+						localPlayer.Pawn.Defusing = localDefusing != 0;
+					if (Offset::vecVelocity)
+						localPlayer.Pawn.Velocity = localVelocity;
+					if (Offset::iPing)
+						localPlayer.Pawn.Ping = localPing;
+					localPlayer.Pawn.HasBomb = false;
+					for (const auto& w : localPlayer.Pawn.WeaponList) {
+						if (w == "c4") { localPlayer.Pawn.HasBomb = true; break; }
+					}
 				}
 			}
+		}
 
 			// ------- 6. Weapon names (low frequency, only if feature needs it) -------
 		if (needWeapon) {
@@ -1902,6 +1995,8 @@ VOID DataThread()
 			newSnap.Entities = std::move(publishEntities);
 			newSnap.Projectiles = projectileCache;
 			newSnap.Spectators = std::move(spectators);
+			// ESP gap-closure stage 2: stamp capture time for render-loop interpolation.
+			newSnap.CaptureTimeUs = now;
 
 			// Preserve low-frequency fields this publish path does not refresh:
 			//   MapName — written by SlowUpdateThread (~10s)

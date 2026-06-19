@@ -49,10 +49,12 @@
 <img width="1874" height="701" alt="image" src="https://github.com/user-attachments/assets/ca3c1dbe-4044-4bd9-b57f-d39eddd66ca5" />
 
 ### Web Radar（网页雷达）
-- 内嵌 WebSocket 服务器
-- 使用 [cs2_webradar](https://github.com/clauadv/cs2_webradar) 前端
-- 局域网内任何设备浏览器即可查看实时雷达
-- **远程共享** — 局域网 IP 显示 + 一键复制、Cloudflare 隧道一键启停（自动安装 cloudflared、自动捕获公网 URL、Job Object 进程树管理），无需服务器
+- 内嵌 WebSocket 服务器（默认端口 22006，可在菜单中修改）
+- 前端资源已嵌入 cs2.exe，单文件部署，无需额外文件
+- 三传输层自动降级：WebSocket → SSE → HTTP 轮询
+- **局域网访问** — 菜单中打开 Web Radar 后，局域网内任何设备浏览器即可查看实时雷达（菜单显示本机 IP + 一键复制 URL）
+- **公网访问（内置 Cloudflare 隧道）** — 菜单中一键启停 cloudflared quick tunnel，自动捕获公网 URL（需先安装 cloudflared：`winget install Cloudflare.cloudflared`）
+- **其他公网方案** — 见下方 [公网访问配置](#公网访问配置) 章节（ngrok / frp / 端口转发）
 <img width="840" height="517" alt="image" src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" />
 <img width="773" height="457" alt="image" src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" />
 
@@ -134,7 +136,7 @@ CS2-DMA/
 | Tab | 功能 |
 |-----|------|
 | **Visuals** | 方框、骨骼、血条、护甲条、武器、距离、名称、视线、连线、观众列表等 ESP 功能 |
-| **Radar** | Web Radar 开关、端口、推送频率、远程共享（Cloudflare 隧道） |
+| **Radar** | Web Radar 开关、端口、推送频率、局域网 URL 显示与复制、Cloudflare 隧道一键启停、雷达校准（旋转/缩放/偏移） |
 | **Grenade** | 投掷物助手开关、录制点位、编辑/删除 |
 | **Fusion** | 准星覆盖层（4 种样式 + 瞄准敌人变色）、准星安全区 |
 | **Hotkeys** | 16 种动作自定义按键绑定（ESP 开关、功能开关、重新获取数据） |
@@ -318,6 +320,79 @@ cd CS2-DMA
 | `en` | `""` / `en` / `ch` | 界面语言（自动检测 / English / 中文）；默认空字符串时通过 `GetUserDefaultUILanguage()` 自动检测 |
 
 功能配置保存在 `saved/configs/` 目录，支持通过菜单创建多套配置。
+
+---
+
+## 公网访问配置
+
+Web Radar 默认监听 `0.0.0.0:22006`，局域网内设备可直接访问。如需从公网访问，可使用以下方案。
+
+### 方案一：内置 Cloudflare 隧道（推荐，免费，一键启停）
+
+程序内置 cloudflared quick tunnel 管理，无需手动命令行操作。
+
+1. 安装 cloudflared（仅需一次）：
+```bat
+winget install Cloudflare.cloudflared
+```
+
+2. 在 cs2.exe 菜单 → Radar Tab → "公网访问 (Cloudflare 隧道)" → 勾选"启用隧道"
+3. 程序自动启动 cloudflared 并捕获公网 URL，显示在菜单中（一键复制）
+4. 在任意设备的浏览器打开该 URL 即可访问雷达
+5. 取消勾选即可停止隧道
+
+> 程序退出时 cloudflared 进程会自动终止（Job Object 管理），不会残留。
+> 临时域名每次启动都会变化。如需固定域名，参考 [Cloudflare Tunnel 官方文档](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) 绑定自有域名。
+
+### 方案二：ngrok（免费额度，简单）
+
+1. 注册 [ngrok](https://ngrok.com/) 账号并下载 `ngrok.exe`
+2. 配置 authtoken：
+
+```bat
+ngrok config add-authtoken YOUR_TOKEN
+```
+
+3. 暴露端口：
+
+```bat
+ngrok http 22006
+```
+
+4. 终端会显示 `https://xxxx.ngrok-free.app` 公网地址
+
+### 方案三：frp（自建服务器，需公网 IP 服务器）
+
+1. 在公网服务器部署 [frps](https://github.com/fatedier/frp)（服务端）
+2. 在运行 cs2.exe 的机器部署 frpc（客户端），配置 `frpc.toml`：
+
+```toml
+serverAddr = "你的服务器公网IP"
+serverPort = 7000
+
+[[proxies]]
+name = "webradar"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22006
+remotePort = 22006
+```
+
+3. 启动 frpc，访问 `http://服务器公网IP:22006`
+
+### 方案四：路由器端口转发（需公网 IP）
+
+1. 登录路由器管理页面，找到"端口转发 / 虚拟服务器"
+2. 添加规则：外部端口 `22006` → 内部 IP（运行 cs2.exe 的机器局域网 IP）→ 内部端口 `22006` → 协议 TCP
+3. 访问 `http://你的公网IP:22006`
+
+> 注意：此方案要求你的宽带拥有公网 IP，部分运营商需申请公网 IP 或使用 DDNS。
+
+### 安全提示
+
+- 公网暴露后任何人知道 URL 都可访问你的雷达，建议在 cs2.exe 菜单的 **Origin 白名单** 中限制允许的来源域名
+- 临时使用完毕后及时关闭隧道/转发，避免长期暴露
+- cloudflared / ngrok 的免费临时域名每次启动都会变化
 
 ---
 

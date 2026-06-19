@@ -1,4 +1,6 @@
 #include "Render.h"
+#include <cctype>
+#include <string>
 
 
 
@@ -129,12 +131,87 @@ namespace Render
 
 
 
+	// ================================================================
+	// ESP gap-closure stage 2: bone reliability check + persistence.
+	// Validates skeleton plausibility (height/anchor/core joints) and
+	// reuses the last valid skeleton within 150ms to suppress flicker.
+	// ================================================================
+	struct BoneCache {
+		DWORD64 pawn = 0;
+		CBone lastValidBone;
+		int64_t lastValidUs = 0;
+	};
+	static BoneCache s_boneCache[64];
+
+	static bool HasReliableBones(const CBone& bone)
+	{
+		if (bone.BonePosCount < 6) return false;
+		if (bone.BonePosCount <= (int)BONEINDEX::ankle_L) return false;
+
+		const auto& head   = bone.BonePosList[BONEINDEX::head];
+		const auto& pelvis = bone.BonePosList[BONEINDEX::pelvis];
+		const auto& ankleL = bone.BonePosList[BONEINDEX::ankle_L];
+
+		if (!head.IsVisible || !pelvis.IsVisible || !ankleL.IsVisible) return false;
+
+		// Skeleton height (head to ankle) must be 20-112 game units.
+		float height = head.Pos.z - ankleL.Pos.z;
+		if (height < 20.f || height > 112.f) return false;
+
+		// Pelvis-to-ankle horizontal distance must be <= 96 units.
+		float dx = pelvis.Pos.x - ankleL.Pos.x;
+		float dy = pelvis.Pos.y - ankleL.Pos.y;
+		if (std::sqrt(dx * dx + dy * dy) > 96.f) return false;
+
+		return true;
+	}
+
+
+
 	void DrawBone(const CEntity& Entity, ImColor Color, float Thickness)
 
 	{
 
-		const CBone& boneRef = Entity.GetBone();
-		if (boneRef.BonePosCount <= 0) return;
+		CBone bone = Entity.GetBone();
+		if (bone.BonePosCount <= 0) return;
+
+		// ESP gap-closure stage 2: reliability check + 150ms persistence.
+		if (MenuConfig::BoneReliabilityEnabled)
+		{
+			const DWORD64 pawnAddr = Entity.Pawn.Address;
+			const int64_t nowUs = std::chrono::duration_cast<std::chrono::microseconds>(
+				std::chrono::steady_clock::now().time_since_epoch()).count();
+
+			// Locate cache slot for this pawn (linear scan over 64 slots).
+			BoneCache* slot = nullptr;
+			if (pawnAddr != 0) {
+				for (auto& c : s_boneCache) {
+					if (c.pawn == pawnAddr) { slot = &c; break; }
+				}
+			}
+			if (!slot) {
+				// Reuse an empty or stale (>500ms) slot.
+				for (auto& c : s_boneCache) {
+					if (c.pawn == 0 || (nowUs - c.lastValidUs) > 500000) {
+						slot = &c;
+						slot->pawn = pawnAddr;
+						slot->lastValidUs = 0;
+						break;
+					}
+				}
+			}
+
+			if (HasReliableBones(bone)) {
+				if (slot) { slot->lastValidBone = bone; slot->lastValidUs = nowUs; }
+			} else if (slot && slot->lastValidUs != 0 && (nowUs - slot->lastValidUs) <= 150000) {
+				// Current bones unreliable — reuse cached skeleton within 150ms.
+				bone = slot->lastValidBone;
+			} else {
+				// Both unreliable and no fresh cache: skip skeleton.
+				// Box ESP (if enabled) still draws the player box.
+				return;
+			}
+		}
 
 		BoneJointPos Previous, Current;
 
@@ -148,7 +225,9 @@ namespace Render
 
 			{
 
-				Current = Entity.GetBone().BonePosList[Index];
+				if ((int)Index >= bone.BonePosCount) continue;
+
+				Current = bone.BonePosList[Index];
 
 				if (Previous.Pos == Vec3(0, 0, 0))
 
@@ -871,6 +950,464 @@ namespace Render
 				}
 			}
 		}
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 2: unified text shadow helper.
+	// Draws text with a 1px black shadow offset, reusing the caller's
+	// alpha channel. Existing Gui.StrokeText already draws a 4-corner
+	// shadow, so this helper is provided for new ESP features that call
+	// ImDrawList directly and want consistent shadow styling.
+	// ================================================================
+	void DrawTextShadow(ImDrawList* drawList, ImFont* font, float fontSize,
+	                     const ImVec2& pos, ImU32 color, const char* text,
+	                     const char* textEnd)
+	{
+		if (!drawList || !text || text[0] == '\0') return;
+
+		if (fontSize > 0.f && font) ImGui::PushFont(font);
+
+		constexpr float shadowOffset = 1.f;
+		ImU32 shadowAlpha = (color >> IM_COL32_A_SHIFT) & 0xFF;
+		drawList->AddText(ImVec2(pos.x + shadowOffset, pos.y + shadowOffset),
+		                  IM_COL32(0, 0, 0, shadowAlpha), text, textEnd);
+		drawList->AddText(pos, color, text, textEnd);
+
+		if (fontSize > 0.f && font) ImGui::PopFont();
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3a: offscreen enemy arrow (Task 7).
+	// Draws a triangular arrow at the screen edge pointing toward an
+	// enemy that is currently outside the view frustum. Uses the local
+	// player's yaw to rotate the world delta into screen space.
+	// ================================================================
+	void DrawOffscreenArrow(ImDrawList* drawList, const Vec3& entityPos, const Vec3& localPos,
+	                        float localYawDeg, float screenW, float screenH, ImU32 color, float size)
+	{
+		if (!drawList) return;
+		if (size <= 0.f) return;
+
+		float dx = entityPos.x - localPos.x;
+		float dy = entityPos.y - localPos.y;
+		if (dx == 0.f && dy == 0.f) return;
+
+		// CS2 yaw: 0=+X, increasing clockwise (toward +Y). Convert to radians.
+		float yawRad = localYawDeg * (float)M_PI / 180.f;
+		float yawCos = cosf(yawRad);
+		float yawSin = sinf(yawRad);
+
+		// Transform world delta into local-player space (forward / right).
+		float relForward = dx * yawCos + dy * yawSin;
+		float relRight   = -dx * yawSin + dy * yawCos;
+
+		// Screen direction: right -> +X, forward -> -Y (screen Y points down).
+		float dirX = relRight;
+		float dirY = -relForward;
+		float len = std::hypot(dirX, dirY);
+		if (len < 0.001f) return;
+		dirX /= len;
+		dirY /= len;
+
+		float radius = std::min(screenW, screenH) * 0.42f - size * 2.5f;
+		if (radius < size) radius = size;
+
+		float cx = screenW * 0.5f;
+		float cy = screenH * 0.5f;
+		float baseX = cx + dirX * radius;
+		float baseY = cy + dirY * radius;
+
+		// Triangle: tip points outward, base corners sit inward + perpendicular.
+		float perpX = -dirY;
+		float perpY = dirX;
+		float tipX = baseX + dirX * size;
+		float tipY = baseY + dirY * size;
+		float leftX  = baseX - dirX * size * 0.85f + perpX * size * 0.70f;
+		float leftY  = baseY - dirY * size * 0.85f + perpY * size * 0.70f;
+		float rightX = baseX - dirX * size * 0.85f - perpX * size * 0.70f;
+		float rightY = baseY - dirY * size * 0.85f - perpY * size * 0.70f;
+
+		drawList->AddTriangleFilled(ImVec2(tipX, tipY), ImVec2(leftX, leftY), ImVec2(rightX, rightY), color);
+		drawList->AddTriangle(ImVec2(tipX, tipY), ImVec2(leftX, leftY), ImVec2(rightX, rightY),
+		                      IM_COL32(0, 0, 0, 220), 2.0f);
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3a: player status flags (Task 8).
+	// Draws Blind/Scoped/Defusing/Kit/Money labels stacked vertically
+	// to the right of the player's 2D box. Each flag has its own toggle
+	// and color in MenuConfig.
+	// ================================================================
+	void DrawPlayerFlags(ImDrawList* drawList, const CEntity& entity,
+	                     const ImVec2& boxMin, const ImVec2& boxMax, float fontSize)
+	{
+		if (!drawList) return;
+
+		float flagX = boxMax.x + 6.0f;
+		float flagY = boxMin.y;
+		float lineH = fontSize > 0.f ? fontSize : 12.f;
+
+		auto drawFlag = [&](const char* text, ImColor color) {
+			if (!text || text[0] == '\0') return;
+			DrawTextShadow(drawList, nullptr, 0.f, ImVec2(flagX, flagY),
+			               ImGui::ColorConvertFloat4ToU32(color.Value), text);
+			flagY += lineH + 1.0f;
+		};
+
+		if (MenuConfig::FlagBlindEnabled && entity.Pawn.FlashDuration > 0.f)
+			drawFlag("Blind", MenuConfig::FlagBlindColor);
+		if (MenuConfig::FlagScopedEnabled && entity.Pawn.Scoped)
+			drawFlag("Scoped", MenuConfig::FlagScopedColor);
+		if (MenuConfig::FlagDefusingEnabled && entity.Pawn.Defusing)
+			drawFlag("Defusing", MenuConfig::FlagDefusingColor);
+		if (MenuConfig::FlagKitEnabled && entity.Pawn.HasDefuser)
+			drawFlag("Kit", MenuConfig::FlagKitColor);
+		if (MenuConfig::FlagMoneyEnabled && entity.Controller.Money > 0) {
+			char moneyBuf[16];
+			snprintf(moneyBuf, sizeof(moneyBuf), "$%d", entity.Controller.Money);
+			drawFlag(moneyBuf, MenuConfig::FlagMoneyColor);
+		}
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3a: sound ESP ripple (Task 10).
+	// Draws an expanding double-ring circle at a player's feet when a
+	// shot was recently fired. Progress 0->1 over 420ms; alpha fades out.
+	// ================================================================
+	void DrawSoundESP(ImDrawList* drawList, const Vec2& screenPos,
+	                  uint64_t nowMs, uint64_t soundUntilMs, ImU32 color)
+	{
+		if (!drawList) return;
+		if (nowMs >= soundUntilMs) return;
+		if (!IsValidFloat(screenPos.x) || !IsValidFloat(screenPos.y)) return;
+
+		float remain = (float)(soundUntilMs - nowMs);
+		float progress = 1.f - remain / 420.f;
+		if (progress < 0.f) progress = 0.f;
+		if (progress > 1.f) progress = 1.f;
+
+		float radiusA = 10.f + 18.f * progress;
+		float radiusB = radiusA + 7.f;
+		int alphaA = (int)((1.f - progress) * 200.f);
+		int alphaB = (int)((1.f - progress) * 120.f);
+		if (alphaA < 0) alphaA = 0;
+		if (alphaB < 0) alphaB = 0;
+
+		ImU32 baseRGB = color & 0x00FFFFFF;
+		ImU32 colA = baseRGB | ((ImU32)alphaA << 24);
+		ImU32 colB = baseRGB | ((ImU32)alphaB << 24);
+
+		drawList->AddCircle(ImVec2(screenPos.x, screenPos.y), radiusA, colA, 32, 2.0f);
+		drawList->AddCircle(ImVec2(screenPos.x, screenPos.y), radiusB, colB, 32, 2.0f);
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3b: C4 bomb timer overlay (Task 11).
+	// Draggable ImGui window with C4 countdown + defuse progress bars.
+	// The displayed countdown is smoothed per-frame (s_bombDisplayedLeft)
+	// and re-synced to the raw value when the drift exceeds 0.5s.
+	// ================================================================
+	void DrawBombTimerOverlay(ImDrawList* drawList, float screenW, float screenH,
+	                          float bombLeftSec, float bombTotalSec,
+	                          bool defusing, float defuseLeftSec, float defuseTotalSec)
+	{
+		(void)drawList; // window uses its own draw list
+
+		// Smoothed display values (persist across frames).
+		static float s_bombDisplayedLeft = 0.f;
+		static float s_defuseDisplayedLeft = 0.f;
+		static bool  s_prevVisible = false;
+		static bool  s_prevDefusing = false;
+
+		const float frameDt = std::clamp(ImGui::GetIO().DeltaTime, 0.f, 0.10f);
+		const float bombTotal = (bombTotalSec > 1.f && std::isfinite(bombTotalSec)) ? bombTotalSec : 40.f;
+
+		// Smooth C4 countdown: decrement by frameDt, re-sync on >0.5s drift.
+		float rawBomb = std::clamp(bombLeftSec, 0.f, bombTotal);
+		if (!s_prevVisible || s_bombDisplayedLeft <= 0.f) {
+			s_bombDisplayedLeft = rawBomb;
+		} else {
+			s_bombDisplayedLeft = std::max(0.f, s_bombDisplayedLeft - frameDt);
+			if (std::fabs(rawBomb - s_bombDisplayedLeft) > 0.5f)
+				s_bombDisplayedLeft = rawBomb;
+		}
+		s_prevVisible = true;
+
+		// Smooth defuse countdown the same way.
+		if (defusing) {
+			float rawDefuse = defuseTotalSec > 0.f ? std::clamp(defuseLeftSec, 0.f, defuseTotalSec) : 0.f;
+			if (!s_prevDefusing || s_defuseDisplayedLeft <= 0.f) {
+				s_defuseDisplayedLeft = rawDefuse;
+			} else {
+				s_defuseDisplayedLeft = std::max(0.f, s_defuseDisplayedLeft - frameDt);
+				if (std::fabs(rawDefuse - s_defuseDisplayedLeft) > 0.4f)
+					s_defuseDisplayedLeft = rawDefuse;
+			}
+			s_prevDefusing = true;
+		} else {
+			s_prevDefusing = false;
+			s_defuseDisplayedLeft = 0.f;
+		}
+
+		// Default to screen center on first call.
+		if (MenuConfig::BombTimerX < 0.f || MenuConfig::BombTimerY < 0.f) {
+			MenuConfig::BombTimerX = std::max(0.f, screenW * 0.5f - 100.f);
+			MenuConfig::BombTimerY = std::max(0.f, screenH * 0.5f - 40.f);
+		}
+		// Clamp to visible screen area.
+		MenuConfig::BombTimerX = std::clamp(MenuConfig::BombTimerX, 0.f, std::max(0.f, screenW - 230.f));
+		MenuConfig::BombTimerY = std::clamp(MenuConfig::BombTimerY, 0.f, std::max(0.f, screenH - 90.f));
+
+		ImGui::SetNextWindowPos(ImVec2(MenuConfig::BombTimerX, MenuConfig::BombTimerY), ImGuiCond_Always);
+		ImGui::SetNextWindowBgAlpha(0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5.0f, 5.0f));
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+		                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar |
+		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground;
+		if (!MenuConfig::ShowMenu)
+			flags |= ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove;
+
+		if (ImGui::Begin("##BombTimerOverlay", nullptr, flags))
+		{
+			// Dragging (only when menu is open).
+			static bool s_dragging = false;
+			if (MenuConfig::ShowMenu) {
+				if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+				    ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+					s_dragging = true;
+				if (s_dragging && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+					ImVec2 delta = ImGui::GetIO().MouseDelta;
+					MenuConfig::BombTimerX += delta.x;
+					MenuConfig::BombTimerY += delta.y;
+					ImGui::SetWindowPos(ImVec2(MenuConfig::BombTimerX, MenuConfig::BombTimerY), ImGuiCond_Always);
+				} else if (s_dragging) {
+					s_dragging = false;
+				}
+			}
+
+			ImDrawList* wdl = ImGui::GetWindowDrawList();
+			const ImVec2 titlePos = ImGui::GetCursorScreenPos();
+			const float barW = 204.f;
+			const float barH = 8.f;
+
+			// Title row: "C4 XX.Xs" with a colored accent stripe.
+			char title[48];
+			snprintf(title, sizeof(title), "C4  %.1fs", (double)s_bombDisplayedLeft);
+			bool bombCritical = s_bombDisplayedLeft <= 10.f;
+			ImU32 titleAccent = bombCritical ? IM_COL32(255, 82, 72, 240) : IM_COL32(255, 192, 72, 240);
+			ImU32 titleText   = bombCritical ? IM_COL32(255, 104, 96, 250) : IM_COL32(255, 202, 82, 250);
+			wdl->AddRectFilled(ImVec2(titlePos.x, titlePos.y + 2.f),
+			                   ImVec2(titlePos.x + 3.f, titlePos.y + 17.f), titleAccent, 2.f);
+			wdl->AddText(ImVec2(titlePos.x + 10.f, titlePos.y), titleText, title);
+			ImGui::Dummy(ImVec2(barW, ImGui::GetTextLineHeight()));
+
+			// C4 progress bar.
+			const ImVec2 barPos = ImGui::GetCursorScreenPos();
+			ImU32 bombBarCol  = bombCritical ? IM_COL32(255, 82, 72, 245)  : IM_COL32(255, 194, 72, 245);
+			ImU32 bombTrackCol= bombCritical ? IM_COL32(74, 24, 24, 150)   : IM_COL32(72, 55, 22, 150);
+			wdl->AddRectFilled(ImVec2(barPos.x - 1.f, barPos.y - 1.f),
+			                   ImVec2(barPos.x + barW + 1.f, barPos.y + barH + 1.f),
+			                   (bombBarCol & 0x00FFFFFF) | (70u << 24), 5.f);
+			wdl->AddRectFilled(barPos, ImVec2(barPos.x + barW, barPos.y + barH), bombTrackCol, 4.f);
+			float bombFrac = std::clamp(s_bombDisplayedLeft / std::max(1.f, bombTotal), 0.f, 1.f);
+			if (bombFrac > 0.f)
+				wdl->AddRectFilled(barPos, ImVec2(barPos.x + std::max(barH, barW * bombFrac), barPos.y + barH), bombBarCol, 4.f);
+			ImGui::Dummy(ImVec2(barW, barH));
+
+			// Defuse progress bar (only while defusing).
+			if (defusing && s_defuseDisplayedLeft > 0.f) {
+				char defText[56];
+				snprintf(defText, sizeof(defText), "Defuse  %.1fs", (double)s_defuseDisplayedLeft);
+				bool canFinish = s_defuseDisplayedLeft <= s_bombDisplayedLeft;
+				ImU32 defTextCol = canFinish ? IM_COL32(100, 255, 132, 245) : IM_COL32(255, 92, 82, 245);
+				const ImVec2 defTextPos = ImGui::GetCursorScreenPos();
+				wdl->AddText(defTextPos, defTextCol, defText);
+				ImGui::Dummy(ImVec2(barW, ImGui::GetTextLineHeight()));
+
+				const ImVec2 defBarPos = ImGui::GetCursorScreenPos();
+				ImU32 defBarCol   = canFinish ? IM_COL32(72, 235, 108, 245) : IM_COL32(255, 82, 72, 245);
+				ImU32 defTrackCol = canFinish ? IM_COL32(19, 62, 30, 150)  : IM_COL32(74, 24, 24, 150);
+				wdl->AddRectFilled(ImVec2(defBarPos.x - 1.f, defBarPos.y - 1.f),
+				                   ImVec2(defBarPos.x + barW + 1.f, defBarPos.y + barH + 1.f),
+				                   (defBarCol & 0x00FFFFFF) | (70u << 24), 5.f);
+				wdl->AddRectFilled(defBarPos, ImVec2(defBarPos.x + barW, defBarPos.y + barH), defTrackCol, 4.f);
+				float defTotal = defuseTotalSec > 0.f ? defuseTotalSec : 10.f;
+				float defFrac = std::clamp(s_defuseDisplayedLeft / std::max(1.f, defTotal), 0.f, 1.f);
+				if (defFrac > 0.f)
+					wdl->AddRectFilled(defBarPos, ImVec2(defBarPos.x + std::max(barH, barW * defFrac), defBarPos.y + barH), defBarCol, 4.f);
+				ImGui::Dummy(ImVec2(barW, barH));
+			}
+		}
+		ImGui::End();
+		ImGui::PopStyleVar(2);
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3b: world ESP (Task 12).
+	// Draws grenade effect timers (Smoke/Inferno/Decoy) above the
+	// existing projectile dots. nowUs is steady_clock microseconds.
+	// ================================================================
+	void DrawWorldESP(ImDrawList* drawList, const std::vector<GrenadeProjectile>& projectiles,
+	                  const float matrix[4][4], uint64_t nowUs)
+	{
+		if (!drawList) return;
+		(void)nowUs; // remaining time is derived from StationaryTimer/DisappearTimer
+
+		for (const auto& proj : projectiles) {
+			if (!IsValidFloat(proj.Position.x) || !IsValidFloat(proj.Position.y) || !IsValidFloat(proj.Position.z))
+				continue;
+
+			// Only Smoke/Inferno(Molotov)/Decoy get effect timers.
+			const char* label = nullptr;
+			float maxDuration = 0.f;
+			ImU32 textCol = 0;
+			switch (proj.Type) {
+				case PROJ_SMOKE:   label = "Smoke"; maxDuration = 18.0f; textCol = IM_COL32(180, 180, 220, 255); break;
+				case PROJ_MOLOTOV: label = "Fire";  maxDuration = 7.0f;  textCol = IM_COL32(255, 120, 40, 255); break;
+				case PROJ_DECOY:   label = "Decoy"; maxDuration = 15.0f; textCol = IM_COL32(200, 200, 80, 255); break;
+				default: continue;
+			}
+
+			// Effect timer only applies once the projectile has settled
+			// (StationaryTimer > 0.5s) or after it disappeared (lingering
+			// effect). In-flight projectiles show no timer.
+			bool showTimer = (proj.StationaryTimer > 0.5f || !proj.Alive);
+			if (!showTimer) continue;
+
+			Vec2 screenPos;
+			if (!CView::WorldToScreen(matrix, proj.Position, screenPos))
+				continue;
+
+			float remaining = maxDuration - proj.StationaryTimer - proj.DisappearTimer;
+			if (remaining < 0.f) remaining = 0.f;
+
+			char text[32];
+			snprintf(text, sizeof(text), "%s %.1fs", label, remaining);
+
+			ImU32 labelCol = MenuConfig::ShowWorldProjectileTimers
+				? textCol
+				: ImGui::ColorConvertFloat4ToU32(MenuConfig::WorldESPColor.Value);
+			DrawTextShadow(drawList, nullptr, 0.f,
+			               ImVec2(screenPos.x, screenPos.y - 30.f), labelCol, text);
+		}
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3b: weapon ammo ESP (Task 13).
+	// Returns the magazine capacity for common CS2 weapons by name.
+	// Unknown weapons return 0 (only current ammo is shown).
+	// ================================================================
+	int WeaponMaxClip(const std::string& weaponName)
+	{
+		// Lowercase compare for robustness.
+		std::string n = weaponName;
+		std::transform(n.begin(), n.end(), n.begin(),
+		               [](unsigned char c) { return (char)std::tolower(c); });
+
+		if (n == "ak47")                       return 30;
+		if (n == "m4a1" || n == "m4a1_silencer") return 30;
+		if (n == "awp")                        return 10;
+		if (n == "deagle")                     return 7;
+		if (n == "glock" || n == "usp_silencer") return 20;
+		if (n == "p250")                       return 13;
+		if (n == "fiveseven")                  return 20;
+		if (n == "tec9")                       return 18;
+		if (n == "cz75a")                      return 12;
+		if (n == "revolver")                   return 8;
+		if (n == "mp9" || n == "mac10")        return 30;
+		if (n == "mp7" || n == "ump45")        return 25;
+		if (n == "p90")                        return 50;
+		if (n == "bizon")                      return 64;
+		if (n == "famas" || n == "galilar")    return 25;
+		if (n == "sg556" || n == "aug")        return 30;
+		if (n == "ssg08")                      return 10;
+		if (n == "scar20" || n == "g3sg1")     return 20;
+		if (n == "m249" || n == "negev")       return 100;
+		if (n == "nova" || n == "xm1014")      return 8;
+		if (n == "sawedoff" || n == "mag7")    return 8;
+		return 0;
+	}
+
+	void DrawWeaponAmmo(ImDrawList* drawList, const ImVec2& pos, int ammoClip, int maxClip,
+	                    float fontSize, ImU32 color, ImU32 lowColor)
+	{
+		if (!drawList) return;
+		if (ammoClip < 0) return; // unknown ammo -> nothing to show
+
+		char ammoText[32];
+		if (maxClip > 0) {
+			snprintf(ammoText, sizeof(ammoText), "Ammo %d/%d", ammoClip, maxClip);
+		} else {
+			snprintf(ammoText, sizeof(ammoText), "Ammo %d", ammoClip);
+		}
+
+		bool lowAmmo = (maxClip > 0) && (ammoClip <= std::max(1, maxClip / 5));
+		ImU32 textCol = lowAmmo ? lowColor : color;
+		DrawTextShadow(drawList, nullptr, 0.f, pos, textCol, ammoText);
+
+		if (lowAmmo) {
+			ImVec2 lowPos = ImVec2(pos.x, pos.y + fontSize + 1.f);
+			DrawTextShadow(drawList, nullptr, 0.f, lowPos, lowColor, "LOW");
+		}
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3b: bar value label (Task 14).
+	// Draws a numeric label with a semi-transparent background box above
+	// a health/armor bar. The box has a 1px accent line at the bottom in
+	// the bar's color. screenW is used for edge avoidance.
+	// ================================================================
+	void DrawBarLabel(ImDrawList* drawList, const ImVec2& barPos, float barHeight,
+	                  int value, ImU32 barColor, float fontSize, float screenW)
+	{
+		if (!drawList) return;
+		if (value < 0) return;
+
+		char text[8];
+		snprintf(text, sizeof(text), "%d", value);
+
+		ImFont* font = ImGui::GetFont();
+		float fs = fontSize > 0.f ? fontSize : 11.f;
+		ImVec2 textSize = font
+			? font->CalcTextSizeA(fs, FLT_MAX, 0.f, text)
+			: ImGui::CalcTextSize(text);
+
+		const float padX = 2.5f;
+		const float padY = 1.0f;
+		float labelW = textSize.x + padX * 2.f;
+		float labelH = textSize.y + padY * 2.f;
+
+		// Center horizontally over the bar, clamp to screen edges.
+		float bgX = (barPos.x + barHeight * 0.5f) - labelW * 0.5f;
+		float bgY = barPos.y - labelH - 3.f;
+		if (bgX < 2.f) bgX = 2.f;
+		if (bgX + labelW > screenW - 2.f) bgX = screenW - labelW - 2.f;
+		if (bgY < 2.f) bgY = 2.f;
+
+		ImVec2 bgMin(bgX, bgY);
+		ImVec2 bgMax(bgX + labelW, bgY + labelH);
+		ImVec2 textPos(bgX + padX, bgY + padY - 0.25f);
+
+		// Background + outline.
+		drawList->AddRectFilled(bgMin, bgMax, IM_COL32(8, 8, 8, 205), 2.5f);
+		drawList->AddRect(bgMin, bgMax, IM_COL32(0, 0, 0, 150), 2.5f, 0, 1.f);
+		// 1px accent line at the bottom in the bar's color.
+		drawList->AddRectFilled(ImVec2(bgMin.x + 1.f, bgMax.y - 2.f),
+		                        ImVec2(bgMax.x - 1.f, bgMax.y - 1.f), barColor, 1.f);
+
+		// Text with shadow.
+		if (font)
+			drawList->AddText(font, fs, ImVec2(textPos.x + 1.f, textPos.y + 1.f),
+			                  IM_COL32(0, 0, 0, 210), text);
+		else
+			drawList->AddText(ImVec2(textPos.x + 1.f, textPos.y + 1.f),
+			                  IM_COL32(0, 0, 0, 210), text);
+		if (font)
+			drawList->AddText(font, fs, textPos, IM_COL32(255, 255, 255, 255), text);
+		else
+			drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), text);
 	}
 
 }

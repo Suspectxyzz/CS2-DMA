@@ -64,4 +64,62 @@ namespace Render
 	void LineToEnemyEx(ImVec4 Rect, ImColor Color, float Thickness, int Origin);
 	void DrawBombESP(const BombData& bomb, const float matrix[4][4]);
 	void DrawProjectileESP(const std::vector<GrenadeProjectile>& projectiles, const float matrix[4][4], const Vec3& localPos);
+
+	// ESP gap-closure stage 2: unified text shadow helper.
+	// Draws text with a 1px black shadow offset, reusing the caller's alpha.
+	// Pass fontSize>0 and a non-null font to push that font for the draw.
+	void DrawTextShadow(ImDrawList* drawList, ImFont* font, float fontSize,
+	                     const ImVec2& pos, ImU32 color, const char* text,
+	                     const char* textEnd = nullptr);
+
+	// ESP gap-closure stage 3a: offscreen enemy arrow (Task 7).
+	// Draws a triangular arrow at the screen edge pointing toward an enemy
+	// that is currently outside the view frustum.
+	void DrawOffscreenArrow(ImDrawList* drawList, const Vec3& entityPos, const Vec3& localPos,
+	                        float localYawDeg, float screenW, float screenH, ImU32 color, float size);
+
+	// ESP gap-closure stage 3a: player status flags (Task 8).
+	// Draws Blind/Scoped/Defusing/Kit/Money labels stacked vertically to the
+	// right of the player's 2D box.
+	void DrawPlayerFlags(ImDrawList* drawList, const CEntity& entity,
+	                     const ImVec2& boxMin, const ImVec2& boxMax, float fontSize);
+
+	// ESP gap-closure stage 3a: sound ESP ripple (Task 10).
+	// Draws an expanding double-ring circle at a player's feet when a shot
+	// was recently fired (SoundUntilMs window).
+	void DrawSoundESP(ImDrawList* drawList, const Vec2& screenPos,
+	                  uint64_t nowMs, uint64_t soundUntilMs, ImU32 color);
+
+	// ESP gap-closure stage 3b: C4 bomb timer overlay (Task 11).
+	// Draws a draggable ImGui window at the screen center showing the C4
+	// countdown progress bar and the defuse progress bar when applicable.
+	// bombLeftSec/bombTotalSec describe the C4 timer; defuseLeftSec/
+	// defuseTotalSec describe the active defuse (0 when nobody defuses).
+	void DrawBombTimerOverlay(ImDrawList* drawList, float screenW, float screenH,
+	                          float bombLeftSec, float bombTotalSec,
+	                          bool defusing, float defuseLeftSec, float defuseTotalSec);
+
+	// ESP gap-closure stage 3b: world ESP (Task 12).
+	// Draws grenade effect timers (Smoke/Inferno/Decoy) on top of the
+	// existing projectile dots. nowUs is steady_clock microseconds.
+	void DrawWorldESP(ImDrawList* drawList, const std::vector<GrenadeProjectile>& projectiles,
+	                  const float matrix[4][4], uint64_t nowUs);
+
+	// ESP gap-closure stage 3b: weapon ammo ESP (Task 13).
+	// Draws "Ammo XX/YY" below the weapon name; shows a red "LOW" tag when
+	// ammoClip <= maxClip/5. When maxClip<=0 (unknown weapon) only the
+	// current ammo is shown.
+	void DrawWeaponAmmo(ImDrawList* drawList, const ImVec2& pos, int ammoClip, int maxClip,
+	                    float fontSize, ImU32 color, ImU32 lowColor);
+
+	// Returns the magazine capacity for common CS2 weapons by name.
+	// Unknown weapons return 0 (caller should only show current ammo).
+	int WeaponMaxClip(const std::string& weaponName);
+
+	// ESP gap-closure stage 3b: bar value label (Task 14).
+	// Draws a numeric label with a semi-transparent background box above a
+	// health/armor bar. The box has a 1px accent line at the bottom in the
+	// bar's color. screenW is used for edge avoidance.
+	void DrawBarLabel(ImDrawList* drawList, const ImVec2& barPos, float barHeight,
+	                  int value, ImU32 barColor, float fontSize, float screenW);
 }

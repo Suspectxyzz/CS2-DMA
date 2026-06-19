@@ -6,6 +6,8 @@
 #include "../config/ConfigMenu.h"
 #include "../config/ConfigSaver.h"
 #include "../utils/Logger.h"
+#include "../game/map_registry.h"
+#include "../render/Cheats.h"
 #include <shellapi.h>
 #include <thread>
 #include <chrono>
@@ -413,53 +415,150 @@ static void DrawTab_Radar() {
 			}
 		}
 
-		// ---- Remote Sharing ----
-		SectionHeader(lang.webradar_remote_share.c_str());
+		// ---- Cloudflare Tunnel (Public Access) ----
+		SectionHeader(lang.webradar_tunnel_section.c_str());
 
-		{
-			bool prevTunnel = MenuConfig::WebRadarCloudflareTunnel;
+		// Cache cloudflared installation check (refresh every 5s)
+		static bool s_cfInstalled = true;
+		static auto s_lastCfCheck = std::chrono::steady_clock::now() - std::chrono::hours(1);
+		auto cfNow = std::chrono::steady_clock::now();
+		if (cfNow - s_lastCfCheck > std::chrono::seconds(5)) {
+			s_cfInstalled = IsCloudflaredInstalled();
+			s_lastCfCheck = cfNow;
+		}
+
+		if (!s_cfInstalled) {
+			ImGui::TextColored(UITheme::Warning, "%s", lang.webradar_tunnel_not_installed.c_str());
+			ImGui::TextDisabled("winget install Cloudflare.cloudflared");
+		} else {
+			bool prev = MenuConfig::WebRadarCloudflareTunnel;
 			Gui.MyCheckBox(lang.webradar_tunnel_enable.c_str(), &MenuConfig::WebRadarCloudflareTunnel);
-			if (MenuConfig::WebRadarCloudflareTunnel != prevTunnel) {
+			if (MenuConfig::WebRadarCloudflareTunnel != prev) {
 				if (MenuConfig::WebRadarCloudflareTunnel) {
-					// Start tunnel in background thread (install may block)
-					std::thread([port = MenuConfig::WebRadarPort]() {
-						if (!StartCloudflareTunnel(port)) {
-							MenuConfig::WebRadarCloudflareTunnel = false;
-						}
-					}).detach();
+					// User enabled — start tunnel
+					if (!StartCloudflareTunnel(MenuConfig::WebRadarPort)) {
+						MenuConfig::WebRadarCloudflareTunnel = false;
+					}
 				} else {
+					// User disabled — stop tunnel
 					StopCloudflareTunnel();
 				}
 			}
-		}
 
-		// Popup: installation failed
-		if (ImGui::BeginPopup("##tunnel_fail")) {
-			ImGui::TextColored(UITheme::Danger, "%s", lang.webradar_tunnel_install_fail.c_str());
-			ImGui::EndPopup();
-		}
-
-		if (MenuConfig::WebRadarCloudflareTunnel) {
-			CfInstallState installState = g_cfInstallState.load();
-			bool tunnelReady = g_cloudflareTunnelRunning.load();
-			std::string tunnelURL;
-			{
-				std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
-				tunnelURL = g_cloudflareTunnelURL;
+			if (MenuConfig::WebRadarCloudflareTunnel) {
+				std::string url = GetCloudflareTunnelURL();
+				if (!url.empty()) {
+					ImGui::TextColored(UITheme::Success, "%s", url.c_str());
+					ImGui::SameLine(0, 8);
+					if (ImGui::SmallButton((lang.webradar_copy_url + "##cf").c_str())) {
+						ImGui::SetClipboardText(url.c_str());
+					}
+				} else {
+					ImGui::TextColored(UITheme::Warning, "%s", lang.webradar_tunnel_starting.c_str());
+				}
 			}
+		}
 
-			if (installState == CfInstallState::Installing) {
-				ImGui::TextColored(UITheme::Warning, "%s", lang.webradar_tunnel_installing.c_str());
-			} else if (tunnelReady && !tunnelURL.empty()) {
-				ImGui::Text("%s:", lang.webradar_tunnel_url.c_str());
-				ImGui::SameLine(0, 4);
-				ImGui::TextColored(UITheme::Success, "%s", tunnelURL.c_str());
-				ImGui::SameLine(0, 8);
-				if (ImGui::SmallButton((lang.webradar_copy_url + "##tunnel_url").c_str())) {
-					ImGui::SetClipboardText(tunnelURL.c_str());
+		// ---- Task 19.4: Radar Calibration Panel ----
+		if (ImGui::CollapsingHeader("Radar Calibration##webradar")) {
+			// Static state persists across frames (GUI thread is single-threaded)
+			static std::string s_calibMapName;
+			static radar::RadarCalibrationRecord s_calibRecord;
+			static bool s_calibDirty = false;
+			static auto s_lastChangeTime = std::chrono::steady_clock::now();
+			static bool s_initialized = false;
+
+			// Read current map name from the game snapshot
+			std::string currentMap;
+			{
+				const auto& snap = Cheats::GetSnapshot();
+				currentMap = snap.MapName;
+			}
+			// Clean and resolve via registry
+			std::string displayMapName;
+			if (!currentMap.empty()) {
+				// Strip path/extension the same way CleanMapName does
+				std::string cleaned = currentMap;
+				if (cleaned.find("maps/") == 0) cleaned = cleaned.substr(5);
+				auto pos = cleaned.find(".vpk");
+				if (pos != std::string::npos) cleaned = cleaned.substr(0, pos);
+				pos = cleaned.find(".bsp");
+				if (pos != std::string::npos) cleaned = cleaned.substr(0, pos);
+
+				if (const radar::MapDefinition* known = radar::FindMapByName(cleaned)) {
+					displayMapName = known->name;
+				} else if (cleaned.empty() || cleaned.find("<empty>") != std::string::npos) {
+					displayMapName = "(no map)";
+				} else {
+					displayMapName = "dynamic_" + cleaned;
 				}
 			} else {
-				ImGui::TextColored(UITheme::Warning, "%s", lang.webradar_tunnel_starting.c_str());
+				displayMapName = "(no map)";
+			}
+
+			ImGui::Text("Map: %s", displayMapName.c_str());
+
+			// Load calibration when map changes
+			if (displayMapName != s_calibMapName && displayMapName != "(no map)") {
+				radar::RadarCalibrationRecord loaded{};
+				if (radar::LoadRadarCalibrationForMap(displayMapName, loaded)) {
+					s_calibRecord = loaded;
+				} else {
+					s_calibRecord = radar::RadarCalibrationRecord{};
+				}
+				s_calibMapName = displayMapName;
+				s_calibDirty = false;
+				s_initialized = true;
+				SetRadarCalibration(s_calibMapName, s_calibRecord);
+			}
+
+			if (s_initialized && s_calibMapName != "(no map)") {
+				ImGui::Spacing();
+
+				bool changed = false;
+				ImGui::SetNextItemWidth(200);
+				changed |= ImGui::SliderFloat("Rotation##calib", &s_calibRecord.rotationDeg, -180.0f, 180.0f, "%.1f deg");
+
+				ImGui::SetNextItemWidth(200);
+				changed |= ImGui::SliderFloat("Scale##calib", &s_calibRecord.scale, 0.5f, 1.5f, "%.3f");
+
+				ImGui::SetNextItemWidth(200);
+				changed |= ImGui::SliderFloat("Offset X##calib", &s_calibRecord.offsetX, -0.25f, 0.25f, "%.4f");
+
+				ImGui::SetNextItemWidth(200);
+				changed |= ImGui::SliderFloat("Offset Y##calib", &s_calibRecord.offsetY, -0.25f, 0.25f, "%.4f");
+
+				if (changed) {
+					s_calibDirty = true;
+					s_lastChangeTime = std::chrono::steady_clock::now();
+					SetRadarCalibration(s_calibMapName, s_calibRecord);
+				}
+
+				// Auto-save after 1200ms debounce
+				if (s_calibDirty) {
+					auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - s_lastChangeTime).count();
+					if (elapsed >= 1200) {
+						radar::SaveRadarCalibrationForMap(s_calibMapName, s_calibRecord);
+						s_calibDirty = false;
+					} else {
+						ImGui::SameLine();
+						ImGui::TextDisabled("(saving...)");
+					}
+				}
+
+				ImGui::Spacing();
+				if (ImGui::SmallButton("Save##calib")) {
+					radar::SaveRadarCalibrationForMap(s_calibMapName, s_calibRecord);
+					s_calibDirty = false;
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Reset##calib")) {
+					s_calibRecord = radar::RadarCalibrationRecord{};
+					s_calibDirty = true;
+					s_lastChangeTime = std::chrono::steady_clock::now();
+					SetRadarCalibration(s_calibMapName, s_calibRecord);
+				}
 			}
 		}
 	}

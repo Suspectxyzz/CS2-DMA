@@ -38,6 +38,7 @@ static std::string SanitizeUtf8(const std::string& s) {
 	return out;
 }
 #include "../game/AppState.h"
+#include "../game/map_registry.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -48,16 +49,42 @@ static std::string SanitizeUtf8(const std::string& s) {
 #include <cctype>
 #include <cstring>
 #include <chrono>
-#include <Shlobj.h>
-#include <winreg.h>
 #include <shared_mutex>
 #include <fstream>
+
+// Windows API for Cloudflare tunnel (CreateProcess, Job Object, pipes)
+#include <Windows.h>
 
 // ============================================================================
 //  Static webapp directory (set by FindWebappDir, used by ServeStaticFile)
 // ============================================================================
 
 static std::string g_webappDir;
+
+// ============================================================================
+//  Task 19: Per-map radar calibration state (shared between GUI and serializer)
+// ============================================================================
+// The GUI thread writes to g_radarCalibration; the worker thread reads it
+// during SerializeSnapshot to append calibration params to the JSON payload.
+// Protected by g_radarCalibrationMutex.
+static radar::RadarCalibrationRecord g_radarCalibration;
+static std::string g_radarCalibrationMapName; // current map being calibrated
+static std::mutex g_radarCalibrationMutex;
+
+// GUI → serializer: set current calibration + map name
+void SetRadarCalibration(const std::string& mapName, const radar::RadarCalibrationRecord& record)
+{
+	std::lock_guard<std::mutex> lock(g_radarCalibrationMutex);
+	g_radarCalibrationMapName = mapName;
+	g_radarCalibration = record;
+}
+
+// Serializer: read current calibration (thread-safe copy)
+static radar::RadarCalibrationRecord GetRadarCalibrationSafe()
+{
+	std::lock_guard<std::mutex> lock(g_radarCalibrationMutex);
+	return g_radarCalibration;
+}
 
 static std::string ToLowerAscii(std::string value) {
 	std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
@@ -1015,313 +1042,6 @@ static void StopViteDevServer() {
 }
 
 // ============================================================================
-//  Cloudflare Tunnel process management
-// ============================================================================
-
-static HANDLE g_cfJob = nullptr;
-static HANDLE g_cfProcess = nullptr;
-static std::thread g_cfReaderThread;
-static std::atomic<bool> g_cfReaderRunning{ false };
-
-// Background thread: reads cloudflared stderr to capture the public URL.
-// cloudflared outputs: "... |  https://xxx.trycloudflare.com  |"
-static void CloudflareOutputReader(HANDLE hPipe) {
-	char buf[4096];
-	DWORD bytesRead;
-	std::string accum;
-
-	while (g_cfReaderRunning.load()) {
-		if (!ReadFile(hPipe, buf, sizeof(buf) - 1, &bytesRead, nullptr) || bytesRead == 0)
-			break;
-		buf[bytesRead] = '\0';
-		accum += buf;
-
-		// Search for https://xxx.trycloudflare.com in accumulated output
-		// cloudflared may output other https:// links (terms, etc.) before the tunnel URL
-		size_t searchPos = 0;
-		size_t pos;
-		while ((pos = accum.find("https://", searchPos)) != std::string::npos) {
-			auto end = accum.find_first_of(" \t\r\n\")", pos);
-			if (end == std::string::npos) end = accum.size();
-			std::string url = accum.substr(pos, end - pos);
-			searchPos = pos + 8;  // advance past this match
-			if (url.find("trycloudflare.com") != std::string::npos)
-			{
-				{
-					std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
-					g_cloudflareTunnelURL = url;
-				}
-				g_cloudflareTunnelRunning.store(true);
-				LOG_INFO("WebRadar", "Cloudflare tunnel URL: {}", url);
-				break;  // URL captured, no need to read further
-			}
-		}
-		if (g_cloudflareTunnelRunning.load()) break;  // exit outer loop too
-
-		// Trim old data to prevent unbounded growth
-		if (accum.size() > 8192)
-			accum = accum.substr(accum.size() - 4096);
-	}
-}
-
-bool StartCloudflareTunnel(int port) {
-	if (g_cfProcess) return true;  // already running
-
-	// Check if cloudflared exists in PATH
-	char cfPath[MAX_PATH] = {};
-	if (SearchPathA(nullptr, "cloudflared", ".exe", MAX_PATH, cfPath, nullptr) == 0) {
-		// Not found — auto-install via winget
-		LOG_INFO("WebRadar", "cloudflared not found, auto-installing via winget");
-		g_cfInstallState.store(CfInstallState::Installing);
-
-		STARTUPINFOA si{};
-		si.cb = sizeof(si);
-		si.dwFlags = STARTF_USESHOWWINDOW;
-		si.wShowWindow = SW_HIDE;
-		PROCESS_INFORMATION pi{};
-		char installCmd[] = "cmd /c winget install Cloudflare.cloudflared --accept-source-agreements --accept-package-agreements";
-
-		if (!CreateProcessA(nullptr, installCmd, nullptr, nullptr, FALSE,
-			CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
-		{
-			LOG_ERROR("WebRadar", "winget install failed: error {}", GetLastError());
-			g_cfInstallState.store(CfInstallState::Failed);
-			return false;
-		}
-
-		// Wait for installation to complete
-		WaitForSingleObject(pi.hProcess, 120000);  // 2 min timeout
-		DWORD exitCode = 1;
-		GetExitCodeProcess(pi.hProcess, &exitCode);
-		CloseHandle(pi.hProcess);
-		CloseHandle(pi.hThread);
-
-		// 0x8A04000B = winget "already installed" — treat as success
-		if (exitCode != 0 && exitCode != 0x8A04000B) {
-			LOG_ERROR("WebRadar", "winget install exited with code {:#x}", exitCode);
-			g_cfInstallState.store(CfInstallState::Failed);
-			return false;
-		}
-
-		// Refresh this process's PATH from registry so SearchPathA can find it
-		{
-			HKEY hKey;
-			wchar_t pathVal[32768];
-			DWORD size = sizeof(pathVal);
-			if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-					L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
-					0, KEY_READ, &hKey) == ERROR_SUCCESS)
-			{
-				if (RegQueryValueExW(hKey, L"Path", nullptr, nullptr, (LPBYTE)pathVal, &size) == ERROR_SUCCESS) {
-					SetEnvironmentVariableW(L"Path", pathVal);
-				}
-				RegCloseKey(hKey);
-			}
-			if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Environment",
-					0, KEY_READ, &hKey) == ERROR_SUCCESS)
-			{
-				size = sizeof(pathVal);
-				if (RegQueryValueExW(hKey, L"Path", nullptr, nullptr, (LPBYTE)pathVal, &size) == ERROR_SUCCESS) {
-					// Append user PATH to system PATH
-					std::wstring curPath;
-					DWORD curLen = GetEnvironmentVariableW(L"Path", nullptr, 0);
-					if (curLen > 0) {
-						curPath.resize(curLen);
-						GetEnvironmentVariableW(L"Path", &curPath[0], curLen);
-						if (!curPath.empty() && curPath.back() == L'\0') curPath.pop_back();
-						curPath += L";";
-						curPath += pathVal;
-						SetEnvironmentVariableW(L"Path", curPath.c_str());
-					}
-				}
-				RegCloseKey(hKey);
-			}
-		}
-
-		// Re-check PATH after refresh
-		if (SearchPathA(nullptr, "cloudflared", ".exe", MAX_PATH, cfPath, nullptr) == 0) {
-			// Try known winget install paths
-			char localAppData[MAX_PATH] = {};
-			SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localAppData);
-
-			const char* knownPaths[] = {
-				"\\Microsoft\\WinGet\\Links\\cloudflared.exe",
-				"\\Microsoft\\WinGet\\Links\\cloudflared_cmd.exe",
-			};
-			for (auto rel : knownPaths) {
-				std::string full = std::string(localAppData) + rel;
-				if (GetFileAttributesA(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
-					strncpy_s(cfPath, full.c_str(), MAX_PATH - 1);
-					break;
-				}
-			}
-
-			// Try Program Files
-			if (cfPath[0] == '\0') {
-				const char* pfPaths[] = {
-					"\\cloudflared\\cloudflared.exe",
-					"\\Cloudflare\\cloudflared.exe",
-				};
-				char pf[MAX_PATH] = {};
-				SHGetFolderPathA(nullptr, CSIDL_PROGRAM_FILES, nullptr, 0, pf);
-				for (auto rel : pfPaths) {
-					std::string full = std::string(pf) + rel;
-					if (GetFileAttributesA(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
-						strncpy_s(cfPath, full.c_str(), MAX_PATH - 1);
-						break;
-					}
-				}
-			}
-
-			// Last resort: ask cmd.exe where cloudflared is (fresh PATH)
-			if (cfPath[0] == '\0') {
-				SECURITY_ATTRIBUTES saP{};
-				saP.nLength = sizeof(saP);
-				saP.bInheritHandle = TRUE;
-				HANDLE hR, hW;
-				if (CreatePipe(&hR, &hW, &saP, 0)) {
-					SetHandleInformation(hR, HANDLE_FLAG_INHERIT, 0);
-					STARTUPINFOA siW{};
-					siW.cb = sizeof(siW);
-					siW.dwFlags = STARTF_USESTDHANDLES;
-					siW.hStdInput = INVALID_HANDLE_VALUE;
-					siW.hStdOutput = hW;
-					siW.hStdError = INVALID_HANDLE_VALUE;
-					PROCESS_INFORMATION piW{};
-					char whereCmd[] = "cmd /c where cloudflared.exe";
-					if (CreateProcessA(nullptr, whereCmd, nullptr, nullptr, TRUE,
-						CREATE_NO_WINDOW, nullptr, nullptr, &siW, &piW))
-					{
-						WaitForSingleObject(piW.hProcess, 10000);
-						CloseHandle(piW.hProcess);
-						CloseHandle(piW.hThread);
-						CloseHandle(hW);
-
-						char buf[MAX_PATH] = {};
-						DWORD read = 0;
-						if (ReadFile(hR, buf, sizeof(buf) - 1, &read, nullptr) && read > 0) {
-							buf[read] = '\0';
-							// First line is the path
-							auto nl = strchr(buf, '\r');
-							if (nl) *nl = '\0';
-							nl = strchr(buf, '\n');
-							if (nl) *nl = '\0';
-							if (buf[0] != '\0') {
-								strncpy_s(cfPath, buf, MAX_PATH - 1);
-							}
-						}
-						CloseHandle(hR);
-					} else {
-						CloseHandle(hR);
-						CloseHandle(hW);
-					}
-				}
-			}
-
-			if (cfPath[0] == '\0') {
-				LOG_ERROR("WebRadar", "cloudflared still not found after install");
-				g_cfInstallState.store(CfInstallState::Failed);
-				return false;
-			}
-		}
-
-		g_cfInstallState.store(CfInstallState::Success);
-		LOG_INFO("WebRadar", "cloudflared installed successfully at: {}", cfPath);
-	}
-
-	// Reset URL
-	{
-		std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
-		g_cloudflareTunnelURL.clear();
-	}
-	g_cloudflareTunnelRunning.store(false);
-
-	// Create pipe for stdout+stderr to capture tunnel URL
-	SECURITY_ATTRIBUTES sa{};
-	sa.nLength = sizeof(sa);
-	sa.bInheritHandle = TRUE;
-	HANDLE hRead, hWrite;
-	if (!CreatePipe(&hRead, &hWrite, &sa, 0)) {
-		LOG_ERROR("WebRadar", "CreatePipe failed: {}", GetLastError());
-		return false;
-	}
-	SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
-
-	// Job Object: kills entire process tree when handle is closed
-	g_cfJob = CreateJobObjectA(nullptr, nullptr);
-	if (g_cfJob) {
-		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli{};
-		jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-		SetInformationJobObject(g_cfJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
-	}
-
-	// Build command line — use full path if we have it
-	std::string cmdStr;
-	if (cfPath[0] != '\0' && strchr(cfPath, '\\') != nullptr)
-		cmdStr = std::string("\"") + cfPath + "\" tunnel --url http://localhost:" + std::to_string(port);
-	else
-		cmdStr = "cloudflared tunnel --url http://localhost:" + std::to_string(port);
-	std::vector<char> cmdBuf(cmdStr.begin(), cmdStr.end());
-	cmdBuf.push_back('\0');
-
-	STARTUPINFOA si{};
-	si.cb = sizeof(si);
-	si.dwFlags = STARTF_USESTDHANDLES;
-	si.hStdInput = INVALID_HANDLE_VALUE;
-	si.hStdOutput = hWrite;   // capture stdout too
-	si.hStdError = hWrite;    // capture stderr
-
-	PROCESS_INFORMATION pi{};
-	if (CreateProcessA(nullptr, cmdBuf.data(), nullptr, nullptr, TRUE,
-		CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &si, &pi))
-	{
-		if (g_cfJob)
-			AssignProcessToJobObject(g_cfJob, pi.hProcess);
-		ResumeThread(pi.hThread);
-		g_cfProcess = pi.hProcess;
-		CloseHandle(pi.hThread);
-		CloseHandle(hWrite);  // child has the write end now
-
-		// Start reader thread to capture URL from stderr
-		g_cfReaderRunning.store(true);
-		g_cfReaderThread = std::thread(CloudflareOutputReader, hRead);
-
-		LOG_INFO("WebRadar", "Cloudflare tunnel started (PID: {})", pi.dwProcessId);
-		return true;
-	} else {
-		LOG_ERROR("WebRadar", "Failed to start cloudflared: error {}", GetLastError());
-		CloseHandle(hRead);
-		CloseHandle(hWrite);
-		if (g_cfJob) { CloseHandle(g_cfJob); g_cfJob = nullptr; }
-		return false;
-	}
-}
-
-void StopCloudflareTunnel() {
-	g_cfReaderRunning.store(false);
-	if (g_cfReaderThread.joinable()) {
-		g_cfReaderThread.detach();  // pipe will be closed, thread exits naturally
-	}
-
-	if (g_cfJob) {
-		TerminateJobObject(g_cfJob, 0);
-		CloseHandle(g_cfJob);
-		g_cfJob = nullptr;
-	}
-	if (g_cfProcess) {
-		CloseHandle(g_cfProcess);
-		g_cfProcess = nullptr;
-	}
-
-	g_cloudflareTunnelRunning.store(false);
-	{
-		std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
-		g_cloudflareTunnelURL.clear();
-	}
-	LOG_INFO("WebRadar", "Cloudflare tunnel stopped");
-}
-
-// ============================================================================
 //  JSON Serialization — converts GameSnapshot → cs2_webradar JSON format
 // ============================================================================
 
@@ -1451,7 +1171,19 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 
 	doc.AddMember("m_local_team", snap.LocalPlayer.Controller.TeamID, a);
 
-	std::string mapName = CleanMapName(snap.MapName);
+	// Task 18: Resolve map name via registry. If the cleaned map name is
+	// known (in our map registry), use it directly. If unknown (workshop
+	// map or empty), prefix with "dynamic_" so the frontend can use
+	// default bounds-projection coordinate conversion.
+	std::string rawMapName = CleanMapName(snap.MapName);
+	std::string mapName;
+	if (const radar::MapDefinition* known = radar::FindMapByName(rawMapName)) {
+		mapName = known->name;
+	} else if (rawMapName.empty() || rawMapName == "invalid") {
+		mapName = "dynamic_unknown";
+	} else {
+		mapName = "dynamic_" + rawMapName;
+	}
 	doc.AddMember("m_map", rapidjson::Value(mapName.c_str(), a), a);
 
 	// Determine bomb carrier pawn index (lower 16 bits of entity handle)
@@ -1534,6 +1266,18 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 			spectators.PushBack(s, a);
 		}
 		doc.AddMember("m_spectators", spectators, a);
+	}
+
+	// Task 19.3: Append per-map radar calibration params so the frontend
+	// can apply rotation/scale/offset during coordinate conversion.
+	{
+		radar::RadarCalibrationRecord cal = GetRadarCalibrationSafe();
+		rapidjson::Value calibration(rapidjson::kObjectType);
+		calibration.AddMember("rotationDeg", cal.rotationDeg, a);
+		calibration.AddMember("scale", cal.scale, a);
+		calibration.AddMember("offsetX", cal.offsetX, a);
+		calibration.AddMember("offsetY", cal.offsetY, a);
+		doc.AddMember("m_calibration", calibration, a);
 	}
 
 	rapidjson::StringBuffer buf;
@@ -1693,15 +1437,6 @@ VOID WebRadarThread() {
 				}
 				StartViteDevServer();
 
-				// Auto-start Cloudflare tunnel if enabled in config
-				if (MenuConfig::WebRadarCloudflareTunnel) {
-					std::thread([port = MenuConfig::WebRadarPort]() {
-						if (!StartCloudflareTunnel(port)) {
-							MenuConfig::WebRadarCloudflareTunnel = false;
-						}
-					}).detach();
-				}
-
 				// Start the serializer worker — it produces payloads off this
 				// broadcast path so slow clients can't stall serialization.
 				server.StartWorker();
@@ -1736,4 +1471,135 @@ VOID WebRadarThread() {
 			Sleep(1000);
 		}
 	}
+}
+
+// ============================================================================
+//  Cloudflare Tunnel (quick tunnel) — exposes local port to the internet
+// ============================================================================
+static HANDLE g_cfJob = nullptr;
+static HANDLE g_cfProcess = nullptr;
+static std::thread g_cfReaderThread;
+static std::atomic<bool> g_cfReaderRunning{ false };
+
+bool IsCloudflaredInstalled() {
+	char path[MAX_PATH] = {};
+	return SearchPathA(nullptr, "cloudflared", ".exe", MAX_PATH, path, nullptr) != 0;
+}
+
+// Reader thread: captures the public URL from cloudflared's stderr.
+// cloudflared prints: "... |  https://xxx.trycloudflare.com  | ..."
+static void CloudflareOutputReader(HANDLE hPipe) {
+	std::string accumulated;
+	char buffer[4096];
+	DWORD bytesRead = 0;
+	while (g_cfReaderRunning.load()) {
+		if (!ReadFile(hPipe, buffer, sizeof(buffer) - 1, &bytesRead, nullptr) || bytesRead == 0)
+			break;
+		buffer[bytesRead] = '\0';
+		accumulated.append(buffer, bytesRead);
+
+		// Search for https://xxx.trycloudflare.com
+		size_t pos = 0;
+		while ((pos = accumulated.find("https://", pos)) != std::string::npos) {
+			size_t end = accumulated.find_first_of(" \t\r\n|", pos);
+			if (end == std::string::npos) end = accumulated.size();
+			std::string url = accumulated.substr(pos, end - pos);
+			if (url.find("trycloudflare.com") != std::string::npos) {
+				std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
+				g_cloudflareTunnelURL = url;
+				g_cloudflareTunnelRunning.store(true);
+				LOG_INFO("WebRadar", "Cloudflare tunnel URL: {}", url);
+				break;
+			}
+			pos = end;
+		}
+		if (g_cloudflareTunnelRunning.load()) break;
+	}
+	CloseHandle(hPipe);
+}
+
+bool StartCloudflareTunnel(int port) {
+	if (g_cfProcess != nullptr) return true;  // already running
+
+	if (!IsCloudflaredInstalled()) {
+		LOG_ERROR("WebRadar", "cloudflared not found in PATH. Install: winget install Cloudflare.cloudflared");
+		return false;
+	}
+
+	// Create Job Object so cloudflared dies when our process exits
+	g_cfJob = CreateJobObjectA(nullptr, nullptr);
+	if (g_cfJob) {
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = {};
+		jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+		SetInformationJobObject(g_cfJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+	}
+
+	// Build command: cloudflared.exe tunnel --url http://localhost:PORT
+	std::string cmd = "cloudflared.exe tunnel --url http://localhost:" + std::to_string(port);
+
+	// Pipe to capture stderr (cloudflared prints the URL there)
+	SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE };
+	HANDLE hRead = nullptr, hWrite = nullptr;
+	CreatePipe(&hRead, &hWrite, &sa, 0);
+	SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+	STARTUPINFOA si = {};
+	si.cb = sizeof(si);
+	si.dwFlags = STARTF_USESTDHANDLES;
+	si.hStdOutput = hWrite;
+	si.hStdError = hWrite;
+	PROCESS_INFORMATION pi = {};
+
+	if (!CreateProcessA(nullptr, const_cast<char*>(cmd.c_str()), nullptr, nullptr, TRUE,
+		CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+		LOG_ERROR("WebRadar", "CreateProcess failed for cloudflared: {}", GetLastError());
+		CloseHandle(hRead);
+		CloseHandle(hWrite);
+		if (g_cfJob) { CloseHandle(g_cfJob); g_cfJob = nullptr; }
+		return false;
+	}
+
+	CloseHandle(hWrite);   // parent doesn't need the write end
+	CloseHandle(pi.hThread);
+	g_cfProcess = pi.hProcess;
+	if (g_cfJob) AssignProcessToJobObject(g_cfJob, g_cfProcess);
+
+	// Start reader thread to capture the public URL
+	g_cfReaderRunning.store(true);
+	g_cfReaderThread = std::thread(CloudflareOutputReader, hRead);
+
+	LOG_INFO("WebRadar", "Cloudflare tunnel started for port {}", port);
+	return true;
+}
+
+void StopCloudflareTunnel() {
+	g_cfReaderRunning.store(false);
+
+	if (g_cfProcess) {
+		TerminateProcess(g_cfProcess, 0);
+		CloseHandle(g_cfProcess);
+		g_cfProcess = nullptr;
+	}
+	if (g_cfJob) {
+		CloseHandle(g_cfJob);
+		g_cfJob = nullptr;
+	}
+	if (g_cfReaderThread.joinable())
+		g_cfReaderThread.join();
+
+	{
+		std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
+		g_cloudflareTunnelURL.clear();
+	}
+	g_cloudflareTunnelRunning.store(false);
+	LOG_INFO("WebRadar", "Cloudflare tunnel stopped");
+}
+
+bool IsCloudflareTunnelRunning() {
+	return g_cloudflareTunnelRunning.load();
+}
+
+std::string GetCloudflareTunnelURL() {
+	std::lock_guard<std::mutex> lock(g_cloudflareTunnelMutex);
+	return g_cloudflareTunnelURL;
 }

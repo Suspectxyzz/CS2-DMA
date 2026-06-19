@@ -62,6 +62,19 @@ public:
 	bool HasDefuser = false;
 	std::string ModelName;
 	std::vector<std::string> WeaponList;
+	// ESP gap-closure stage 1: extended tactical fields
+	bool Scoped = false;
+	bool Defusing = false;
+	int AmmoClip = -1;
+	bool HasBomb = false;
+	float EyeYaw = 0.f;
+	uint64_t SoundUntilMs = 0;
+	Vec3 Velocity;
+	Vec3 PrevPos;          // previous frame position (snapshot interpolation)
+	uint16_t WeaponIconId = 0;
+	uint16_t GrenadeIds[4] = {};
+	int GrenadeCount = 0;
+	int Ping = 0;
 public:
 	bool GetPos();
 	bool GetViewAngle();
@@ -74,6 +87,13 @@ public:
 	bool GetFov();
 	bool GetSpotted();
 	bool GetFFlags();
+	bool GetScoped();
+	bool GetDefusing();
+	bool GetAmmoClip();
+	bool GetHasBomb();
+	bool GetEyeYaw();
+	bool GetVelocity();
+	bool GetPing();
 
 	constexpr bool HasFlag(const Flags Flag) const noexcept {
 		return fFlags & (int)Flag;

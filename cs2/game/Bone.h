@@ -21,6 +21,15 @@ enum BONEINDEX : DWORD
 	leg_upper_R=20,
 	leg_lower_R=21,
 	ankle_R=22,
+	// ESP gap-closure stage 1: extended bones (chest/gun/eyes + CT/T toes)
+	chest=23,
+	gun=24,
+	eye_L=25,
+	eye_R=26,
+	foot_toes_L_T=74,
+	foot_toes_R_T=77,
+	foot_toes_L_CT=81,
+	foot_toes_R_CT=86,
 };
 
 struct BoneJointData
@@ -43,7 +52,7 @@ private:
 	DWORD64 EntityPawnAddress = 0;
 public:
 	DWORD64 BoneArrayAddress = 0;
-	static constexpr int NUM_BONES = 30;
+	static constexpr int NUM_BONES = 87;
 	BoneJointPos BonePosList[NUM_BONES]{};
 	int BonePosCount = 0;
 
@@ -61,6 +70,15 @@ namespace BoneJointList
 	inline constexpr DWORD RightArm[] = { neck_0, arm_upper_R, arm_lower_R, hand_R };
 	inline constexpr DWORD LeftLeg[] = { pelvis, leg_upper_L, leg_lower_L, ankle_L };
 	inline constexpr DWORD RightLeg[] = { pelvis, leg_upper_R, leg_lower_R, ankle_R };
+
+	// ESP gap-closure stage 1: toe bone chains (CT/T differentiated)
+	inline constexpr DWORD LeftFootToe_T[] = { ankle_L, foot_toes_L_T };
+	inline constexpr DWORD LeftFootToe_CT[] = { ankle_L, foot_toes_L_CT };
+	inline constexpr DWORD RightFootToe_T[] = { ankle_R, foot_toes_R_T };
+	inline constexpr DWORD RightFootToe_CT[] = { ankle_R, foot_toes_R_CT };
+
+	constexpr DWORD LeftToeBoneForTeam(int team) { return team == 3 ? foot_toes_L_CT : foot_toes_L_T; }
+	constexpr DWORD RightToeBoneForTeam(int team) { return team == 3 ? foot_toes_R_CT : foot_toes_R_T; }
 
 	struct BoneChain {
 		const DWORD* data;

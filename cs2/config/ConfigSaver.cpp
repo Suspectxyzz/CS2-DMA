@@ -90,10 +90,10 @@ namespace MyConfigSaver {
         configFile << "ShowWebRadar " << MenuConfig::ShowWebRadar << std::endl;
         configFile << "WebRadarPort " << MenuConfig::WebRadarPort << std::endl;
         configFile << "WebRadarInterval " << MenuConfig::WebRadarInterval << std::endl;
-        configFile << "WebRadarCloudflareTunnel " << MenuConfig::WebRadarCloudflareTunnel << std::endl;
         configFile << "WebRadarPasswordEnabled " << MenuConfig::WebRadarPasswordEnabled << std::endl;
         configFile << "WebRadarPassword " << MenuConfig::WebRadarPassword << std::endl;
         configFile << "WebRadarOriginAllowlist " << MenuConfig::WebRadarOriginAllowlist << std::endl;
+        configFile << "WebRadarCloudflareTunnel " << MenuConfig::WebRadarCloudflareTunnel << std::endl;
         configFile << "ShowBombESP " << MenuConfig::ShowBombESP << std::endl;
         configFile << "BombPlantedColor " << MenuConfig::BombPlantedColor.Value.x << " " << MenuConfig::BombPlantedColor.Value.y << " " << MenuConfig::BombPlantedColor.Value.z << " " << MenuConfig::BombPlantedColor.Value.w << std::endl;
         configFile << "BombCarrierColor " << MenuConfig::BombCarrierColor.Value.x << " " << MenuConfig::BombCarrierColor.Value.y << " " << MenuConfig::BombCarrierColor.Value.z << " " << MenuConfig::BombCarrierColor.Value.w << std::endl;
@@ -201,10 +201,10 @@ namespace MyConfigSaver {
                 else if (key == "ShowWebRadar") iss >> MenuConfig::ShowWebRadar;
                 else if (key == "WebRadarPort") iss >> MenuConfig::WebRadarPort;
                 else if (key == "WebRadarInterval") iss >> MenuConfig::WebRadarInterval;
-                else if (key == "WebRadarCloudflareTunnel") iss >> MenuConfig::WebRadarCloudflareTunnel;
                 else if (key == "WebRadarPasswordEnabled") iss >> MenuConfig::WebRadarPasswordEnabled;
                 else if (key == "WebRadarPassword") iss >> MenuConfig::WebRadarPassword;
                 else if (key == "WebRadarOriginAllowlist") iss >> MenuConfig::WebRadarOriginAllowlist;
+                else if (key == "WebRadarCloudflareTunnel") iss >> MenuConfig::WebRadarCloudflareTunnel;
                 else if (key == "ShowBombESP") iss >> MenuConfig::ShowBombESP;
                 else if (key == "BombPlantedColor") iss >> MenuConfig::BombPlantedColor.Value.x >> MenuConfig::BombPlantedColor.Value.y >> MenuConfig::BombPlantedColor.Value.z >> MenuConfig::BombPlantedColor.Value.w;
                 else if (key == "BombCarrierColor") iss >> MenuConfig::BombCarrierColor.Value.x >> MenuConfig::BombCarrierColor.Value.y >> MenuConfig::BombCarrierColor.Value.z >> MenuConfig::BombCarrierColor.Value.w;

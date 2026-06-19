@@ -39,6 +39,11 @@ const translations = {
     showLatency: "Show Latency",
     bgOpacity: "BG Opacity",
     smoothing: "Smooth Move",
+    autozoom: "Autozoom",
+    vertIndicator: "Height Indicator",
+    vertNone: "None",
+    vertColor: "Color",
+    vertScale: "Scale",
 
     // System
     language: "Language",
@@ -96,6 +101,11 @@ const translations = {
     showLatency: "显示延迟",
     bgOpacity: "背景透明度",
     smoothing: "移动平滑",
+    autozoom: "自动缩放",
+    vertIndicator: "高度指示器",
+    vertNone: "关闭",
+    vertColor: "颜色",
+    vertScale: "缩放",
 
     // System
     language: "语言",

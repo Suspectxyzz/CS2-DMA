@@ -292,6 +292,63 @@ bool PlayerPawn::GetFFlags()
 	return GetDataAddressWithOffset<int>(Address, Offset::fFlags, this->fFlags);
 }
 
+bool PlayerPawn::GetScoped()
+{
+	if (Offset::bIsScoped == 0)
+		return false;
+	uint8_t val = 0;
+	if (!GetDataAddressWithOffset<uint8_t>(Address, Offset::bIsScoped, val))
+		return false;
+	this->Scoped = val != 0;
+	return true;
+}
+
+bool PlayerPawn::GetDefusing()
+{
+	if (Offset::bIsDefusing == 0)
+		return false;
+	uint8_t val = 0;
+	if (!GetDataAddressWithOffset<uint8_t>(Address, Offset::bIsDefusing, val))
+		return false;
+	this->Defusing = val != 0;
+	return true;
+}
+
+bool PlayerPawn::GetAmmoClip()
+{
+	// Active weapon resolution + m_iClip1 read is handled in Threads.cpp
+	// (shares the weapon-name scatter pipeline). Get method kept as placeholder.
+	return false;
+}
+
+bool PlayerPawn::GetHasBomb()
+{
+	// HasBomb is inferred from the weapon list (c4 presence) in Threads.cpp.
+	return false;
+}
+
+bool PlayerPawn::GetEyeYaw()
+{
+	if (Offset::angEyeAngles == 0)
+		return false;
+	// m_angEyeAngles is a Vec2 (pitch, yaw); yaw sits at offset +4
+	return GetDataAddressWithOffset<float>(Address, Offset::angEyeAngles + 4, this->EyeYaw);
+}
+
+bool PlayerPawn::GetVelocity()
+{
+	if (Offset::vecVelocity == 0)
+		return false;
+	return GetDataAddressWithOffset<Vec3>(Address, Offset::vecVelocity, this->Velocity);
+}
+
+bool PlayerPawn::GetPing()
+{
+	// m_iPing lives on CBasePlayerController, not on the pawn. Threads.cpp
+	// reads it via the controller address and assigns Pawn.Ping.
+	return false;
+}
+
 bool CEntity::InitPawnAddress(const DWORD64& PlayerPawnAddress)
 {
 	if (PlayerPawnAddress == 0)
