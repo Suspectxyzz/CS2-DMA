@@ -81,6 +81,9 @@ namespace MenuConfig
 	inline bool WebRadarCloudflareTunnel = false;
 	inline bool WebRadarPasswordEnabled = false;
 	inline std::string WebRadarPassword = "123456";
+	// Task 10: Origin whitelist for /api/* paths (comma-separated).
+	// Empty = allow all origins. Example: "http://localhost:5173,https://example.com"
+	inline std::string WebRadarOriginAllowlist;
 
 	inline bool TeamCheck = true;
 

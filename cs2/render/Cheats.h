@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include <shared_mutex>
+#include <atomic>
 
 // Bomb state for web radar
 struct BombData
@@ -78,7 +79,30 @@ namespace Cheats
 	void Menu();
 	void Run();
 
-	// Single shared_mutex: writer takes unique_lock only for swap, readers take shared_lock
+	// Double-buffered lock-free snapshot.
+	// The hot path — DataThread publishing and render/WebRadar/Keys readers —
+	// is lock-free: the writer builds a full snapshot, copies it into the
+	// inactive buffer, then flips the atomic index (release). Readers fetch
+	// the active buffer via GetSnapshot() (acquire), never blocking the writer.
+	//
+	// The shared_mutex is retained for low-frequency in-place writers that
+	// patch a single field of the live buffer instead of republishing the
+	// whole snapshot (SlowUpdateThread → MapName, DataThread → Bomb). These
+	// run at 10s / 50ms cadence, so mutex contention with the hot path is
+	// negligible; a torn read there costs at most one stale frame.
+	inline GameSnapshot SnapshotBuf[2];
+	inline std::atomic<int> SnapshotReadIdx{ 0 };
+
+	inline const GameSnapshot& GetSnapshot() {
+		return SnapshotBuf[SnapshotReadIdx.load(std::memory_order_acquire)];
+	}
+
+	inline void PublishSnapshot(const GameSnapshot& snap) {
+		int writeIdx = 1 - SnapshotReadIdx.load(std::memory_order_relaxed);
+		SnapshotBuf[writeIdx] = snap;
+		SnapshotReadIdx.store(writeIdx, std::memory_order_release);
+	}
+
+	// Retained for low-frequency in-place writers (MapName, Bomb).
 	inline std::shared_mutex SnapshotMutex;
-	inline GameSnapshot Snapshot;
 }

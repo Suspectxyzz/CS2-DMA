@@ -4,8 +4,12 @@
 #include "MenuConfig.h"
 #include "../config/ConfigSaver.h"
 #include "../utils/Logger.h"
+#include "intervals.h"
+#include "SceneReset.h"
 
 #include <winnt.h>
+#include <windows.h>
+#include <immintrin.h>
 #include <thread>
 #include <cmath>
 #include <set>
@@ -56,9 +60,9 @@ VOID ConnectionThread()
 			static int initValidateRetries = 0;
 			LOG_DEBUG("Connection", "Initializing game addresses...");
 			if (gGame.InitAddress()) {
-				// Post-init validation: refresh DMA + verify data is actually accessible
-				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-				Sleep(500);
+			// Post-init validation: refresh DMA + verify data is actually accessible
+			RequestDmaRefresh(DmaRefreshTier::Full);
+			Sleep(500);
 				// Verify client.dll is accessible (decryption check)
 				PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
 				BOOL moduleOk = VMMDLL_Map_GetModuleFromNameU(ProcessMgr.HANDLE, ProcessMgr.ProcessID, (LPSTR)"client.dll", &pModuleEntry, NULL);
@@ -95,8 +99,8 @@ VOID ConnectionThread()
 		case AppState::WAITING_DECRYPT:
 		{
 			LOG_DEBUG("Connection", "Waiting for client.dll decryption...");
-			VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-			Sleep(3000);
+		RequestDmaRefresh(DmaRefreshTier::Full);
+		Sleep(3000);
 			PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
 			BOOL moduleOk = VMMDLL_Map_GetModuleFromNameU(ProcessMgr.HANDLE, ProcessMgr.ProcessID, (LPSTR)"client.dll", &pModuleEntry, NULL);
 			if (moduleOk && pModuleEntry) {
@@ -114,10 +118,7 @@ VOID ConnectionThread()
 			if (!ProcessMgr.IsProcessAlive()) {
 				LOG_WARNING("Connection", "Game process lost, searching again...");
 				ProcessMgr.Detach();
-				{
-					std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-					Cheats::Snapshot = GameSnapshot{};
-				}
+				Cheats::PublishSnapshot(GameSnapshot{});
 				globalVars::gameState.store(AppState::SEARCHING_GAME);
 			} else {
 				Sleep(2000);
@@ -129,6 +130,39 @@ VOID ConnectionThread()
 			break;
 		}
 	}
+}
+
+// ---------- Thread tuning helpers (P4 Task 13) ----------
+
+// Pin the calling thread to a core counted back from the last logical core
+// and bump its priority. backFromLastCore = 0 → last core, 1 → second-to-last.
+// Isolates hot DMA/worker threads from the render thread.
+static void SetWorkerThreadAffinity(int backFromLastCore)
+{
+	int cpuCount = (int)std::thread::hardware_concurrency();
+
+	if (cpuCount <= 0) return;
+
+	int targetCore = cpuCount - 1 - backFromLastCore;
+
+	if (targetCore < 0) targetCore = 0;
+
+	DWORD_PTR mask = (DWORD_PTR)1 << targetCore;
+
+	SetThreadAffinityMask(GetCurrentThread(), mask);
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+}
+
+// Sub-millisecond sleep: coarse sleep_until (~1ms granularity on Windows)
+// followed by a short spin using _mm_pause to hit the target precisely.
+static void PreciseSleepUs(int64_t us)
+{
+	auto target = std::chrono::steady_clock::now() + std::chrono::microseconds(us);
+
+	std::this_thread::sleep_until(target - std::chrono::microseconds(900));
+
+	while (std::chrono::steady_clock::now() < target)
+		_mm_pause();
 }
 
 // ---------- Validation helpers ----------
@@ -157,6 +191,10 @@ static bool IsValidHealth(int hp)
 
 VOID DataThread()
 {
+	// Pin to the last core and raise priority so the DMA pipeline is not
+	// starved by the render thread (P4 Task 13).
+	SetWorkerThreadAffinity(0);
+
 	// --- Entity cache: persists across frames, avoids re-reading controller data ---
 	struct CachedEntity {
 		DWORD64 controllerAddr;
@@ -187,17 +225,31 @@ VOID DataThread()
 	static ScatterBuf scatterBuf[MAX_ENTITIES];
 	ScatterBuf localBuf{};
 
-	int weaponCounter = 0;
-	constexpr int WEAPON_UPDATE_INTERVAL = 5; // ~10ms at 2ms cycle
+	// Per-slot core-field read failure tracking (P3 Task 8).
+	// Static so state persists across frames; DataThread is single-threaded.
+	static int s_coreReadFailStreak[MAX_ENTITIES] = {};
+	static int64_t s_coreReadFailSinceUs[MAX_ENTITIES] = {};
+	constexpr int CORE_READ_EVICT_THRESHOLD = 96;
 
-	// Tiered update frequency
-	int frameCounter = 0;
-	constexpr int DISCOVERY_INTERVAL = 5;      // re-discover entities every 5 frames (~10ms)
-	constexpr int CONTROLLER_REFRESH = 50;     // refresh names/armor/teamID every 50 frames (~100ms)
+	// Tiered update frequency — microsecond intervals (P2)
+	auto nowUs = []() -> int64_t {
+		return std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+	};
 
-	// Consecutive read failure counter — triggers DMA cache refresh on map transition
+	int64_t lastDiscoveryUs = 0;
+	int64_t lastControllerRefreshUs = 0;
+	int64_t lastWeaponUpdateUs = 0;
+	int64_t lastWrExtraUs = 0;
+	int64_t lastWrSlowUs = 0;
+	int64_t lastProjectileScanUs = 0;
+	int64_t lastPeriodicRefreshUs = 0;
+
+	int frameCounter = 0; // retained for logging only
+
+	// Consecutive read failure counter — triggers tiered DMA refresh (P3 Task 9)
+	// 100→Probe, 300→Repair, 500→Full (+ InitAddress + reset)
 	int consecutiveFailCount = 0;
-	constexpr int FAIL_REFRESH_THRESHOLD = 100; // ~100ms of consecutive failures → refresh
 
 	// Stale data counter — matrix all-zero means DMA cache may be out of date
 	int staleDataCount = 0;
@@ -206,7 +258,7 @@ VOID DataThread()
 	while (true)
 	{
 		try {
-			Sleep(1);
+			PreciseSleepUs(1000);
 
 			if (globalVars::gameState.load() != AppState::RUNNING) {
 				Sleep(100);
@@ -214,6 +266,13 @@ VOID DataThread()
 			}
 
 			frameCounter++;
+
+			int64_t now = nowUs(); // frame timestamp, reused throughout this iteration
+
+			// Controller refresh is shared by local player refresh and entity discovery.
+			// Compute once per frame so both paths see the same decision.
+			bool controllerRefreshDue = (now - lastControllerRefreshUs) >= intervals::kControllerRefreshUs;
+			if (controllerRefreshDue) lastControllerRefreshUs = now;
 
 			// --- Compute feature needs from MenuConfig ---
 			bool anyESPDraw = MenuConfig::ShowBoxESP || MenuConfig::ShowBoneESP ||
@@ -229,8 +288,9 @@ VOID DataThread()
 			if (!anyFeature) {
 				LOG_TRACE("Data", "No features enabled, sleeping");
 				Sleep(50);
-				std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-				Cheats::Snapshot.Entities.clear();
+				GameSnapshot cleared = Cheats::GetSnapshot();
+				cleared.Entities.clear();
+				Cheats::PublishSnapshot(cleared);
 				continue;
 			}
 
@@ -241,18 +301,23 @@ VOID DataThread()
 			bool needWeapon = MenuConfig::ShowWeaponESP || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled;
 
 			// ------- 1. Read matrix -------
-			if (!ProcessMgr.ReadMemory(gGame.GetMatrixAddress(), matrix, 64)) {
-				LOG_TRACE("Data", "ReadMemory matrix FAILED (addr=0x{:X})", gGame.GetMatrixAddress());
-				consecutiveFailCount++;
-				if (consecutiveFailCount >= FAIL_REFRESH_THRESHOLD) {
-					LOG_WARNING("Data", "{} consecutive read failures, refreshing DMA cache...", consecutiveFailCount);
-					VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-					gGame.InitAddress();
-					consecutiveFailCount = 0;
-				}
-				continue;
+		if (!ProcessMgr.ReadMemory(gGame.GetMatrixAddress(), matrix, 64)) {
+			LOG_TRACE("Data", "ReadMemory matrix FAILED (addr=0x{:X})", gGame.GetMatrixAddress());
+			consecutiveFailCount++;
+			if (consecutiveFailCount >= 500) {
+				LOG_WARNING("Data", "{} consecutive read failures, requesting Full DMA refresh", consecutiveFailCount);
+				RequestDmaRefresh(DmaRefreshTier::Full);
+				gGame.InitAddress();
+				SceneReset::BumpSceneReset();
+				consecutiveFailCount = 0;
+			} else if (consecutiveFailCount >= 300) {
+				RequestDmaRefresh(DmaRefreshTier::Repair);
+			} else if (consecutiveFailCount >= 100) {
+				RequestDmaRefresh(DmaRefreshTier::Probe);
 			}
-			consecutiveFailCount = 0;
+			continue;
+		}
+		consecutiveFailCount = 0;
 
 			// Check for stale matrix (all zeros = not in game or DMA cache stale)
 			bool matrixAllZero = true;
@@ -260,15 +325,16 @@ VOID DataThread()
 				if (((float*)matrix)[i] != 0.0f) { matrixAllZero = false; break; }
 			}
 			if (matrixAllZero) {
-				staleDataCount++;
-				if (staleDataCount >= STALE_DATA_THRESHOLD) {
-					LOG_WARNING("Data", "Matrix all-zero for {} frames, refreshing DMA cache", staleDataCount);
-					VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-					gGame.UpdateEntityListEntry();
-					staleDataCount = 0;
-				}
-				continue;
-			}
+			staleDataCount++;
+			if (staleDataCount >= STALE_DATA_THRESHOLD) {
+			LOG_WARNING("Data", "Matrix all-zero for {} frames, refreshing DMA cache", staleDataCount);
+			RequestDmaRefresh(DmaRefreshTier::Full);
+			gGame.UpdateEntityListEntry();
+			SceneReset::BumpSceneReset();
+			staleDataCount = 0;
+		}
+			continue;
+		}
 			staleDataCount = 0;
 
 			memcpy(gGame.View.Matrix, matrix, 64);
@@ -288,16 +354,20 @@ VOID DataThread()
 			LOG_TRACE("Data", "Local: ctrl=0x{:X} pawn=0x{:X}", localControllerAddr, localPawnAddr);
 
 			// Detect match entry: pawn 0→non-zero means player just entered a match
-			if (localPawnAddr != 0 && localPawnAddrCached == 0) {
-				LOG_INFO("Data", "Player entered match (pawn 0→0x{:X}), refreshing DMA cache", localPawnAddr);
-				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-				gGame.UpdateEntityListEntry();
-			}
+	if (localPawnAddr != 0 && localPawnAddrCached == 0) {
+		LOG_INFO("Data", "Player entered match (pawn 0→0x{:X}), refreshing DMA cache", localPawnAddr);
+		RequestDmaRefresh(DmaRefreshTier::Full);
+		gGame.UpdateEntityListEntry();
+		SceneReset::BumpSceneReset();
+		// Reset entity cache to discard stale menu/loading data so the next
+		// discovery frame rebuilds the player list from a clean state.
+		entityCache.clear();
+	}
 
 			// Local player: full controller read only on address change or periodic refresh
-			bool localChanged = (localPawnAddr != localPawnAddrCached);
-			if (localChanged || frameCounter % CONTROLLER_REFRESH == 0) {
-				LOG_TRACE("Data", "Local player refresh (changed={}, periodic={})", localChanged, frameCounter % CONTROLLER_REFRESH == 0);
+		bool localChanged = (localPawnAddr != localPawnAddrCached);
+		if (localChanged || controllerRefreshDue) {
+			LOG_TRACE("Data", "Local player refresh (changed={}, periodic={})", localChanged, controllerRefreshDue);
 				CEntity newLocal;
 				if (!newLocal.UpdateController(localControllerAddr)) {
 					LOG_DEBUG("Data", "Local UpdateController FAILED (addr=0x{:X})", localControllerAddr);
@@ -326,15 +396,16 @@ VOID DataThread()
 			// ------- 3-7. Entity pipeline (skip when only projectile ESP is on) -------
 			if (needEntityPipeline) {
 
-			bool isDiscoveryFrame = (frameCounter % DISCOVERY_INTERVAL == 0) || entityCache.empty();
+			bool isDiscoveryFrame = ((now - lastDiscoveryUs) >= intervals::kDiscoveryUs) || entityCache.empty();
+		if (isDiscoveryFrame) lastDiscoveryUs = now;
 
 			if (isDiscoveryFrame) {
 				LOG_TRACE("Data", "--- Discovery frame (cache_size={}) ---", entityCache.size());
-				// Refresh DMA cache only when cache is empty (just entered match)
-				// or when we detect stale data. Not every frame — too expensive.
-				if (entityCache.empty()) {
-					VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-				}
+			// Refresh DMA cache only when cache is empty (just entered match)
+			// or when we detect stale data. Not every frame — too expensive.
+			if (entityCache.empty()) {
+				RequestDmaRefresh(DmaRefreshTier::Full);
+			}
 
 				// Refresh EntityListEntry every discovery frame — the pointer can change
 				// between SlowUpdateThread's 10s intervals (round restarts, player joins, etc.)
@@ -345,7 +416,12 @@ VOID DataThread()
 					continue;
 				}
 
-				int scanCount = MAX_ENTITIES;
+				// CS2 player controllers occupy entity list slots 1-64 (maxPlayers=64).
+			// Fixed scan of 64 slots covers all players. The previous adaptive
+			// shrinking (based on entityCache.size()) caused a self-reinforcing
+			// miss loop: incomplete scan → small cache → small hint → small range.
+			constexpr int PLAYER_CONTROLLER_SLOTS = 64;
+			int scanCount = PLAYER_CONTROLLER_SLOTS;
 
 				// Scatter-read entity addresses at once
 				DWORD64 entityAddresses[MAX_ENTITIES]{};
@@ -365,19 +441,20 @@ VOID DataThread()
 						if (entityAddresses[i] != 0) { allAddrZero = false; break; }
 					}
 					if (allAddrZero) {
-						LOG_DEBUG("Data", "Phase 0 scatter all-zero, refreshing DMA cache");
-						VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-						VMMDLL_SCATTER_HANDLE addrHandle = ProcessMgr.CreateScatterHandle();
-						if (addrHandle) {
-							for (int i = 0; i < scanCount; i++)
-								ProcessMgr.AddScatterReadRequest(addrHandle, listEntry + (i + 1) * 0x70, &entityAddresses[i], sizeof(DWORD64));
-							ProcessMgr.ExecuteReadScatter(addrHandle);
-							VMMDLL_Scatter_CloseHandle(addrHandle);
-						}
+				LOG_DEBUG("Data", "Phase 0 scatter all-zero, refreshing DMA cache");
+				RequestDmaRefresh(DmaRefreshTier::Full);
+				SceneReset::BumpSceneReset();
+					VMMDLL_SCATTER_HANDLE addrHandle = ProcessMgr.CreateScatterHandle();
+					if (addrHandle) {
+						for (int i = 0; i < scanCount; i++)
+							ProcessMgr.AddScatterReadRequest(addrHandle, listEntry + (i + 1) * 0x70, &entityAddresses[i], sizeof(DWORD64));
+						ProcessMgr.ExecuteReadScatter(addrHandle);
+						VMMDLL_Scatter_CloseHandle(addrHandle);
 					}
 				}
+				}
 
-				bool controllerRefresh = (frameCounter % CONTROLLER_REFRESH == 0);
+				bool controllerRefresh = controllerRefreshDue;
 				std::vector<CachedEntity> newCache;
 				newCache.reserve(MAX_ENTITIES);
 				localPlayerIndex = -1;
@@ -434,14 +511,16 @@ VOID DataThread()
 					// Need the first-level entity list pointer (not the 2nd-level listEntry)
 					// to calculate which sub-list each pawn handle belongs to
 					DWORD64 entityPawnListEntry = 0;
-					if (!ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityPawnListEntry) || entityPawnListEntry == 0) {
-						// DMA cache may be stale, refresh and retry once
-						VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
-						ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityPawnListEntry);
-					}
+				if (!ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityPawnListEntry) || entityPawnListEntry == 0) {
+				// DMA cache may be stale, refresh and retry once
+				RequestDmaRefresh(DmaRefreshTier::Full);
+				SceneReset::BumpSceneReset();
+				ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityPawnListEntry);
+			}
 
 					// DIAG: log Phase 1 scatter results
-					if (refreshCount > 0 && frameCounter % 50 == 0) {
+				if (refreshCount > 0 && (now - lastPeriodicRefreshUs) >= intervals::kPeriodicRefreshUs) {
+					lastPeriodicRefreshUs = now;
 						int diagAlive = 0, diagDead = 0, diagZero = 0;
 						for (int r = 0; r < refreshCount; r++) {
 							int i = refreshSlots[r];
@@ -592,8 +671,8 @@ VOID DataThread()
 				}
 
 				LOG_DEBUG("Data", "Discovery done: cache={} refresh={}", (int)newCache.size(), refreshCount);
-				entityCache = std::move(newCache);
-			}
+			entityCache = std::move(newCache);
+		}
 
 			// ------- 4. Scatter read dynamic fields (2-pass: refresh bone addresses every frame) -------
 			{
@@ -610,28 +689,77 @@ VOID DataThread()
 					memset(&localBuf, 0, sizeof(ScatterBuf));
 
 					constexpr int PASS1_BATCH = 2; // pawn spans 3 pages (0x354,0x1588,0x3DD0) + sceneNode = 4 pages/entity
-					for (int batchStart = 0; batchStart < count; batchStart += PASS1_BATCH) {
-						int batchEnd = (batchStart + PASS1_BATCH < count) ? batchStart + PASS1_BATCH : count;
-						VMMDLL_SCATTER_HANDLE handle = ProcessMgr.CreateScatterHandle();
-						if (!handle) continue;
+				for (int batchStart = 0; batchStart < count; batchStart += PASS1_BATCH) {
+					int batchEnd = (batchStart + PASS1_BATCH < count) ? batchStart + PASS1_BATCH : count;
+					VMMDLL_SCATTER_HANDLE handle = ProcessMgr.CreateScatterHandle();
+					if (!handle) continue;
+					for (int i = batchStart; i < batchEnd; i++) {
+						auto& ce = entityCache[i];
+						auto& buf = scatterBuf[i];
+						DWORD64 pawn = ce.pawnAddr;
+						ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::Pos, &buf.pos, sizeof(Vec3));
+						ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::CurrentHealth, &buf.health, sizeof(int));
+						ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::PawnArmor, &buf.armor, sizeof(int));
+						ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::flFlashDuration, &buf.flashDuration, sizeof(float));
+						if (needBones && ce.sceneNodeAddr != 0)
+							ProcessMgr.AddScatterReadRequest(handle, ce.sceneNodeAddr + Offset::BoneArray, &freshBoneArrays[i], sizeof(DWORD64));
+						if (needViewAngle)
+							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::angEyeAngles, &buf.viewAngle, sizeof(Vec2));
+						if (needCameraPos)
+							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::vecLastClipCameraPos, &buf.cameraPos, sizeof(Vec3));
+					}
+					bool batchOk = ProcessMgr.ExecuteReadScatter(handle);
+					VMMDLL_Scatter_CloseHandle(handle);
+
+					// Per-slot fault tolerance (P3 Task 8): on batch failure, retry each
+					// slot individually so a single bad pawn doesn't poison the batch.
+					if (batchOk) {
+						for (int i = batchStart; i < batchEnd; i++)
+							s_coreReadFailStreak[i] = 0;
+					} else {
 						for (int i = batchStart; i < batchEnd; i++) {
 							auto& ce = entityCache[i];
 							auto& buf = scatterBuf[i];
 							DWORD64 pawn = ce.pawnAddr;
-							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::Pos, &buf.pos, sizeof(Vec3));
-							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::CurrentHealth, &buf.health, sizeof(int));
-							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::PawnArmor, &buf.armor, sizeof(int));
-							ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::flFlashDuration, &buf.flashDuration, sizeof(float));
+							VMMDLL_SCATTER_HANDLE slotHandle = ProcessMgr.CreateScatterHandle();
+							if (!slotHandle) {
+								if (s_coreReadFailStreak[i] == 0)
+									s_coreReadFailSinceUs[i] = now;
+								s_coreReadFailStreak[i]++;
+								continue;
+							}
+							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::Pos, &buf.pos, sizeof(Vec3));
+							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::CurrentHealth, &buf.health, sizeof(int));
+							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::PawnArmor, &buf.armor, sizeof(int));
+							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::flFlashDuration, &buf.flashDuration, sizeof(float));
 							if (needBones && ce.sceneNodeAddr != 0)
-								ProcessMgr.AddScatterReadRequest(handle, ce.sceneNodeAddr + Offset::BoneArray, &freshBoneArrays[i], sizeof(DWORD64));
+								ProcessMgr.AddScatterReadRequest(slotHandle, ce.sceneNodeAddr + Offset::BoneArray, &freshBoneArrays[i], sizeof(DWORD64));
 							if (needViewAngle)
-								ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::angEyeAngles, &buf.viewAngle, sizeof(Vec2));
+								ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::angEyeAngles, &buf.viewAngle, sizeof(Vec2));
 							if (needCameraPos)
-								ProcessMgr.AddScatterReadRequest(handle, pawn + Offset::vecLastClipCameraPos, &buf.cameraPos, sizeof(Vec3));
+								ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::vecLastClipCameraPos, &buf.cameraPos, sizeof(Vec3));
+							bool slotOk = ProcessMgr.ExecuteReadScatter(slotHandle);
+							VMMDLL_Scatter_CloseHandle(slotHandle);
+							if (slotOk) {
+								s_coreReadFailStreak[i] = 0;
+							} else {
+								if (s_coreReadFailStreak[i] == 0)
+									s_coreReadFailSinceUs[i] = now;
+								s_coreReadFailStreak[i]++;
+							}
 						}
-						ProcessMgr.ExecuteReadScatter(handle);
-						VMMDLL_Scatter_CloseHandle(handle);
 					}
+				}
+
+				// Per-slot eviction: persistent failure → drop pawn, rediscover next discovery frame
+				for (int i = 0; i < count; i++) {
+					if (s_coreReadFailStreak[i] >= CORE_READ_EVICT_THRESHOLD) {
+						LOG_WARNING("Data", "Evicting entity slot {} (pawn=0x{:X}) after {} core read failures",
+							i, entityCache[i].pawnAddr, s_coreReadFailStreak[i]);
+						entityCache[i].pawnAddr = 0;
+						s_coreReadFailStreak[i] = 0;
+					}
+				}
 
 					// Local player dynamic fields (1 page, separate to avoid skip when count==0)
 					{
@@ -727,37 +855,168 @@ VOID DataThread()
 			}
 
 			// ------- 6. Weapon names (low frequency, only if feature needs it) -------
-			if (needWeapon) {
-				weaponCounter++;
-				if (weaponCounter >= WEAPON_UPDATE_INTERVAL) {
-					weaponCounter = 0;
-					localPlayer.Pawn.GetWeaponName();
+		if (needWeapon) {
+			if ((now - lastWeaponUpdateUs) >= intervals::kWeaponUpdateUs) {
+				lastWeaponUpdateUs = now;
+				// --- Active weapon names via scatter batch read ---
+					// Collect all player slots (local + alive entities)
+					constexpr int MAX_WPN_SLOTS = MAX_ENTITIES + 1;
+					DWORD64 wpnPawnAddrs[MAX_WPN_SLOTS]{};
+					std::string* wpnNameOut[MAX_WPN_SLOTS]{};
+					int wpnSlotCount = 0;
+					if (localPlayer.Pawn.Address != 0) {
+						wpnPawnAddrs[wpnSlotCount] = localPlayer.Pawn.Address;
+						wpnNameOut[wpnSlotCount] = &localPlayer.Pawn.WeaponName;
+						wpnSlotCount++;
+					}
 					for (auto& ce : entityCache) {
-						if (ce.pawnAddr != 0 && ce.entity.Pawn.Health > 0)
-							ce.entity.Pawn.GetWeaponName();
+						if (ce.pawnAddr != 0 && ce.entity.Pawn.Health > 0 && wpnSlotCount < MAX_WPN_SLOTS) {
+							wpnPawnAddrs[wpnSlotCount] = ce.pawnAddr;
+							wpnNameOut[wpnSlotCount] = &ce.entity.Pawn.WeaponName;
+							wpnSlotCount++;
+						}
+					}
+					for (int i = 0; i < wpnSlotCount; i++)
+						*wpnNameOut[i] = "Weapon_None";
+
+					if (wpnSlotCount > 0) {
+						constexpr int WPN_BATCH = 6;
+						DWORD64 wsPtrs[MAX_WPN_SLOTS]{};
+						DWORD activeHandles[MAX_WPN_SLOTS]{};
+						DWORD64 subLists[MAX_WPN_SLOTS]{};
+						DWORD64 weaponAddrs[MAX_WPN_SLOTS]{};
+						DWORD64 m_pEntities[MAX_WPN_SLOTS]{};
+						DWORD64 nameAddrs[MAX_WPN_SLOTS]{};
+						char nameBufs[MAX_WPN_SLOTS][64];
+						memset(nameBufs, 0, sizeof(nameBufs));
+
+						// Pass 1: read WeaponServices pointers
+						for (int bs = 0; bs < wpnSlotCount; bs += WPN_BATCH) {
+							int be = (bs + WPN_BATCH < wpnSlotCount) ? bs + WPN_BATCH : wpnSlotCount;
+							VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+							if (!h) continue;
+							for (int i = bs; i < be; i++)
+								ProcessMgr.AddScatterReadRequest(h, wpnPawnAddrs[i] + Offset::WeaponServices, &wsPtrs[i], sizeof(DWORD64));
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
+						}
+
+						// Pass 2: read ActiveWeapon handles
+						for (int bs = 0; bs < wpnSlotCount; bs += WPN_BATCH) {
+							int be = (bs + WPN_BATCH < wpnSlotCount) ? bs + WPN_BATCH : wpnSlotCount;
+							VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+							if (!h) continue;
+							for (int i = bs; i < be; i++) {
+								if (wsPtrs[i])
+									ProcessMgr.AddScatterReadRequest(h, wsPtrs[i] + Offset::ActiveWeapon, &activeHandles[i], sizeof(DWORD));
+							}
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
+						}
+
+						// Pass 3: read entityListDeref (shared, 1 read) + subLists
+						DWORD64 entityListDeref = 0;
+						ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityListDeref);
+						if (entityListDeref) {
+							for (int bs = 0; bs < wpnSlotCount; bs += WPN_BATCH) {
+								int be = (bs + WPN_BATCH < wpnSlotCount) ? bs + WPN_BATCH : wpnSlotCount;
+								VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+								if (!h) continue;
+								for (int i = bs; i < be; i++) {
+									if (activeHandles[i] == 0 || activeHandles[i] == 0xFFFFFFFF) continue;
+									DWORD idx = activeHandles[i] & 0x7FFF;
+									ProcessMgr.AddScatterReadRequest(h, entityListDeref + 0x10 + 8 * (idx >> 9), &subLists[i], sizeof(DWORD64));
+								}
+								ProcessMgr.ExecuteReadScatter(h);
+								VMMDLL_Scatter_CloseHandle(h);
+							}
+						}
+
+						// Pass 4: read weaponAddrs
+						for (int bs = 0; bs < wpnSlotCount; bs += WPN_BATCH) {
+							int be = (bs + WPN_BATCH < wpnSlotCount) ? bs + WPN_BATCH : wpnSlotCount;
+							VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+							if (!h) continue;
+							for (int i = bs; i < be; i++) {
+								if (!subLists[i]) continue;
+								DWORD idx = activeHandles[i] & 0x7FFF;
+								ProcessMgr.AddScatterReadRequest(h, subLists[i] + 0x70 * (idx & 0x1FF), &weaponAddrs[i], sizeof(DWORD64));
+							}
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
+						}
+
+						// Pass 5a: read m_pEntity (weaponAddr + 0x10)
+						for (int bs = 0; bs < wpnSlotCount; bs += WPN_BATCH) {
+							int be = (bs + WPN_BATCH < wpnSlotCount) ? bs + WPN_BATCH : wpnSlotCount;
+							VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+							if (!h) continue;
+							for (int i = bs; i < be; i++) {
+								if (!weaponAddrs[i]) continue;
+								ProcessMgr.AddScatterReadRequest(h, weaponAddrs[i] + 0x10, &m_pEntities[i], sizeof(DWORD64));
+							}
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
+						}
+
+						// Pass 5b: read nameAddr (m_pEntity + 0x20)
+						for (int bs = 0; bs < wpnSlotCount; bs += WPN_BATCH) {
+							int be = (bs + WPN_BATCH < wpnSlotCount) ? bs + WPN_BATCH : wpnSlotCount;
+							VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+							if (!h) continue;
+							for (int i = bs; i < be; i++) {
+								if (!m_pEntities[i]) continue;
+								ProcessMgr.AddScatterReadRequest(h, m_pEntities[i] + 0x20, &nameAddrs[i], sizeof(DWORD64));
+							}
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
+						}
+
+						// Pass 6: read weapon name strings (64 bytes)
+						for (int bs = 0; bs < wpnSlotCount; bs += WPN_BATCH) {
+							int be = (bs + WPN_BATCH < wpnSlotCount) ? bs + WPN_BATCH : wpnSlotCount;
+							VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+							if (!h) continue;
+							for (int i = bs; i < be; i++) {
+								if (!nameAddrs[i]) continue;
+								ProcessMgr.AddScatterReadRequest(h, nameAddrs[i], nameBufs[i], 64);
+							}
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
+						}
+
+						// Parse weapon names (same logic as GetWeaponName)
+						for (int i = 0; i < wpnSlotCount; i++) {
+							if (!nameAddrs[i]) continue;
+							nameBufs[i][63] = '\0';
+							if (!memchr(nameBufs[i], 0, 64)) continue;
+							std::string s(nameBufs[i]);
+							if (s.empty()) continue;
+							auto pos = s.find("_");
+							if (pos == std::string::npos) continue;
+							*wpnNameOut[i] = s.substr(pos + 1);
+						}
 					}
 				} else {
-					std::shared_lock<std::shared_mutex> readLock(Cheats::SnapshotMutex);
-					localPlayer.Pawn.WeaponName = Cheats::Snapshot.LocalPlayer.Pawn.WeaponName;
-					for (auto& ce : entityCache) {
-						for (const auto& old : Cheats::Snapshot.Entities) {
-							if (old.Controller.Address == ce.controllerAddr) {
-								ce.entity.Pawn.WeaponName = old.Pawn.WeaponName;
-								break;
-							}
+				const GameSnapshot& cur = Cheats::GetSnapshot();
+				localPlayer.Pawn.WeaponName = cur.LocalPlayer.Pawn.WeaponName;
+				for (auto& ce : entityCache) {
+					for (const auto& old : cur.Entities) {
+						if (old.Controller.Address == ce.controllerAddr) {
+							ce.entity.Pawn.WeaponName = old.Pawn.WeaponName;
+							break;
 						}
 					}
 				}
 			}
+			}
 
 			// ------- 7. Web Radar extra data -------
-			if (MenuConfig::ShowWebRadar) {
-				static int wrExtraCounter = 0;
-				static int wrSlowCounter = 0;
-				if (++wrExtraCounter >= 25) { // ~50ms
-					wrExtraCounter = 0;
-					int cnt = (int)entityCache.size();
-					if (cnt > MAX_ENTITIES) cnt = MAX_ENTITIES;
+		if (MenuConfig::ShowWebRadar) {
+			if ((now - lastWrExtraUs) >= intervals::kWrExtraUs) {
+				lastWrExtraUs = now;
+				int cnt = (int)entityCache.size();
+				if (cnt > MAX_ENTITIES) cnt = MAX_ENTITIES;
 
 					// Phase A: scatter-read pointer fields + color
 					DWORD64 moneyPtrs[MAX_ENTITIES]{};
@@ -942,18 +1201,21 @@ VOID DataThread()
 					}
 
 
-					// Store bomb data for snapshot
-					{
-						std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-						Cheats::Snapshot.Bomb = bombSnap;
-					}
+					// Store bomb data for snapshot (in-place patch of the live buffer;
+				// the next DataThread publish carries it forward via the
+				// MapName/Bomb preservation in the main publish path).
+				{
+					std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
+					int readIdx = Cheats::SnapshotReadIdx.load(std::memory_order_relaxed);
+					Cheats::SnapshotBuf[readIdx].Bomb = bombSnap;
+				}
 				}
 
 				// --- Model name + full weapon list (low frequency ~5s) ---
-				if (++wrSlowCounter >= 100) {
-					wrSlowCounter = 0;
-					int cnt = (int)entityCache.size();
-					if (cnt > MAX_ENTITIES) cnt = MAX_ENTITIES;
+			if ((now - lastWrSlowUs) >= intervals::kWrSlowUs) {
+				lastWrSlowUs = now;
+				int cnt = (int)entityCache.size();
+				if (cnt > MAX_ENTITIES) cnt = MAX_ENTITIES;
 
 					// ========= Model Name =========
 					constexpr int MODEL_BATCH = 6; // 1 page per entity
@@ -1091,54 +1353,138 @@ VOID DataThread()
 						if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
 					}
 
-					// Helper: resolve weapon handle → entity address → weapon name
-					// Must dereference entityListAddr first, same pattern as entity discovery
-					DWORD64 entityListDeref = 0;
-					ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityListDeref);
-					auto resolveWeaponName = [entityListDeref](DWORD handle) -> std::string {
-						if (handle == 0 || handle == 0xFFFFFFFF) return "";
-						if (!entityListDeref) return "";
-						DWORD idx = handle & 0x7FFF;
-						DWORD64 subList = 0;
-						if (!ProcessMgr.ReadMemory<DWORD64>(entityListDeref + 0x10 + 8 * (idx >> 9), subList) || !subList)
-							return "";
-						DWORD64 weaponAddr = 0;
-						if (!ProcessMgr.ReadMemory<DWORD64>(subList + 0x70 * (idx & 0x1FF), weaponAddr) || !weaponAddr)
-							return "";
-						DWORD64 nameAddr = ProcessMgr.TraceAddress(weaponAddr + 0x10, { 0x20, 0x0 });
-						if (!nameAddr) return "";
-						char buf[64]{};
-						ProcessMgr.ReadMemory(nameAddr, buf, sizeof(buf) - 1);
-						buf[63] = '\0';
-						std::string s(buf);
-						auto pos = s.find("_");
-						if (pos == std::string::npos || s.empty()) return "";
-						return s.substr(pos + 1);
-					};
-
-					// Phase W4: resolve all weapons for each entity
+					// Phase W4: resolve all weapon names via scatter batch read
+					// Collect all weapon handles (entities + local player)
+					constexpr int MAX_TOTAL_WEAPONS = (MAX_ENTITIES + 1) * MAX_WEAPONS_PER_PLAYER;
+					static DWORD allHandles[MAX_TOTAL_WEAPONS];
+					static int slotEntityIdx[MAX_TOTAL_WEAPONS]; // -1 for local player
+					int allHandleCount = 0;
 					for (int i = 0; i < cnt; i++) {
-						std::vector<std::string> weapons;
 						int wc = wvBuf[i].count;
 						if (wc > MAX_WEAPONS_PER_PLAYER) wc = MAX_WEAPONS_PER_PLAYER;
-						for (int w = 0; w < wc; w++) {
-							std::string name = resolveWeaponName(handleArrays[i][w]);
-							if (!name.empty())
-								weapons.push_back(name);
+						for (int w = 0; w < wc && allHandleCount < MAX_TOTAL_WEAPONS; w++) {
+							allHandles[allHandleCount] = handleArrays[i][w];
+							slotEntityIdx[allHandleCount] = i;
+							allHandleCount++;
 						}
-						entityCache[i].entity.Pawn.WeaponList = std::move(weapons);
 					}
 					{
-						std::vector<std::string> weapons;
 						int wc = localWv.count;
 						if (wc > MAX_WEAPONS_PER_PLAYER) wc = MAX_WEAPONS_PER_PLAYER;
-						for (int w = 0; w < wc; w++) {
-							std::string name = resolveWeaponName(localHandles[w]);
-							if (!name.empty())
-								weapons.push_back(name);
+						for (int w = 0; w < wc && allHandleCount < MAX_TOTAL_WEAPONS; w++) {
+							allHandles[allHandleCount] = localHandles[w];
+							slotEntityIdx[allHandleCount] = -1;
+							allHandleCount++;
 						}
-						localPlayer.Pawn.WeaponList = std::move(weapons);
 					}
+
+					// Read entityListDeref (shared, 1 read)
+					DWORD64 entityListDeref = 0;
+					ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityListDeref);
+
+					// Scatter batch resolve: subList → weaponAddr → m_pEntity → nameAddr → name string
+					static DWORD64 subLists[MAX_TOTAL_WEAPONS];
+					static DWORD64 weaponAddrs[MAX_TOTAL_WEAPONS];
+					static DWORD64 m_pEntities[MAX_TOTAL_WEAPONS];
+					static DWORD64 wepNameAddrs[MAX_TOTAL_WEAPONS];
+					static char nameBufs[MAX_TOTAL_WEAPONS][64];
+					memset(subLists, 0, allHandleCount * sizeof(DWORD64));
+					memset(weaponAddrs, 0, allHandleCount * sizeof(DWORD64));
+					memset(m_pEntities, 0, allHandleCount * sizeof(DWORD64));
+					memset(wepNameAddrs, 0, allHandleCount * sizeof(DWORD64));
+					memset(nameBufs, 0, (size_t)allHandleCount * 64);
+
+					constexpr int WPN_BATCH = 6;
+
+					// Pass 1: read subLists
+					if (entityListDeref) {
+						for (int bs = 0; bs < allHandleCount; bs += WPN_BATCH) {
+							int be = (bs + WPN_BATCH < allHandleCount) ? bs + WPN_BATCH : allHandleCount;
+							VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+							if (!h) continue;
+							for (int i = bs; i < be; i++) {
+								if (allHandles[i] == 0 || allHandles[i] == 0xFFFFFFFF) continue;
+								DWORD idx = allHandles[i] & 0x7FFF;
+								ProcessMgr.AddScatterReadRequest(h, entityListDeref + 0x10 + 8 * (idx >> 9), &subLists[i], sizeof(DWORD64));
+							}
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
+						}
+					}
+
+					// Pass 2: read weaponAddrs
+					for (int bs = 0; bs < allHandleCount; bs += WPN_BATCH) {
+						int be = (bs + WPN_BATCH < allHandleCount) ? bs + WPN_BATCH : allHandleCount;
+						VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+						if (!h) continue;
+						for (int i = bs; i < be; i++) {
+							if (!subLists[i]) continue;
+							DWORD idx = allHandles[i] & 0x7FFF;
+							ProcessMgr.AddScatterReadRequest(h, subLists[i] + 0x70 * (idx & 0x1FF), &weaponAddrs[i], sizeof(DWORD64));
+						}
+						ProcessMgr.ExecuteReadScatter(h);
+						VMMDLL_Scatter_CloseHandle(h);
+					}
+
+					// Pass 3a: read m_pEntities (weaponAddr + 0x10)
+					for (int bs = 0; bs < allHandleCount; bs += WPN_BATCH) {
+						int be = (bs + WPN_BATCH < allHandleCount) ? bs + WPN_BATCH : allHandleCount;
+						VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+						if (!h) continue;
+						for (int i = bs; i < be; i++) {
+							if (!weaponAddrs[i]) continue;
+							ProcessMgr.AddScatterReadRequest(h, weaponAddrs[i] + 0x10, &m_pEntities[i], sizeof(DWORD64));
+						}
+						ProcessMgr.ExecuteReadScatter(h);
+						VMMDLL_Scatter_CloseHandle(h);
+					}
+
+					// Pass 3b: read wepNameAddrs (m_pEntity + 0x20)
+					for (int bs = 0; bs < allHandleCount; bs += WPN_BATCH) {
+						int be = (bs + WPN_BATCH < allHandleCount) ? bs + WPN_BATCH : allHandleCount;
+						VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+						if (!h) continue;
+						for (int i = bs; i < be; i++) {
+							if (!m_pEntities[i]) continue;
+							ProcessMgr.AddScatterReadRequest(h, m_pEntities[i] + 0x20, &wepNameAddrs[i], sizeof(DWORD64));
+						}
+						ProcessMgr.ExecuteReadScatter(h);
+						VMMDLL_Scatter_CloseHandle(h);
+					}
+
+					// Pass 4: read name strings (64 bytes)
+					for (int bs = 0; bs < allHandleCount; bs += WPN_BATCH) {
+						int be = (bs + WPN_BATCH < allHandleCount) ? bs + WPN_BATCH : allHandleCount;
+						VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+						if (!h) continue;
+						for (int i = bs; i < be; i++) {
+							if (!wepNameAddrs[i]) continue;
+							ProcessMgr.AddScatterReadRequest(h, wepNameAddrs[i], nameBufs[i], 64);
+						}
+						ProcessMgr.ExecuteReadScatter(h);
+						VMMDLL_Scatter_CloseHandle(h);
+					}
+
+					// Parse names into per-entity weapon lists (same logic as resolveWeaponName)
+					std::vector<std::string> entityWeapons[MAX_ENTITIES];
+					std::vector<std::string> localWeapons;
+					for (int i = 0; i < allHandleCount; i++) {
+						if (!wepNameAddrs[i]) continue;
+						nameBufs[i][63] = '\0';
+						if (!memchr(nameBufs[i], 0, 64)) continue;
+						std::string s(nameBufs[i]);
+						if (s.empty()) continue;
+						auto pos = s.find("_");
+						if (pos == std::string::npos) continue;
+						std::string name = s.substr(pos + 1);
+						if (slotEntityIdx[i] >= 0)
+							entityWeapons[slotEntityIdx[i]].push_back(name);
+						else
+							localWeapons.push_back(name);
+					}
+					for (int i = 0; i < cnt; i++)
+						entityCache[i].entity.Pawn.WeaponList = std::move(entityWeapons[i]);
+					localPlayer.Pawn.WeaponList = std::move(localWeapons);
 				}
 			}
 
@@ -1152,15 +1498,60 @@ VOID DataThread()
 				}
 			}
 
-			// ------- 8. Grenade projectile scanning (~100ms) -------
-			static std::vector<GrenadeProjectile> projectileCache;
-			static std::set<DWORD64> expiredEntities;
-			if (MenuConfig::ShowProjectileESP) {
-				LOG_TRACE("Data", "Projectile ESP scan (cache={})", projectileCache.size());
-				static int projCounter = 0;
-				if (++projCounter >= 10) { // ~20ms at 2ms cycle
-					projCounter = 0;
-					std::vector<GrenadeProjectile> newProjectiles;
+			// ------- 8. Grenade projectile scanning (adaptive interval + sharded discovery + 3-tier cache) -------
+	static std::vector<GrenadeProjectile> projectileCache;
+	static std::set<DWORD64> expiredEntities;
+
+	// P5 Task 14: Sharded discovery state
+	static int s_worldDiscoveryShard = 0;
+	static int s_lastWorldEntityCount = 0;
+	static int s_worldIdleStreak = 0;
+
+	// P5 Task 15: Three-tier cache (skip DMA reads for unchanged entities)
+	static DWORD64 s_cachedProjEntityAddrs[960] = {};
+	static DWORD64 s_cachedProjSceneNodes[960] = {};
+	static Vec3 s_cachedProjPositions[960] = {};
+	static uint8_t s_cachedProjTypes[960] = {};
+	static uint64_t s_projCacheResetSerial = 0;
+
+	if (MenuConfig::ShowProjectileESP) {
+		LOG_TRACE("Data", "Projectile ESP scan (cache={})", projectileCache.size());
+
+		// P5 Task 15: Invalidate cache on scene reset
+		uint64_t currentSerial = SceneReset::CurrentSerial();
+		if (currentSerial != s_projCacheResetSerial) {
+			memset(s_cachedProjEntityAddrs, 0, sizeof(s_cachedProjEntityAddrs));
+			memset(s_cachedProjSceneNodes, 0, sizeof(s_cachedProjSceneNodes));
+			memset(s_cachedProjPositions, 0, sizeof(s_cachedProjPositions));
+			memset(s_cachedProjTypes, 0, sizeof(s_cachedProjTypes));
+			s_projCacheResetSerial = currentSerial;
+		}
+
+		// P5 Task 14: Adaptive interval + shard count based on entity count
+		int64_t worldScanUs = intervals::kWorldScanBaseUs;
+		int shardCount = 1;
+		if (s_lastWorldEntityCount <= 800) {
+			worldScanUs = intervals::kWorldScanBaseUs;
+			shardCount = 1;
+		} else if (s_lastWorldEntityCount <= 1200) {
+			worldScanUs = intervals::kWorldScanHighUs;
+			shardCount = 2;
+		} else if (s_lastWorldEntityCount <= 2000) {
+			worldScanUs = intervals::kWorldScanMedUs;
+			shardCount = 4;
+		} else {
+			worldScanUs = intervals::kWorldScanLowUs;
+			shardCount = 10;
+		}
+
+		// P5 Task 14: Idle detection — double interval after 3 consecutive empty scans
+		if (s_worldIdleStreak >= 3) {
+			worldScanUs *= 2;
+		}
+
+		if ((now - lastProjectileScanUs) >= worldScanUs) {
+			lastProjectileScanUs = now;
+			std::vector<GrenadeProjectile> newProjectiles;
 
 					// Scan entities across chunk 0 (64-511) and chunk 1 (512-1023)
 					DWORD64 entityListPtr = 0;
@@ -1182,84 +1573,107 @@ VOID DataThread()
 							}
 						}
 
-						// Phase 1: Scatter-read all entity addresses (using correct chunk + slot)
-						// Contiguous array reads: 960 entries × 0x70 stride ≈ 17 pages across 2 chunks.
-						// Batch 200 entries ≈ 6 pages to stay within VMMDLL limit.
-						DWORD64 entAddrs[SCAN_COUNT]{};
-						{
-							constexpr int PROJ_ADDR_BATCH = 200;
-							for (int batchStart = 0; batchStart < SCAN_COUNT; batchStart += PROJ_ADDR_BATCH) {
-								int batchEnd = (batchStart + PROJ_ADDR_BATCH < SCAN_COUNT) ? batchStart + PROJ_ADDR_BATCH : SCAN_COUNT;
-								VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
-								if (!h) continue;
-								for (int i = batchStart; i < batchEnd; i++) {
-									int idx = SCAN_START + i;
-									int chunk = idx / 512;
-									int slot = idx % 512;
-									if (chunk < 2 && chunkPtrs[chunk] != 0)
-										ProcessMgr.AddScatterReadRequest(h, chunkPtrs[chunk] + (DWORD64)slot * 0x70, &entAddrs[i], sizeof(DWORD64));
-								}
-								ProcessMgr.ExecuteReadScatter(h);
-								VMMDLL_Scatter_CloseHandle(h);
+						// P5 Task 14: Compute shard range for this scan
+					int slotsPerShard = SCAN_COUNT / shardCount;
+					if (slotsPerShard < 1) slotsPerShard = 1;
+					int shardStart = s_worldDiscoveryShard * slotsPerShard;
+					int shardEnd = (s_worldDiscoveryShard == shardCount - 1) ? SCAN_COUNT : shardStart + slotsPerShard;
+					if (shardEnd > SCAN_COUNT) shardEnd = SCAN_COUNT;
+
+					// Phase 1: Scatter-read entity addresses for current shard only
+					DWORD64 entAddrs[SCAN_COUNT]{};
+					int nonZeroCount = 0;
+					{
+						VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+						if (h) {
+							for (int i = shardStart; i < shardEnd; i++) {
+								int idx = SCAN_START + i;
+								int chunk = idx / 512;
+								int slot = idx % 512;
+								if (chunk < 2 && chunkPtrs[chunk] != 0)
+									ProcessMgr.AddScatterReadRequest(h, chunkPtrs[chunk] + (DWORD64)slot * 0x70, &entAddrs[i], sizeof(DWORD64));
 							}
+							ProcessMgr.ExecuteReadScatter(h);
+							VMMDLL_Scatter_CloseHandle(h);
 						}
+						for (int i = shardStart; i < shardEnd; i++) {
+							if (entAddrs[i] != 0) nonZeroCount++;
+						}
+					}
+					s_lastWorldEntityCount = nonZeroCount;
+
+					// P5 Task 15: Cache check — split slots into cache-hit and cache-miss
+					std::vector<int> cacheMissIdx;
+					for (int i = shardStart; i < shardEnd; i++) {
+						if (entAddrs[i] != 0 && entAddrs[i] == s_cachedProjEntityAddrs[i]) {
+							// Cache hit — reuse cached type/sceneNode/position
+						} else {
+							if (entAddrs[i] != 0) cacheMissIdx.push_back(i);
+							s_cachedProjEntityAddrs[i] = entAddrs[i];
+							s_cachedProjSceneNodes[i] = 0;
+							s_cachedProjPositions[i] = Vec3{};
+							s_cachedProjTypes[i] = 0;
+						}
+					}
 
 						// Phases 2-4: random address reads, batch by actual non-zero count.
-						// Each valid entry is at a different heap address = 1 unique page each.
+						// P5 Task 15: Only read cache-miss slots (unchanged entities skip DMA)
 						constexpr int PROJ_RAND_BATCH = 6;
 
-						// Phase 2: Scatter-read identity pointers for valid entities
 						DWORD64 identityPtrs[SCAN_COUNT]{};
-						{
-							VMMDLL_SCATTER_HANDLE h = nullptr;
-							int bc = 0;
-							for (int i = 0; i < SCAN_COUNT; i++) {
-								if (entAddrs[i] == 0) continue;
-								if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
-								ProcessMgr.AddScatterReadRequest(h, entAddrs[i] + Offset::EntityIdentity, &identityPtrs[i], sizeof(DWORD64));
-								if (++bc >= PROJ_RAND_BATCH) {
-									ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
-								}
-							}
-							if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
-						}
-
-						// Phase 3: Scatter-read designer name pointers
 						DWORD64 namePtrs[SCAN_COUNT]{};
-						{
-							VMMDLL_SCATTER_HANDLE h = nullptr;
-							int bc = 0;
-							for (int i = 0; i < SCAN_COUNT; i++) {
-								if (identityPtrs[i] == 0) continue;
-								if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
-								ProcessMgr.AddScatterReadRequest(h, identityPtrs[i] + Offset::DesignerName, &namePtrs[i], sizeof(DWORD64));
-								if (++bc >= PROJ_RAND_BATCH) {
-									ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
-								}
-							}
-							if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
-						}
-
-						// Phase 4: Scatter-read designer name strings
 						char nameStrings[SCAN_COUNT][40]{};
-						{
-							VMMDLL_SCATTER_HANDLE h = nullptr;
-							int bc = 0;
-							for (int i = 0; i < SCAN_COUNT; i++) {
-								if (namePtrs[i] == 0) continue;
-								if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
-								ProcessMgr.AddScatterReadRequest(h, namePtrs[i], nameStrings[i], 39);
-								if (++bc >= PROJ_RAND_BATCH) {
-									ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
+
+						if (!cacheMissIdx.empty()) {
+							// Phase 2: Scatter-read identity pointers for cache-miss entities
+							{
+								VMMDLL_SCATTER_HANDLE h = nullptr;
+								int bc = 0;
+								for (int i : cacheMissIdx) {
+									if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
+									ProcessMgr.AddScatterReadRequest(h, entAddrs[i] + Offset::EntityIdentity, &identityPtrs[i], sizeof(DWORD64));
+									if (++bc >= PROJ_RAND_BATCH) {
+										ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
+									}
 								}
+								if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
 							}
-							if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
+
+							// Phase 3: Scatter-read designer name pointers
+							{
+								VMMDLL_SCATTER_HANDLE h = nullptr;
+								int bc = 0;
+								for (int i : cacheMissIdx) {
+									if (identityPtrs[i] == 0) continue;
+									if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
+									ProcessMgr.AddScatterReadRequest(h, identityPtrs[i] + Offset::DesignerName, &namePtrs[i], sizeof(DWORD64));
+									if (++bc >= PROJ_RAND_BATCH) {
+										ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
+									}
+								}
+								if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
+							}
+
+							// Phase 4: Scatter-read designer name strings
+							{
+								VMMDLL_SCATTER_HANDLE h = nullptr;
+								int bc = 0;
+								for (int i : cacheMissIdx) {
+									if (namePtrs[i] == 0) continue;
+									if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
+									ProcessMgr.AddScatterReadRequest(h, namePtrs[i], nameStrings[i], 39);
+									if (++bc >= PROJ_RAND_BATCH) {
+										ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
+									}
+								}
+								if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
+							}
 						}
 
-					// Phase 5: Identify grenade projectiles
-						struct ProjCandidate { int idx; GrenadeProjectileType type; float radius; };
+					// Phase 5: Identify grenade projectiles (cache-miss slots)
+						struct ProjCandidate { int idx; GrenadeProjectileType type; float radius; bool fromCache; };
 						std::vector<ProjCandidate> candidates;
-						for (int i = 0; i < SCAN_COUNT; i++) {
+						for (int i : cacheMissIdx) {
 							nameStrings[i][39] = '\0';
 							if (nameStrings[i][0] == '\0') continue;
 							const char* n = nameStrings[i];
@@ -1271,18 +1685,31 @@ VOID DataThread()
 							else if (strstr(n, "molotov_projectile") || strstr(n, "incendiarygrenade_proj")) { type = PROJ_MOLOTOV; radius = 150.f; }
 							else if (strstr(n, "decoy_projectile"))           { type = PROJ_DECOY;   radius = 0.f; }
 							if (type == PROJ_UNKNOWN) continue;
-							candidates.push_back({ i, type, radius });
+							candidates.push_back({ i, type, radius, false });
+							s_cachedProjTypes[i] = static_cast<uint8_t>(type) + 1;
+						}
+
+						// Phase 5b: Add cache-hit slots that were projectiles last scan
+						for (int i = shardStart; i < shardEnd; i++) {
+							if (entAddrs[i] != 0 && entAddrs[i] == s_cachedProjEntityAddrs[i] && s_cachedProjTypes[i] != 0) {
+								GrenadeProjectileType type = static_cast<GrenadeProjectileType>(s_cachedProjTypes[i] - 1);
+								float radius = 0;
+								if (type == PROJ_HE) radius = 350.f;
+								else if (type == PROJ_MOLOTOV) radius = 150.f;
+								candidates.push_back({ i, type, radius, true });
+							}
 						}
 
 						if (!candidates.empty()) {
-							// Phase 6: Scatter-read GameSceneNode for candidates (batched)
-							DWORD64 sceneNodes[SCAN_COUNT]{};
+							// Phase 6: Scatter-read GameSceneNode for cache-miss candidates (batched)
+							// P5 Task 15: cache-hit candidates reuse s_cachedProjSceneNodes
 							{
 								VMMDLL_SCATTER_HANDLE h = nullptr;
 								int bc = 0;
 								for (auto& c : candidates) {
+									if (c.fromCache) continue;
 									if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
-									ProcessMgr.AddScatterReadRequest(h, entAddrs[c.idx] + Offset::GameSceneNode, &sceneNodes[c.idx], sizeof(DWORD64));
+									ProcessMgr.AddScatterReadRequest(h, entAddrs[c.idx] + Offset::GameSceneNode, &s_cachedProjSceneNodes[c.idx], sizeof(DWORD64));
 									if (++bc >= PROJ_RAND_BATCH) {
 										ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
 									}
@@ -1290,15 +1717,16 @@ VOID DataThread()
 								if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
 							}
 
-							// Phase 7: Scatter-read positions (batched)
-							Vec3 positions[SCAN_COUNT]{};
+							// Phase 7: Scatter-read positions for cache-miss candidates (batched)
+							// P5 Task 15: cache-hit candidates reuse s_cachedProjPositions
 							{
 								VMMDLL_SCATTER_HANDLE h = nullptr;
 								int bc = 0;
 								for (auto& c : candidates) {
-									if (sceneNodes[c.idx] == 0) continue;
+									if (c.fromCache) continue;
+									if (s_cachedProjSceneNodes[c.idx] == 0) continue;
 									if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
-									ProcessMgr.AddScatterReadRequest(h, sceneNodes[c.idx] + Offset::vecAbsOrigin, &positions[c.idx], sizeof(Vec3));
+									ProcessMgr.AddScatterReadRequest(h, s_cachedProjSceneNodes[c.idx] + Offset::vecAbsOrigin, &s_cachedProjPositions[c.idx], sizeof(Vec3));
 									if (++bc >= PROJ_RAND_BATCH) {
 										ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
 									}
@@ -1311,7 +1739,7 @@ VOID DataThread()
 							for (auto& c : candidates) {
 								DWORD64 addr = entAddrs[c.idx];
 								if (expiredEntities.count(addr)) continue;
-								Vec3& pos = positions[c.idx];
+								Vec3& pos = s_cachedProjPositions[c.idx];
 								if (!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z)) continue;
 								if (std::abs(pos.x) < 1.f && std::abs(pos.y) < 1.f && std::abs(pos.z) < 1.f) continue;
 								GrenadeProjectile proj;
@@ -1331,6 +1759,14 @@ VOID DataThread()
 								if (!stillInList.count(*it)) it = expiredEntities.erase(it);
 								else ++it;
 							}
+						}
+
+						// P5 Task 14: Advance shard and update idle detection
+						s_worldDiscoveryShard = (s_worldDiscoveryShard + 1) % shardCount;
+						if (newProjectiles.empty()) {
+							s_worldIdleStreak++;
+						} else {
+							s_worldIdleStreak = 0;
 						}
 					}
 
@@ -1458,13 +1894,27 @@ VOID DataThread()
 				}
 
 				LOG_TRACE("Data", "Publishing snapshot: entities={} projs={} localHP={} spectators={}", publishEntities.size(), projectileCache.size(), localPlayer.Pawn.Health, spectators.size());
-				std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-				memcpy(Cheats::Snapshot.Matrix, matrix, sizeof(matrix));
-				Cheats::Snapshot.LocalPlayer = localPlayer;
-				Cheats::Snapshot.LocalPlayer.LocalPlayerControllerIndex = localPlayerIndex;
-				Cheats::Snapshot.Entities.swap(publishEntities);
-				Cheats::Snapshot.Projectiles = projectileCache;
-				Cheats::Snapshot.Spectators = std::move(spectators);
+
+			GameSnapshot newSnap;
+			memcpy(newSnap.Matrix, matrix, sizeof(matrix));
+			newSnap.LocalPlayer = localPlayer;
+			newSnap.LocalPlayer.LocalPlayerControllerIndex = localPlayerIndex;
+			newSnap.Entities = std::move(publishEntities);
+			newSnap.Projectiles = projectileCache;
+			newSnap.Spectators = std::move(spectators);
+
+			// Preserve low-frequency fields this publish path does not refresh:
+			//   MapName — written by SlowUpdateThread (~10s)
+			//   Bomb    — written by the WebRadar-extra block above (~50ms)
+			// A shared_lock keeps the read exclusive against the in-place writers.
+			{
+				std::shared_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
+				const GameSnapshot& cur = Cheats::GetSnapshot();
+				memcpy(newSnap.MapName, cur.MapName, sizeof(newSnap.MapName));
+				newSnap.Bomb = cur.Bomb;
+			}
+
+			Cheats::PublishSnapshot(newSnap);
 			}
 		}
 		catch (const std::exception& e) {
@@ -1509,10 +1959,11 @@ VOID SlowUpdateThread()
 			ProcessMgr.ReadMemory(mapaddress2, tempMap, 32);
 
 			LOG_DEBUG("SlowUpdate", "Map name: '{}' (addr=0x{:X})", tempMap, mapaddress2);
-			{
-				std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-				memcpy(Cheats::Snapshot.MapName, tempMap, sizeof(tempMap));
-			}
+		{
+			std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
+			int readIdx = Cheats::SnapshotReadIdx.load(std::memory_order_relaxed);
+			memcpy(Cheats::SnapshotBuf[readIdx].MapName, tempMap, sizeof(tempMap));
+		}
 
 			Sleep(10000);
 		}
@@ -1560,8 +2011,7 @@ VOID KeysCheckThread()
 			CEntity localCopy;
 			bool valid = false;
 			{
-				std::shared_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-				const auto& lp = Cheats::Snapshot.LocalPlayer;
+				const auto& lp = Cheats::GetSnapshot().LocalPlayer;
 				if (lp.Controller.Address != 0 &&
 				    lp.Pawn.Address != 0 &&
 				    lp.Pawn.Health > 0) {
@@ -1607,6 +2057,49 @@ VOID KeysCheckThread()
 				MyConfigSaver::MarkDirty();
 			}
 			hk.wasPressed = pressed;
+		}
+	}
+}
+
+// =====================================================================
+//  DmaAdminThread — asynchronous VMMDLL_ConfigSet refresh processing
+//
+//  Polls g_pendingRefreshFlags (set by RequestDmaRefresh) every 20ms and
+//  performs the actual VMMDLL_ConfigSet calls off the DataThread path.
+//  Executes the highest requested tier and bumps the scene-reset serial.
+// =====================================================================
+
+VOID DmaAdminThread()
+{
+	while (true)
+	{
+		try {
+			Sleep(20);
+
+			if (globalVars::gameState.load() == AppState::EXITING)
+				return;
+
+			uint32_t flags = g_pendingRefreshFlags.load(std::memory_order_acquire);
+			if (flags == 0) continue;
+
+			// Clear flags before issuing the (potentially slow) refresh call
+			g_pendingRefreshFlags.store(0, std::memory_order_release);
+
+			// Execute the highest tier requested
+			if (flags & 0x4) { // Full
+				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+			} else if (flags & 0x2) { // Repair
+				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_MEM_PARTIAL, 1);
+				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_MEDIUM, 1);
+			} else if (flags & 0x1) { // Probe
+				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_FAST, 1);
+				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_TLB_PARTIAL, 1);
+			}
+
+			SceneReset::BumpSceneReset();
+		}
+		catch (...) {
+			// Silently swallow — keep the loop alive
 		}
 	}
 }

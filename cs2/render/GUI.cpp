@@ -8,6 +8,7 @@
 #include "../utils/Logger.h"
 #include <shellapi.h>
 #include <thread>
+#include <chrono>
 
 // ============================================================================
 // Color Scheme: Dark Purple-Blue Accent (UITheme)
@@ -325,6 +326,19 @@ static void DrawTab_Radar() {
 			}
 		}
 
+		// Task 10: Origin allowlist for /api/* CORS
+		{
+			static char originBuf[512] = "";
+			if (originBuf[0] == '\0' && !MenuConfig::WebRadarOriginAllowlist.empty())
+				strncpy_s(originBuf, MenuConfig::WebRadarOriginAllowlist.c_str(), 511);
+			ImGui::SetNextItemWidth(280);
+			if (ImGui::InputText("Origin Allowlist##webradar", originBuf, sizeof(originBuf))) {
+				MenuConfig::WebRadarOriginAllowlist = originBuf;
+			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Comma-separated origins for /api/* CORS. Empty = allow all.");
+		}
+
 		// ---- Server status ----
 		ImGui::Spacing();
 		bool running = g_webRadarRunning.load();
@@ -335,6 +349,42 @@ static void DrawTab_Radar() {
 			ImGui::Text("%s: %d", lang.webradar_clients.c_str(), clients);
 		} else {
 			ImGui::TextColored(UITheme::Danger, "%s", lang.webradar_not_running.c_str());
+		}
+
+		// ---- Task 9: Runtime stats debug panel ----
+		if (running && ImGui::CollapsingHeader("Runtime Stats##webradar")) {
+			RuntimeStatsSnapshot snap;
+			{
+				std::lock_guard<std::mutex> lock(g_webRadarStatsMutex);
+				snap = g_webRadarStats;
+			}
+
+			// Compute send Hz by sampling framesSent over time
+			static uint64_t prevFramesSent = 0;
+			static auto prevTime = std::chrono::steady_clock::now();
+			static double sendHz = 0.0;
+			auto now = std::chrono::steady_clock::now();
+			double elapsed = std::chrono::duration<double>(now - prevTime).count();
+			if (elapsed >= 0.5) {
+				uint64_t delta = snap.framesSent - prevFramesSent;
+				sendHz = delta / elapsed;
+				prevFramesSent = snap.framesSent;
+				prevTime = now;
+			}
+
+			uint64_t avgSerUs = snap.serializeUsCount > 0 ? snap.serializeUsTotal / snap.serializeUsCount : 0;
+			uint64_t avgBcUs  = snap.broadcastUsCount > 0 ? snap.broadcastUsTotal / snap.broadcastUsCount : 0;
+
+			ImGui::Text("Send Hz:        %.1f", sendHz);
+			ImGui::Text("Clients:        %d", snap.clientCount);
+			ImGui::Text("Frames sent:    %llu", (unsigned long long)snap.framesSent);
+			ImGui::Text("Frames dropped: %llu", (unsigned long long)snap.framesDropped);
+			ImGui::Text("Coalesced:      %llu", (unsigned long long)snap.coalescedFrames);
+			ImGui::Text("Slow client drops: %llu", (unsigned long long)snap.droppedFramesSlowClient);
+			ImGui::Text("Serialize avg:  %llu us", (unsigned long long)avgSerUs);
+			ImGui::Text("Broadcast avg:  %llu us", (unsigned long long)avgBcUs);
+			ImGui::Text("Payload last:   %zu bytes", snap.payloadBytesLast);
+			ImGui::Text("Payload peak:   %zu bytes", snap.payloadBytesPeak);
 		}
 
 		// ---- Local / LAN Access ----

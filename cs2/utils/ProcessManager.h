@@ -28,6 +28,12 @@
 
 
 
+inline thread_local int SCATTER_PENDING_COUNT = 0;
+
+inline thread_local int SCATTER_PREPARE_FAIL_COUNT = 0;
+
+
+
 /**
 
  * @file ProcessManager.hpp
@@ -430,17 +436,63 @@ public:
 
 	{
 
-		VMMDLL_Scatter_PrepareEx(handle, address, size, (PBYTE)buffer, NULL);
+		if (VMMDLL_Scatter_PrepareEx(handle, address, size, (PBYTE)buffer, NULL))
+
+			SCATTER_PENDING_COUNT++;
+
+		else
+
+			SCATTER_PREPARE_FAIL_COUNT++;
 
 	}
 
-	void ExecuteReadScatter(VMMDLL_SCATTER_HANDLE handle)
+	bool ExecuteReadScatter(VMMDLL_SCATTER_HANDLE handle)
 
 	{
 
-		VMMDLL_Scatter_ExecuteRead(handle);
+		if (!handle)
+
+			return false;
+
+		const int pending = SCATTER_PENDING_COUNT;
+
+		const int prepareFails = SCATTER_PREPARE_FAIL_COUNT;
+
+		SCATTER_PENDING_COUNT = 0;
+
+		SCATTER_PREPARE_FAIL_COUNT = 0;
+
+		if (pending == 0)
+
+		{
+
+			VMMDLL_Scatter_Clear(handle, ProcessID, NULL);
+
+			return prepareFails == 0;
+
+		}
+
+		for (int attempt = 0; attempt < 3; ++attempt)
+
+		{
+
+			if (VMMDLL_Scatter_ExecuteRead(handle))
+
+			{
+
+				VMMDLL_Scatter_Clear(handle, ProcessID, NULL);
+
+				return true;
+
+			}
+
+			Sleep(1);
+
+		}
 
 		VMMDLL_Scatter_Clear(handle, ProcessID, NULL);
+
+		return false;
 
 	}
 
@@ -486,23 +538,23 @@ public:
 
 	template <typename T>
 
-	T ReadMemoryExtra(uintptr_t address, DWORD pid, bool cache = false, const DWORD size = sizeof(T))
+	bool ReadMemoryExtra(uintptr_t address, DWORD pid, T& outBuffer, bool cache = false, const DWORD size = sizeof(T))
 
 	{
 
-		T buffer{};
-
 		DWORD bytes_read = 0;
+
+		BOOL ok;
 
 		if (!cache)
 
-			VMMDLL_MemReadEx(this->HANDLE, pid, address, (PBYTE)&buffer, size, &bytes_read, VMMDLL_FLAG_NOCACHE);
+			ok = VMMDLL_MemReadEx(this->HANDLE, pid, address, (PBYTE)&outBuffer, size, &bytes_read, VMMDLL_FLAG_NOCACHE);
 
 		else
 
-			VMMDLL_MemReadEx(this->HANDLE, pid, address, (PBYTE)&buffer, size, &bytes_read, VMMDLL_FLAG_CACHE_RECENT_ONLY);
+			ok = VMMDLL_MemReadEx(this->HANDLE, pid, address, (PBYTE)&outBuffer, size, &bytes_read, VMMDLL_FLAG_CACHE_RECENT_ONLY);
 
-		return buffer;
+		return ok == TRUE;
 
 	}
 
@@ -820,17 +872,17 @@ public:
 
 				for (int slot = 0; slot < 8 && !found; slot++) {
 
-					uintptr_t slot_ptr = ReadMemoryExtra<uintptr_t>(g_slots_va, pid);
+					uintptr_t slot_ptr = 0;
 
-					if (!slot_ptr) continue;
+					if (!ReadMemoryExtra<uintptr_t>(g_slots_va, pid, slot_ptr) || !slot_ptr) continue;
 
-					uintptr_t entry = ReadMemoryExtra<uintptr_t>(slot_ptr + 8 * slot, pid);
+					uintptr_t entry = 0;
 
-					if (!entry) continue;
+					if (!ReadMemoryExtra<uintptr_t>(slot_ptr + 8 * slot, pid, entry) || !entry) continue;
 
-					user_session_state = ReadMemoryExtra<uintptr_t>(entry, pid);
+					user_session_state = 0;
 
-					if (!user_session_state || user_session_state < 0x7FFFFFFFFFFF) continue;
+					if (!ReadMemoryExtra<uintptr_t>(entry, pid, user_session_state) || !user_session_state || user_session_state < 0x7FFFFFFFFFFF) continue;
 
 
 
@@ -910,11 +962,13 @@ public:
 
 
 
-					uintptr_t user_session_state = ReadMemoryExtra<uintptr_t>(
+					uintptr_t tmp1 = 0, tmp2 = 0, user_session_state = 0;
 
-						ReadMemoryExtra<uintptr_t>(
+					ReadMemoryExtra<uintptr_t>(g_slots_va, pid, tmp1);
 
-							ReadMemoryExtra<uintptr_t>(g_slots_va, pid), pid), pid);
+					ReadMemoryExtra<uintptr_t>(tmp1, pid, tmp2);
+
+					ReadMemoryExtra<uintptr_t>(tmp2, pid, user_session_state);
 
 
 
@@ -1032,7 +1086,13 @@ public:
 
 						uintptr_t g_session_global_slots = tmp + offsets.session_global_slots;
 
-						uintptr_t user_session_state = ReadMemoryExtra<uintptr_t>(ReadMemoryExtra<uintptr_t>(ReadMemoryExtra<uintptr_t>(g_session_global_slots, pid), pid), pid);
+						uintptr_t tmp1 = 0, tmp2 = 0, user_session_state = 0;
+
+						ReadMemoryExtra<uintptr_t>(g_session_global_slots, pid, tmp1);
+
+						ReadMemoryExtra<uintptr_t>(tmp1, pid, tmp2);
+
+						ReadMemoryExtra<uintptr_t>(tmp2, pid, user_session_state);
 
 						gafAsyncKeyStateExport = user_session_state + offsets.gaf_async_key_state;
 

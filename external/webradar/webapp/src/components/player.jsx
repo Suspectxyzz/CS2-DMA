@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { getRadarPosition, playerColors } from "../utilities/utilities";
+import { getRadarPosition, getSplitIndex, playerColors } from "../utilities/utilities";
 
 
 const playerRotations = new Map();
@@ -18,6 +18,11 @@ const Player = ({ playerData, mapData, radarImage, localTeam, averageLatency, se
   const [lastKnownPosition, setLastKnownPosition] = useState(null);
   const radarPosition = getRadarPosition(mapData, playerData.m_position) || { x: 0, y: 0 };
   const invalidPosition = radarPosition.x <= 0 && radarPosition.y <= 0;
+
+  const lastSplitRef = useRef(-1);
+  const currentSplit = getSplitIndex(mapData, playerData.m_position?.z);
+  const splitChanged = currentSplit !== lastSplitRef.current;
+  lastSplitRef.current = currentSplit;
 
   const playerRef = useRef();
   const playerBounding = playerRef.current
@@ -66,7 +71,7 @@ const Player = ({ playerData, mapData, radarImage, localTeam, averageLatency, se
     (settings.showEnemyNames && playerData.m_team !== localTeam);
   const showWeapon = settings.showWeapon ?? true;
   const activeWeapon = showWeapon && playerData.m_weapons && playerData.m_weapons.m_active;
-  const transitionMs = (settings.smoothTransition ?? true) ? averageLatency : 0;
+  const transitionMs = (settings.smoothTransition ?? true) && !splitChanged ? averageLatency : 0;
 
   return (
     <div

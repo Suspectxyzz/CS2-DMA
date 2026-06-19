@@ -14,6 +14,7 @@ enum class AppState {
 	INITIALIZING_GAME,
 	WAITING_DECRYPT,
 	RUNNING,
+	EXITING,
 };
 
 namespace globalVars {

@@ -3,6 +3,7 @@
 #include <ws2tcpip.h>
 
 #include "WebRadar.h"
+#include "WebRadar/embedded_assets.h"
 
 #include "../utils/base64.h"
 #include "../utils/Logger.h"
@@ -46,6 +47,7 @@ static std::string SanitizeUtf8(const std::string& s) {
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <chrono>
 #include <Shlobj.h>
 #include <winreg.h>
 #include <shared_mutex>
@@ -98,6 +100,46 @@ static std::string ExtractPath(const std::string& url) {
 	return (qpos == std::string::npos) ? url : url.substr(0, qpos);
 }
 
+// Task 10: Extract Origin header value from an HTTP request.
+static std::string ExtractOrigin(const std::string& request) {
+	std::string lower = ToLowerAscii(request);
+	auto pos = lower.find("origin:");
+	if (pos == std::string::npos) return "";
+	pos = request.find(':', pos) + 1;
+	while (pos < request.size() && (request[pos] == ' ' || request[pos] == '\t')) pos++;
+	auto end = request.find("\r\n", pos);
+	if (end == std::string::npos) end = request.size();
+	return request.substr(pos, end - pos);
+}
+
+// Task 10: Check if an Origin is allowed by the comma-separated allowlist.
+// Empty allowlist = allow all (backward compatible).
+static bool IsOriginAllowed(const std::string& origin, const std::string& allowlist) {
+	if (allowlist.empty()) return true;
+	std::stringstream ss(allowlist);
+	std::string item;
+	while (std::getline(ss, item, ',')) {
+		auto start = item.find_first_not_of(" \t");
+		auto end = item.find_last_not_of(" \t");
+		if (start == std::string::npos) continue;
+		std::string trimmed = item.substr(start, end - start + 1);
+		if (trimmed == "*" || trimmed == origin) return true;
+	}
+	return false;
+}
+
+// Send raw bytes to a socket with a simple retry loop (used for SSE).
+static bool SendRaw(SOCKET sock, const std::string& data) {
+	int total = (int)data.size();
+	int sent = 0;
+	while (sent < total) {
+		int r = send(sock, data.data() + sent, total - sent, 0);
+		if (r <= 0) return false;
+		sent += r;
+	}
+	return true;
+}
+
 static std::string GetMimeType(const std::string& path) {
 	auto dot = path.rfind('.');
 	if (dot == std::string::npos) return "application/octet-stream";
@@ -115,21 +157,79 @@ static std::string GetMimeType(const std::string& path) {
 	return "application/octet-stream";
 }
 
+// ============================================================================
+//  Embedded asset lookup — finds RCDATA resources baked into cs2.exe by URL.
+//  Resource names are URL paths (e.g. "/index.html"); see webRadar_resources.rc.
+// ============================================================================
+namespace webradar {
+
+bool FindEmbeddedAsset(const std::string& urlPath, EmbeddedAsset* out) {
+	if (!out || urlPath.empty())
+		return false;
+
+	const HMODULE hModule = GetModuleHandleA(nullptr);
+	const HRSRC hRes = FindResourceA(hModule, urlPath.c_str(), MAKEINTRESOURCEA(10)); // RT_RCDATA
+	if (!hRes)
+		return false;
+
+	const HGLOBAL hData = LoadResource(hModule, hRes);
+	if (!hData)
+		return false;
+
+	const void* ptr = LockResource(hData);
+	const DWORD sz = SizeofResource(hModule, hRes);
+	if (!ptr || sz == 0)
+		return false;
+
+	out->data = ptr;
+	out->size = static_cast<size_t>(sz);
+	return true;
+}
+
+} // namespace webradar
+
 static bool ServeStaticFile(SOCKET clientSock, const std::string& httpPath) {
+	// Sanitize path: no ".." traversal
+	if (httpPath.find("..") != std::string::npos) return false;
+
+	// Normalize: map "/" and "" to "/index.html" for both embedded + filesystem lookup.
+	std::string servePath = (httpPath == "/" || httpPath.empty()) ? "/index.html" : httpPath;
+
+	// 1. Try embedded resource first (single-file deployment).
+	webradar::EmbeddedAsset asset{};
+	if (webradar::FindEmbeddedAsset(servePath, &asset)) {
+		std::string content(static_cast<const char*>(asset.data), asset.size);
+		std::string mime = GetMimeType(servePath);
+		// HTML/JS/CSS are volatile (index.html changes, JS/CSS are hash-named but
+		// referenced by index.html); everything else (icons, map data, fonts) is
+		// immutable and can be cached aggressively.
+		bool volatileAsset = (servePath == "/index.html" ||
+			mime == "application/javascript; charset=utf-8" ||
+			mime == "text/css; charset=utf-8");
+		std::string cacheControl = volatileAsset ? "no-store" : "public, max-age=86400";
+		std::string header =
+			"HTTP/1.1 200 OK\r\n"
+			"Content-Type: " + mime + "\r\n"
+			"Content-Length: " + std::to_string(content.size()) + "\r\n"
+			"Cache-Control: " + cacheControl + "\r\n"
+			"Connection: close\r\n"
+			"Access-Control-Allow-Origin: *\r\n"
+			"\r\n";
+		send(clientSock, header.c_str(), (int)header.size(), 0);
+		send(clientSock, content.c_str(), (int)content.size(), 0);
+		LOG_TRACE("WebRadar", "Served embedded {} ({} bytes, {})", servePath, content.size(), mime);
+		return true;
+	}
+
+	// 2. Fallback: serve from filesystem (dev mode / dist directory).
 	if (g_webappDir.empty()) {
 		LOG_ERROR("WebRadar", "ServeStaticFile: g_webappDir is empty, cannot serve {}", httpPath);
 		return false;
 	}
 
-	// Sanitize path: no ".." traversal
-	if (httpPath.find("..") != std::string::npos) return false;
-
 	std::string filePath = g_webappDir;
-	// Map / to /index.html
-	if (httpPath == "/" || httpPath.empty())
-		filePath += "\\index.html";
-	else {
-		std::string rel = httpPath;
+	{
+		std::string rel = servePath;
 		for (auto& c : rel) if (c == '/') c = '\\';
 		filePath += rel;
 	}
@@ -311,6 +411,8 @@ bool WebRadarServer::Start(uint16_t port) {
 }
 
 void WebRadarServer::Stop() {
+	// Stop the worker first so it stops writing m_latestPayload while we tear down.
+	StopWorker();
 	if (!m_running.load()) return;
 	m_running.store(false);
 
@@ -328,12 +430,27 @@ void WebRadarServer::Stop() {
 		m_clients.clear();
 	}
 
+	// Close SSE clients too
+	{
+		std::lock_guard<std::mutex> lock(m_sseMutex);
+		for (auto s : m_sseClients) closesocket(s);
+		m_sseClients.clear();
+	}
+
 	LOG_INFO("WebRadar", "Server stopped");
 }
 
 int WebRadarServer::GetClientCount() const {
-	std::lock_guard<std::mutex> lock(m_clientsMutex);
-	return (int)m_clients.size();
+	int count = 0;
+	{
+		std::lock_guard<std::mutex> lock(m_clientsMutex);
+		count += (int)m_clients.size();
+	}
+	{
+		std::lock_guard<std::mutex> lock(m_sseMutex);
+		count += (int)m_sseClients.size();
+	}
+	return count;
 }
 
 void WebRadarServer::AcceptLoop() {
@@ -416,6 +533,94 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 				std::string httpPath = request.substr(pathStart + 1, pathEnd - pathStart - 1);
 				std::string cleanPath = ExtractPath(httpPath);
 
+				// Task 10: Origin whitelist for /api/* paths
+				bool isApiPath = (cleanPath.rfind("/api/", 0) == 0);
+				std::string origin = isApiPath ? ExtractOrigin(request) : "";
+				std::string corsOrigin = "*";
+				if (isApiPath) {
+					if (!IsOriginAllowed(origin, MenuConfig::WebRadarOriginAllowlist)) {
+						std::string body = "Origin not allowed";
+						std::string resp = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: " + std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+						send(clientSock, resp.c_str(), (int)resp.size(), 0);
+						closesocket(clientSock);
+						return;
+					}
+					// Reflect the specific origin if whitelist is set, else *
+					corsOrigin = MenuConfig::WebRadarOriginAllowlist.empty() ? "*" : origin;
+				}
+
+				// Task 8: SSE endpoint /api/stream
+				if (cleanPath == "/api/stream") {
+					// Shorter send timeout for SSE (matches KevqDMA reference)
+					DWORD sseTimeout = 600;
+					setsockopt(clientSock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&sseTimeout, sizeof(sseTimeout));
+					const BOOL noDelay = TRUE;
+					setsockopt(clientSock, IPPROTO_TCP, TCP_NODELAY, (const char*)&noDelay, sizeof(noDelay));
+
+					std::string headers =
+						"HTTP/1.1 200 OK\r\n"
+						"Content-Type: text/event-stream\r\n"
+						"Cache-Control: no-store\r\n"
+						"Connection: keep-alive\r\n"
+						"Access-Control-Allow-Origin: " + corsOrigin + "\r\n"
+						"\r\n";
+					if (!SendRaw(clientSock, headers)) {
+						closesocket(clientSock);
+						return;
+					}
+
+					// Send initial payload if available
+					std::string initialPayload = GetLatestPayloadForPolling();
+					if (!initialPayload.empty()) {
+						std::string sseEvent = "data: " + initialPayload + "\n\n";
+						SendRaw(clientSock, sseEvent);
+					}
+
+					// Register as SSE client so Broadcast() pushes to it
+					{
+						std::lock_guard<std::mutex> lock(m_sseMutex);
+						m_sseClients.push_back(clientSock);
+					}
+					LOG_INFO("WebRadar", "SSE client connected");
+
+					// Monitoring loop — detect client disconnect.
+					// SSE is server-push only; any readable event means close/error.
+					while (m_running.load()) {
+						fd_set readSet;
+						FD_ZERO(&readSet);
+						FD_SET(clientSock, &readSet);
+						timeval tv{ 1, 0 };
+						int sel = select(0, &readSet, nullptr, nullptr, &tv);
+						if (sel < 0) break;
+						if (sel == 0) continue;
+						char buf[16];
+						int r = recv(clientSock, buf, sizeof(buf), 0);
+						if (r <= 0) break;
+						// Discard client data (SSE is one-way)
+					}
+
+					RemoveSseClient(clientSock);
+					closesocket(clientSock);
+					LOG_INFO("WebRadar", "SSE client disconnected");
+					return;
+				}
+
+				// Task 8: HTTP polling endpoint /api/live
+				if (cleanPath == "/api/live") {
+					std::string payload = GetLatestPayloadForPolling();
+					std::string resp =
+						"HTTP/1.1 200 OK\r\n"
+						"Content-Type: application/json\r\n"
+						"Cache-Control: no-store\r\n"
+						"Access-Control-Allow-Origin: " + corsOrigin + "\r\n"
+						"Content-Length: " + std::to_string(payload.size()) + "\r\n"
+						"Connection: close\r\n"
+						"\r\n" + payload;
+					send(clientSock, resp.c_str(), (int)resp.size(), 0);
+					closesocket(clientSock);
+					return;
+				}
+
 				if (cleanPath == "/cs2_auth_status") {
 					std::string json = "{\"password_required\":" + std::string(MenuConfig::WebRadarPasswordEnabled ? "true" : "false") + "}";
 					std::string resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(json.size()) + "\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n" + json;
@@ -464,7 +669,10 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 	}
 	LOG_INFO("WebRadar", "Handshake OK, clients: {}", GetClientCount());
 
-	// Read loop: handle ping/close from browser, ignore data frames
+	// Read loop: handle ping/close from browser, ignore data frames.
+	// Task 10.2: handle continuation frames (opcode 0x0) per RFC 6455 §5.4.
+	std::string fragmentBuffer;
+	bool fragmenting = false;
 	while (m_running.load()) {
 		fd_set readSet;
 		FD_ZERO(&readSet);
@@ -486,6 +694,7 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 		}
 
 		uint8_t opcode = header[0] & 0x0F;
+		bool fin = (header[0] & 0x80) != 0;
 		bool masked = (header[1] & 0x80) != 0;
 		uint64_t payloadLen = header[1] & 0x7F;
 
@@ -512,7 +721,7 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 			break;
 		}
 
-		// Read and discard payload (we don't process client data)
+		// Read payload (client data is discarded, but fragment buffer is maintained)
 		if (payloadLen > 65536) {
 			LOG_DEBUG("WebRadar", "ClientLoop: payload too large ({})", payloadLen);
 			break;
@@ -525,13 +734,16 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 			totalRead += r;
 		}
 
+		// Unmask payload if needed (for fragment buffer correctness)
+		if (masked && payloadLen > 0) {
+			for (size_t i = 0; i < payloadLen; i++)
+				payload[i] ^= maskKey[i % 4];
+		}
+
 		if (opcode == 0x8) {
 			// Close frame payload: first 2 bytes = close code (big-endian)
 			uint16_t closeCode = 0;
-			if (payloadLen >= 2 && masked) {
-				closeCode = ((uint8_t)payload[0] ^ maskKey[0]) << 8;
-				closeCode |= (uint8_t)payload[1] ^ maskKey[1];
-			} else if (payloadLen >= 2) {
+			if (payloadLen >= 2) {
 				closeCode = ((uint8_t)payload[0]) << 8;
 				closeCode |= (uint8_t)payload[1];
 			}
@@ -542,6 +754,36 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 		if (opcode == 0x9) { // Ping → Pong
 			uint8_t pong[2] = { 0x8A, 0x00 };
 			send(clientSock, (const char*)pong, 2, 0);
+			continue;
+		}
+
+		if (opcode == 0xA) { // Pong — ignore
+			continue;
+		}
+
+		// Task 10.2: WebSocket fragmentation (RFC 6455 §5.4)
+		if (opcode == 0x0) { // Continuation frame
+			if (!fragmenting) {
+				LOG_DEBUG("WebRadar", "ClientLoop: unexpected continuation frame");
+				break;
+			}
+			fragmentBuffer += payload;
+			if (fin) {
+				// Complete fragmented message — discard (we don't process client data)
+				fragmentBuffer.clear();
+				fragmenting = false;
+			}
+		} else if (opcode == 0x1 || opcode == 0x2) { // Text or Binary
+			if (fragmenting) {
+				LOG_DEBUG("WebRadar", "ClientLoop: new data frame while fragmenting");
+				break;
+			}
+			if (!fin) {
+				// Start of fragmented message
+				fragmentBuffer = payload;
+				fragmenting = true;
+			}
+			// else: complete unfragmented message — discard
 		}
 	}
 
@@ -593,23 +835,83 @@ bool WebRadarServer::SendFrame(SOCKET sock, const std::string& payload) {
 }
 
 void WebRadarServer::Broadcast(const std::string& message) {
-	std::lock_guard<std::mutex> lock(m_clientsMutex);
-	LOG_TRACE("WebRadar", "Broadcast: {} bytes to {} clients", message.size(), m_clients.size());
-	for (auto it = m_clients.begin(); it != m_clients.end(); ) {
-		if (!SendFrame(*it, message)) {
-			LOG_DEBUG("WebRadar", "SendFrame failed, removing client from list");
-			// Don't closesocket here — ClientLoop owns the socket and will
-			// detect the failure on its next recv, then close it itself.
-			it = m_clients.erase(it);
-		} else {
-			++it;
+	auto t0 = std::chrono::steady_clock::now();
+
+	// Save latest payload for /api/live and /api/stream initial event.
+	{
+		std::lock_guard<std::mutex> lock(m_lastPayloadMutex);
+		m_lastBroadcastPayload = message;
+	}
+
+	int sentCount = 0;
+
+	// Send to WebSocket clients
+	{
+		std::lock_guard<std::mutex> lock(m_clientsMutex);
+		LOG_TRACE("WebRadar", "Broadcast: {} bytes to {} ws clients", message.size(), m_clients.size());
+		for (auto it = m_clients.begin(); it != m_clients.end(); ) {
+			if (!SendFrame(*it, message)) {
+				int err = WSAGetLastError();
+				if (err == WSAETIMEDOUT) {
+					// Task 9: slow client — skip this broadcast, keep connection
+					m_stats.droppedFramesSlowClient++;
+					LOG_DEBUG("WebRadar", "SendFrame timed out, skipping slow client");
+					++it;
+				} else {
+					LOG_DEBUG("WebRadar", "SendFrame failed (err={}), removing client", err);
+					it = m_clients.erase(it);
+				}
+			} else {
+				sentCount++;
+				++it;
+			}
 		}
 	}
+
+	// Send to SSE clients (Task 8)
+	{
+		std::lock_guard<std::mutex> lock(m_sseMutex);
+		if (!m_sseClients.empty()) {
+			std::string sseMsg = "data: " + message + "\n\n";
+			LOG_TRACE("WebRadar", "Broadcast: {} bytes to {} sse clients", sseMsg.size(), m_sseClients.size());
+			for (auto it = m_sseClients.begin(); it != m_sseClients.end(); ) {
+				if (!SendRaw(*it, sseMsg)) {
+					int err = WSAGetLastError();
+					if (err == WSAETIMEDOUT) {
+						m_stats.droppedFramesSlowClient++;
+						++it;
+					} else {
+						// Don't closesocket — SSE ClientLoop owns the socket.
+						it = m_sseClients.erase(it);
+					}
+				} else {
+					sentCount++;
+					++it;
+				}
+			}
+		}
+	}
+
+	// Task 9: update stats
+	if (sentCount > 0) {
+		m_stats.framesSent++;
+	} else {
+		m_stats.framesDropped++;
+	}
+	auto t1 = std::chrono::steady_clock::now();
+	uint64_t us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+	m_stats.broadcastUsTotal += us;
+	m_stats.broadcastUsCount++;
 }
 
 void WebRadarServer::RemoveClient(SOCKET sock) {
 	std::lock_guard<std::mutex> lock(m_clientsMutex);
 	m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), sock), m_clients.end());
+}
+
+void WebRadarServer::RemoveSseClient(SOCKET sock) {
+	std::lock_guard<std::mutex> lock(m_sseMutex);
+	m_sseClients.erase(std::remove(m_sseClients.begin(), m_sseClients.end(), sock), m_sseClients.end());
 }
 
 // ============================================================================
@@ -1180,6 +1482,7 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 		rapidjson::Value bomb(rapidjson::kObjectType);
 		bomb.AddMember("x", snap.Bomb.x, a);
 		bomb.AddMember("y", snap.Bomb.y, a);
+		bomb.AddMember("z", snap.Bomb.z, a);
 		if (snap.Bomb.isPlanted) {
 			bomb.AddMember("m_blow_time", snap.Bomb.blowTime, a);
 			bomb.AddMember("m_is_defused", snap.Bomb.isDefused, a);
@@ -1189,10 +1492,163 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 		doc.AddMember("m_bomb", bomb, a);
 	}
 
+	// Projectiles (in-flight / active grenades)
+	if (!snap.Projectiles.empty()) {
+		rapidjson::Value projectiles(rapidjson::kArrayType);
+		for (const auto& proj : snap.Projectiles) {
+			const char* typeStr = nullptr;
+			float maxDuration = 0.f;
+			switch (proj.Type) {
+				case PROJ_FLASH:   typeStr = "flash";     break;
+				case PROJ_SMOKE:   typeStr = "smoke";     maxDuration = 18.0f; break;
+				case PROJ_HE:      typeStr = "explosive"; break;
+				case PROJ_MOLOTOV: typeStr = "inferno";   maxDuration = 7.0f;  break;
+				case PROJ_DECOY:   typeStr = "decoy";     break;
+				default: continue;
+			}
+			rapidjson::Value p(rapidjson::kObjectType);
+			p.AddMember("m_type", rapidjson::Value(typeStr, a), a);
+			rapidjson::Value pos(rapidjson::kObjectType);
+			pos.AddMember("x", proj.Position.x, a);
+			pos.AddMember("y", proj.Position.y, a);
+			p.AddMember("m_position", pos, a);
+			float lifeRemaining = 0.f;
+			if (maxDuration > 0.f) {
+				lifeRemaining = maxDuration - proj.StationaryTimer - proj.DisappearTimer;
+				if (lifeRemaining < 0.f) lifeRemaining = 0.f;
+			}
+			p.AddMember("m_life_remaining", lifeRemaining, a);
+			projectiles.PushBack(p, a);
+		}
+		doc.AddMember("m_projectiles", projectiles, a);
+	}
+
+	// Spectators (observers)
+	if (!snap.Spectators.empty()) {
+		rapidjson::Value spectators(rapidjson::kArrayType);
+		for (const auto& spec : snap.Spectators) {
+			rapidjson::Value s(rapidjson::kObjectType);
+			s.AddMember("m_name", rapidjson::Value(SanitizeUtf8(spec.Name).c_str(), a), a);
+			s.AddMember("m_team", spec.TeamID, a);
+			s.AddMember("m_observer_mode", spec.ObserverMode, a);
+			spectators.PushBack(s, a);
+		}
+		doc.AddMember("m_spectators", spectators, a);
+	}
+
 	rapidjson::StringBuffer buf;
 	rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
 	doc.Accept(writer);
 	return buf.GetString();
+}
+
+// ============================================================================
+//  Worker thread — serializes GameSnapshot → JSON off the broadcast path.
+//  Runs at MenuConfig::WebRadarInterval; hands the latest payload to the
+//  broadcast loop (WebRadarThread) via m_latestPayload + m_payloadReady.
+//  Slow clients can't stall this thread because Broadcast() lives elsewhere.
+// ============================================================================
+
+void WebRadarServer::WorkerLoop() {
+	LOG_INFO("WebRadar", "Worker thread started");
+
+	while (m_workerRunning.load()) {
+		// Sleep for the configured interval, but wake immediately on stop.
+		{
+			std::unique_lock<std::mutex> lock(m_payloadMutex);
+			m_workerCv.wait_for(lock,
+				std::chrono::milliseconds(MenuConfig::WebRadarInterval),
+				[this] { return !m_workerRunning.load(); });
+		}
+		if (!m_workerRunning.load()) break;
+
+		// Nothing to serialize while the game isn't running.
+		if (globalVars::gameState.load() != AppState::RUNNING) continue;
+
+		// No viewers → skip to save CPU (matches previous single-thread behavior).
+		if (GetClientCount() == 0) continue;
+
+		// Serialize off the broadcast path.
+		auto t0 = std::chrono::steady_clock::now();
+		GameSnapshot snap = Cheats::GetSnapshot();
+		std::string json = SerializeSnapshot(snap);
+		auto t1 = std::chrono::steady_clock::now();
+		uint64_t us = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+		m_serializeUs.store(us);
+
+		// Task 9: record serialize stats
+		m_stats.serializeUsTotal += us;
+		m_stats.serializeUsCount++;
+
+		size_t payloadBytes = json.size();
+		{
+			std::lock_guard<std::mutex> lock(m_payloadMutex);
+			// Task 9: if previous payload wasn't consumed yet, it's being coalesced
+			if (m_payloadReady.load()) {
+				m_stats.coalescedFrames++;
+			}
+			m_latestPayload = std::move(json);
+			m_payloadReady.store(true);
+		}
+
+		// Task 9: update payload byte stats
+		m_stats.payloadBytesLast.store(payloadBytes);
+		size_t currentPeak = m_stats.payloadBytesPeak.load();
+		while (payloadBytes > currentPeak &&
+		       !m_stats.payloadBytesPeak.compare_exchange_weak(currentPeak, payloadBytes)) {
+			// currentPeak was reloaded by compare_exchange_weak; retry
+		}
+
+		LOG_TRACE("WebRadar", "Worker: serialized {} bytes in {}us (map='{}', entities={})",
+			payloadBytes, us, CleanMapName(snap.MapName), snap.Entities.size());
+	}
+
+	LOG_INFO("WebRadar", "Worker thread stopped");
+}
+
+void WebRadarServer::StartWorker() {
+	if (m_workerRunning.load()) return;
+	m_payloadReady.store(false);
+	m_workerRunning.store(true);
+	m_workerThread = std::thread(&WebRadarServer::WorkerLoop, this);
+}
+
+void WebRadarServer::StopWorker() {
+	if (!m_workerRunning.load()) return;
+	m_workerRunning.store(false);
+	m_workerCv.notify_all();   // wake the worker so it exits promptly
+	if (m_workerThread.joinable())
+		m_workerThread.join();
+}
+
+bool WebRadarServer::ConsumePayload(std::string& out) {
+	if (!m_payloadReady.load()) return false;
+	std::lock_guard<std::mutex> lock(m_payloadMutex);
+	if (!m_payloadReady.load()) return false;   // double-check under lock
+	out = std::move(m_latestPayload);
+	m_payloadReady.store(false);
+	return true;
+}
+
+RuntimeStatsSnapshot WebRadarServer::GetStats() const {
+	RuntimeStatsSnapshot s;
+	s.framesSent = m_stats.framesSent.load();
+	s.framesDropped = m_stats.framesDropped.load();
+	s.coalescedFrames = m_stats.coalescedFrames.load();
+	s.droppedFramesSlowClient = m_stats.droppedFramesSlowClient.load();
+	s.serializeUsTotal = m_stats.serializeUsTotal.load();
+	s.serializeUsCount = m_stats.serializeUsCount.load();
+	s.broadcastUsTotal = m_stats.broadcastUsTotal.load();
+	s.broadcastUsCount = m_stats.broadcastUsCount.load();
+	s.payloadBytesLast = m_stats.payloadBytesLast.load();
+	s.payloadBytesPeak = m_stats.payloadBytesPeak.load();
+	s.clientCount = GetClientCount();
+	return s;
+}
+
+std::string WebRadarServer::GetLatestPayloadForPolling() const {
+	std::lock_guard<std::mutex> lock(m_lastPayloadMutex);
+	return m_lastBroadcastPayload;
 }
 
 // ============================================================================
@@ -1217,7 +1673,7 @@ VOID WebRadarThread() {
 			// ---- Toggle server on/off based on menu ----
 			if (!MenuConfig::ShowWebRadar) {
 				if (server.IsRunning()) {
-					server.Stop();
+					server.Stop();   // stops worker + accept + closes clients
 					StopViteDevServer();
 					LOG_INFO("WebRadar", "Disabled by user");
 				}
@@ -1245,42 +1701,36 @@ VOID WebRadarThread() {
 						}
 					}).detach();
 				}
+
+				// Start the serializer worker — it produces payloads off this
+				// broadcast path so slow clients can't stall serialization.
+				server.StartWorker();
 			}
 			g_webRadarRunning.store(true);
 
-			// ---- Update client count for UI ----
+			// ---- Update client count + stats for UI ----
 			g_webRadarClientCount.store(server.GetClientCount());
-
-			// ---- Wait for game ----
-			if (globalVars::gameState.load() != AppState::RUNNING) {
-				Sleep(200);
-				continue;
-			}
-
-			// ---- Skip if no clients connected ----
-			if (server.GetClientCount() == 0) {
-				Sleep(100);
-				continue;
-			}
-
-			// ---- Snapshot → JSON → Broadcast ----
-			GameSnapshot snap;
+			// Task 9: copy stats snapshot for GUI debug panel
 			{
-				std::shared_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-				snap = Cheats::Snapshot;
+				RuntimeStatsSnapshot snap = server.GetStats();
+				std::lock_guard<std::mutex> lock(g_webRadarStatsMutex);
+				g_webRadarStats = snap;
 			}
 
-			std::string json = SerializeSnapshot(snap);
-			LOG_TRACE("WebRadar", "Serialized: {} bytes, map='{}', entities={}", json.size(), CleanMapName(snap.MapName), snap.Entities.size());
-			server.Broadcast(json);
-
-			if (firstBroadcast) {
-				LOG_INFO("WebRadar", "First broadcast sent ({} bytes, map={}, players={})",
-					json.size(), CleanMapName(snap.MapName), snap.Entities.size());
-				firstBroadcast = false;
+			// ---- Broadcast the latest payload if the worker produced one ----
+			// Game-state / no-client gating now lives in WorkerLoop; this loop
+			// only ships whatever payload is ready.
+			std::string payload;
+			if (server.ConsumePayload(payload)) {
+				server.Broadcast(payload);
+				if (firstBroadcast) {
+					LOG_INFO("WebRadar", "First broadcast sent ({} bytes)", payload.size());
+					firstBroadcast = false;
+				}
 			}
 
-			Sleep(MenuConfig::WebRadarInterval);
+			// Poll the worker at a short cadence so ready payloads ship promptly.
+			Sleep(10);
 		}
 		catch (...) {
 			Sleep(1000);

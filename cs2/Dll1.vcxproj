@@ -155,6 +155,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="game\Bone.cpp" />
+    <ClCompile Include="game\CameraWorker.cpp" />
     <ClCompile Include="game\Entity.cpp" />
     <ClCompile Include="game\Game.cpp" />
     <ClCompile Include="game\Offsets.cpp" />
@@ -185,6 +186,7 @@
   <ItemGroup>
     <ClInclude Include="game\AppState.h" />
     <ClInclude Include="game\Bone.h" />
+    <ClInclude Include="game\CameraWorker.h" />
     <ClInclude Include="game\Entity.h" />
     <ClInclude Include="game\Game.h" />
     <ClInclude Include="game\MemoryHelper.h" />
@@ -216,11 +218,15 @@
     <ClInclude Include="OS-ImGui\OS-ImGui_External.h" />
     <ClInclude Include="OS-ImGui\OS-ImGui_Struct.h" />
     <ClInclude Include="render\WebRadar.h" />
+    <ClInclude Include="render\WebRadar\embedded_assets.h" />
     <ClInclude Include="utils\Logger.h" />
     <ClInclude Include="utils\CrashHandler.h" />
     <ClInclude Include="utils\ProcessManager.h" />
     <ClInclude Include="utils\Telemetry.h" />
     <ClInclude Include="utils\SystemInfo.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="render\WebRadar\webRadar_resources.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

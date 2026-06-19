@@ -20,3 +20,6 @@ VOID KeysCheckThread();
 
 // Web Radar: WebSocket server broadcasting game data to browser clients
 VOID WebRadarThread();
+
+// DMA admin: asynchronous VMMDLL_ConfigSet refresh processing (P3 Task 10)
+VOID DmaAdminThread();

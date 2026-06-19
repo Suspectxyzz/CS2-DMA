@@ -13,6 +13,7 @@ typedef long NTSTATUS;
 #endif
 
 #include "game/Threads.h"
+#include "game/CameraWorker.h"
 #include "game/MenuConfig.h"
 #include "render/GrenadeHelper.h"
 #include "config/ConfigSaver.h"
@@ -497,8 +498,13 @@ void main(HMODULE module) {
 		safeCreateThread((LPTHREAD_START_ROUTINE)(DataThread), "DataThread");
 		safeCreateThread((LPTHREAD_START_ROUTINE)(SlowUpdateThread), "SlowUpdateThread");
 		safeCreateThread((LPTHREAD_START_ROUTINE)(KeysCheckThread), "KeysCheckThread");
+		safeCreateThread((LPTHREAD_START_ROUTINE)(DmaAdminThread), "DmaAdminThread");
 		LOG_INFO("DMA", "All threads started, searching for cs2.exe...");
 	}
+
+	// CameraWorker runs its own 500Hz thread; only needs DMA + matrix address,
+	// which become valid once the game is RUNNING (it idles until then).
+	CameraWorker::Start();
 
 	// WebRadar server starts independently — it only needs the HTTP/WS server,
 	// not DMA. Game data broadcast is skipped when DMA is not connected.
@@ -509,6 +515,12 @@ void main(HMODULE module) {
 	{
 		Gui.NewWindow("CS2DMA", Vec2((float)MenuConfig::RenderWidth, (float)MenuConfig::RenderHeight), Cheats::Run);
 	}
+
+	// Signal background threads to exit before tearing down subsystems
+	globalVars::gameState.store(AppState::EXITING);
+
+	// CameraWorker checks EXITING and exits its loop; join before teardown.
+	CameraWorker::Stop();
 
 	// Session ended — upload log before exit
 	Telemetry::UploadSessionLog();

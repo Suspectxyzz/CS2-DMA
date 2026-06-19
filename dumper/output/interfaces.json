@@ -1,8 +1,4 @@
 {
-  "animationsystem.dll": {
-    "AnimationSystemUtils_001": 8462736,
-    "AnimationSystem_001": 8429744
-  },
   "client.dll": {
     "ClientToolsInfo_001": 33968832,
     "EmptyWorldService001_Client": 33721072,
@@ -90,8 +86,6 @@
     "NavSystem001": 1190192
   },
   "networksystem.dll": {
-    "FlattenedSerializersVersion001": 2549584,
-    "NetworkMessagesVersion001": 2714208,
     "NetworkSystemVersion001": 2653856,
     "SerializedEntitiesVersion001": 2654096
   },
@@ -100,9 +94,6 @@
   },
   "panorama_text_pango.dll": {
     "PanoramaTextServices001": 2853440
-  },
-  "panoramauiclient.dll": {
-    "PanoramaUIClient001": 2712608
   },
   "particles.dll": {
     "ParticleSystemMgr003": 5546864
@@ -117,10 +108,6 @@
   },
   "resourcesystem.dll": {
     "ResourceSystem013": 537056
-  },
-  "scenefilecache.dll": {
-    "ResponseRulesCache001": 1005808,
-    "SceneFileCache002": 1006200
   },
   "scenesystem.dll": {
     "RenderingPipelines_001": 6699936,

@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import Player from "./player";
 import Bomb from "./bomb";
+import Projectiles from "./Projectiles";
 
 const Radar = ({
   playerArray,
@@ -9,6 +10,7 @@ const Radar = ({
   localTeam,
   averageLatency,
   bombData,
+  projectiles,
   settings,
   mapRotation = 0,
 }) => {
@@ -23,6 +25,13 @@ const Radar = ({
         transition: settings.smoothTransition !== false ? 'transform 150ms linear' : 'none',
       }}>
         <img ref={radarImageRef} className={`max-h-[90vh] w-auto h-auto`} src={radarImage} />
+
+        <Projectiles
+          projectiles={projectiles}
+          radarImage={radarImageRef.current}
+          mapData={mapData}
+          settings={settings}
+        />
 
         {playerArray.map((player) => (
           <Player

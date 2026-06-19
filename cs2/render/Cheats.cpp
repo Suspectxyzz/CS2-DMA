@@ -1,4 +1,5 @@
 #include "../game/AppState.h"
+#include "../game/CameraWorker.h"
 
 #include "GUI.h"
 #include "UITheme.h"
@@ -70,23 +71,22 @@ void Cheats::Run()
 			return;
 		}
 
-		// Single lock to snapshot all shared state
-		GameSnapshot snap;
-		{
-			std::shared_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-			snap = Cheats::Snapshot;
-		}
+		// Lock-free snapshot read (double-buffered, acquire on the index).
+		GameSnapshot snap = Cheats::GetSnapshot();
 		LOG_TRACE("Render", "Snapshot: entities={} projs={} map='{}'", snap.Entities.size(), snap.Projectiles.size(), snap.MapName);
 
 		const auto& LocalPlayerSnapshot = snap.LocalPlayer;
 
-		// Read fresh ViewMatrix every render frame (single 64-byte DMA read).
-		// Entity world positions update at DMA rate (~100-200Hz), but view angle
-		// changes every game frame. Re-projecting here ensures ESP tracks view
-		// rotation at display refresh rate — eliminates stutter during mouse movement.
+		// View matrix is read at 500Hz by the dedicated CameraWorker thread,
+		// decoupling camera reads from the render loop. Re-projecting here
+		// ensures ESP tracks view rotation at display refresh rate —
+		// eliminates stutter during mouse movement.
 		float freshMatrix[4][4];
-		if (!ProcessMgr.ReadMemory(gGame.GetMatrixAddress(), freshMatrix, 64)) {
-			LOG_TRACE("Render", "Fresh matrix read FAILED, using snapshot matrix");
+		if (CameraWorker::HasFreshData()) {
+			CameraWorker::GetLatestMatrix(freshMatrix);
+		} else {
+			// No fresh data yet (worker still warming up) — fall back to the
+			// matrix captured in the last snapshot.
 			memcpy(freshMatrix, snap.Matrix, sizeof(freshMatrix));
 		}
 

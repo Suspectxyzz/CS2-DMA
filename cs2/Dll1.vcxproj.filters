@@ -1,4 +1,4 @@
-﻿﻿﻿﻿<?xml version="1.0" encoding="utf-8"?>
+﻿﻿﻿﻿﻿﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -151,6 +151,9 @@
     <ClInclude Include="render\WebRadar.h">
       <Filter>render</Filter>
     </ClInclude>
+    <ClInclude Include="render\WebRadar\embedded_assets.h">
+      <Filter>render</Filter>
+    </ClInclude>
     <ClInclude Include="config\Language.h">
       <Filter>config</Filter>
     </ClInclude>
@@ -220,5 +223,10 @@
     <ClInclude Include="OS-ImGui\imgui\imstb_truetype.h">
       <Filter>OS-ImGui\imgui</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="render\WebRadar\webRadar_resources.rc">
+      <Filter>render</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

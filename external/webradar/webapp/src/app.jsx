@@ -50,6 +50,8 @@ const App = () => {
   const [mapData, setMapData] = useState();
   const [localTeam, setLocalTeam] = useState();
   const [bombData, setBombData] = useState();
+  const [projectiles, setProjectiles] = useState([]);
+  const [spectators, setSpectators] = useState([]);
   const [settings, setSettings] = useState(loadSettings());
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -66,12 +68,87 @@ const App = () => {
 
   useEffect(() => {
     let ws = null;
+    let eventSource = null;
+    let pollInterval = null;
     let reconnectTimer = null;
     let disposed = false;
+    let backoff = 400;
+    let transportMode = "ws"; // "ws" | "sse" | "poll"
 
+    const MAX_BACKOFF = 5000;
+
+    // Shared message handler — used by WebSocket, SSE, and polling.
+    const handleMessage = (raw) => {
+      try {
+        setAverageLatency(getLatency());
+        const parsedData = JSON.parse(raw);
+        setPlayerArray(parsedData.m_players);
+        setLocalTeam(parsedData.m_local_team);
+        setBombData(parsedData.m_bomb);
+        setProjectiles(parsedData.m_projectiles || []);
+        setSpectators(parsedData.m_spectators || []);
+
+        const map = parsedData.m_map;
+        if (map !== "invalid" && map !== currentMapRef.current) {
+          if (!/^[a-zA-Z0-9_-]+$/.test(map)) {
+            console.error("[WebRadar] Invalid map name rejected");
+            return;
+          }
+          currentMapRef.current = map;
+          fetch(`data/${map}/data.json`)
+            .then((r) => r.json())
+            .then((mapJson) => {
+              setMapData({ ...mapJson, name: map });
+              document.body.style.backgroundImage = `url(./data/${map}/background.png)`;
+            })
+            .catch((fetchErr) => {
+              console.error("[WebRadar] failed to load map data:", fetchErr);
+            });
+        }
+      } catch (e) {
+        console.error("[WebRadar] message parse error:", e);
+      }
+    };
+
+    // --- Transport 3: HTTP polling ---
+    const startPolling = () => {
+      if (disposed) return;
+      transportMode = "poll";
+      console.info("[WebRadar] falling back to HTTP polling");
+      pollInterval = setInterval(() => {
+        fetch("/api/live")
+          .then((r) => r.text())
+          .then(handleMessage)
+          .catch(() => {});
+      }, 67);
+    };
+
+    // --- Transport 2: SSE ---
+    const startSSE = () => {
+      if (disposed) return;
+      transportMode = "sse";
+      console.info("[WebRadar] falling back to SSE");
+      try {
+        eventSource = new EventSource("/api/stream");
+      } catch (e) {
+        console.error("[WebRadar] SSE constructor error:", e);
+        startPolling();
+        return;
+      }
+      eventSource.onopen = () => { backoff = 400; };
+      eventSource.onmessage = (e) => handleMessage(e.data);
+      eventSource.onerror = () => {
+        if (eventSource) eventSource.close();
+        eventSource = null;
+        if (!disposed) startPolling();
+      };
+    };
+
+    // --- Transport 1: WebSocket ---
     const connect = () => {
       if (disposed) return;
-      console.info("[WebRadar] connecting ...");
+      transportMode = "ws";
+      console.info("[WebRadar] connecting via WebSocket...");
 
       const proto = getWsProtocol();
       const storedPassword = sessionStorage.getItem("webradar_password") || "";
@@ -81,7 +158,7 @@ const App = () => {
 
       try { ws = new WebSocket(wsUrl); } catch (e) {
         console.error("[WebRadar] WebSocket constructor error:", e);
-        scheduleReconnect();
+        fallback();
         return;
       }
 
@@ -91,7 +168,8 @@ const App = () => {
 
       ws.onopen = () => {
         clearTimeout(connectionTimeout);
-        console.info("[WebRadar] connected");
+        backoff = 400;
+        console.info("[WebRadar] connected via WebSocket");
         setPasswordError(false);
         setPasswordConnecting(false);
         const el = document.getElementsByClassName("radar_message")[0];
@@ -100,19 +178,23 @@ const App = () => {
 
       ws.onclose = (event) => {
         clearTimeout(connectionTimeout);
-        if (event.code !== 1000) {
-          fetch("/cs2_auth_status").then(r => r.json()).then(data => {
-            if (data.password_required) {
-              setPasswordRequired(true);
-              setPasswordError(true);
-              sessionStorage.removeItem("webradar_password");
-            }
-          }).catch(() => {});
-          setPasswordConnecting(false);
+        if (event.code === 1000) {
+          console.warn("[WebRadar] disconnected, reconnecting...");
+          scheduleReconnect();
           return;
         }
-        console.warn("[WebRadar] disconnected, reconnecting in 3s...");
-        scheduleReconnect();
+        // Abnormal closure — check auth, then fall back
+        fetch("/cs2_auth_status").then(r => r.json()).then(data => {
+          if (data.password_required && !sessionStorage.getItem("webradar_password")) {
+            setPasswordRequired(true);
+            setPasswordError(true);
+            sessionStorage.removeItem("webradar_password");
+            setPasswordConnecting(false);
+          } else {
+            fallback();
+          }
+        }).catch(() => { fallback(); });
+        setPasswordConnecting(false);
       };
 
       ws.onerror = (error) => {
@@ -122,33 +204,22 @@ const App = () => {
       };
 
       ws.onmessage = async (event) => {
-        try {
-          setAverageLatency(getLatency());
-          const raw = typeof event.data === 'string' ? event.data : await event.data.text();
-          const parsedData = JSON.parse(raw);
-          setPlayerArray(parsedData.m_players);
-          setLocalTeam(parsedData.m_local_team);
-          setBombData(parsedData.m_bomb);
-
-          const map = parsedData.m_map;
-          if (map !== "invalid" && map !== currentMapRef.current) {
-            if (!/^[a-zA-Z0-9_-]+$/.test(map)) {
-              console.error("[WebRadar] Invalid map name rejected");
-              return;
-            }
-            currentMapRef.current = map;
-            try {
-              const mapJson = await (await fetch(`data/${map}/data.json`)).json();
-              setMapData({ ...mapJson, name: map });
-              document.body.style.backgroundImage = `url(./data/${map}/background.png)`;
-            } catch (fetchErr) {
-              console.error("[WebRadar] failed to load map data:", fetchErr);
-            }
-          }
-        } catch (e) {
-          console.error("[WebRadar] message parse error:", e);
-        }
+        const raw = typeof event.data === "string" ? event.data : await event.data.text();
+        handleMessage(raw);
       };
+    };
+
+    // Fall back from WebSocket to SSE, or SSE to polling, with backoff.
+    const fallback = () => {
+      if (disposed) return;
+      if (transportMode === "ws") {
+        reconnectTimer = setTimeout(() => {
+          if (!disposed) startSSE();
+        }, backoff);
+        backoff = Math.min(backoff * 2, MAX_BACKOFF);
+      } else if (transportMode === "sse") {
+        startPolling();
+      }
     };
 
     const scheduleReconnect = () => {
@@ -182,6 +253,8 @@ const App = () => {
       disposed = true;
       clearTimeout(reconnectTimer);
       if (ws) ws.close();
+      if (eventSource) eventSource.close();
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, []);
 
@@ -336,6 +409,7 @@ const App = () => {
               localTeam={localTeam}
               averageLatency={averageLatency}
               bombData={bombData}
+              projectiles={projectiles}
               settings={settings}
               mapRotation={mapRotation}
               t={t}
