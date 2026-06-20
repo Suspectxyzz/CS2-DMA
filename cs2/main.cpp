@@ -17,6 +17,9 @@ typedef long NTSTATUS;
 #include "game/MenuConfig.h"
 #include "render/GrenadeHelper.h"
 #include "config/ConfigSaver.h"
+#include "game/OffsetUpdater.h"
+
+#include "rapidjson/document.h"
 
 #include <iostream>
 #include <filesystem>
@@ -151,28 +154,42 @@ static std::string downloadUrl(const wchar_t* host, const wchar_t* path) {
 
 // Check GitHub Releases for newer version; if found, open releases page and return false (stop launch)
 static bool CheckForUpdates() {
+	using namespace rapidjson;
 	LOG_INFO("Config", "Checking for updates (current: v{})...", PROJECT_VERSION);
-	std::string response = downloadUrl(L"api.github.com", L"/repos/chao-shushu/CS2-DMA/releases/latest");
+
+	// Retry up to 3 times with exponential backoff (500ms, 1000ms)
+	std::string response;
+	for (int attempt = 1; attempt <= 3; ++attempt) {
+		response = downloadUrl(L"api.github.com", L"/repos/chao-shushu/CS2-DMA/releases/latest");
+		if (!response.empty()) break;
+		if (attempt < 3) {
+			DWORD delay = 500 * (1 << (attempt - 1));
+			LOG_INFO("Config", "GitHub API retry {}/3 after {}ms...", attempt, (int)delay);
+			Sleep(delay);
+		}
+	}
 	if (response.empty()) {
-		LOG_WARNING("Config", "Could not reach GitHub Releases API, continuing");
+		LOG_WARNING("Config", "Could not reach GitHub Releases API after 3 retries, continuing");
 		return true; // network issue, don't block launch
 	}
 
-	// Simple JSON parse: find "tag_name":"..."
-	const std::string tagKey = "\"tag_name\"";
-	size_t pos = response.find(tagKey);
-	if (pos == std::string::npos) return true;
-	pos = response.find('"', pos + tagKey.size());
-	if (pos == std::string::npos) return true;
-	size_t endPos = response.find('"', pos + 1);
-	if (endPos == std::string::npos) return true;
-	std::string latestTag = response.substr(pos + 1, endPos - pos - 1);
+	// Parse JSON with rapidjson
+	Document doc;
+	doc.Parse(response.c_str());
+	if (doc.HasParseError()) {
+		LOG_WARNING("Config", "Failed to parse GitHub Releases response (code: {})", (int)doc.GetParseError());
+		return true;
+	}
 
-	// Skip beta/pre-release versions (e.g. "1.3.0-beta", "v2.0.0-rc1")
-	if (latestTag.find("-beta") != std::string::npos ||
-		latestTag.find("-alpha") != std::string::npos ||
-		latestTag.find("-rc") != std::string::npos ||
-		latestTag.find("-pre") != std::string::npos) {
+	// Get tag_name
+	if (!doc.HasMember("tag_name") || !doc["tag_name"].IsString()) {
+		LOG_WARNING("Config", "GitHub Releases response missing 'tag_name'");
+		return true;
+	}
+	std::string latestTag = doc["tag_name"].GetString();
+
+	// Skip pre-release versions using the API's 'prerelease' boolean field
+	if (doc.HasMember("prerelease") && doc["prerelease"].IsBool() && doc["prerelease"].GetBool()) {
 		LOG_INFO("Config", "Latest release {} is a pre-release, skipping update check", latestTag);
 		return true;
 	}
@@ -224,119 +241,6 @@ static bool CheckForUpdates() {
 		LOG_INFO("Config", "Already up to date (v{})", PROJECT_VERSION);
 		return true;
 	}
-}
-
-// Get directory containing the running executable
-static std::string GetExeDir() {
-	char buf[MAX_PATH] = {};
-	GetModuleFileNameA(NULL, buf, MAX_PATH);
-	return fs::path(buf).parent_path().string();
-}
-
-// Run cs2-dumper in DMA mode to update offsets from live game memory
-static bool RunDMAOffsetDumper() {
-	std::string exeDir = GetExeDir();
-	std::string dumperExe = exeDir + "\\dumper\\cs2-dumper.exe";
-	std::string outputDir = exeDir + "\\dumper\\output";
-	std::string dumperDir = exeDir + "\\dumper";
-
-	if (!fs::exists(dumperExe)) {
-		LOG_ERROR("Config", "cs2-dumper.exe not found at {}", dumperExe);
-		std::cout << lang.console_dma_dumper_missing << std::endl;
-		return false;
-	}
-
-	// Ensure output directory exists
-	fs::create_directories(outputDir);
-
-	// Build command line
-	std::string cmdLine = "\"" + dumperExe + "\" -c pcileech -a \":device=FPGA\" -p cs2.exe -f json -o \"" + outputDir + "\" -vv";
-	LOG_INFO("Config", "Running: {}", cmdLine);
-
-	// Build environment block with MEMFLOW_PLUGIN_PATH pointing to dumper\plugins
-	std::string pluginsDir = dumperDir + "\\plugins";
-	std::string envBlock;
-	// Copy current environment and append MEMFLOW_PLUGIN_PATH
-	LPTCH rawEnv = GetEnvironmentStringsA();
-	if (rawEnv) {
-		char* p = rawEnv;
-		while (*p) {
-			envBlock.append(p);
-			envBlock.push_back('\0');
-			p += strlen(p) + 1;
-		}
-		FreeEnvironmentStringsA(rawEnv);
-	}
-	envBlock.append("MEMFLOW_PLUGIN_PATH=");
-	envBlock.append(pluginsDir);
-	envBlock.push_back('\0');
-	envBlock.push_back('\0');
-
-	// Use CreateProcessA to avoid cmd.exe path interpretation issues
-	// and set working directory to dumper's directory (for log file + DLL search)
-	STARTUPINFOA si = { sizeof(STARTUPINFOA) };
-	PROCESS_INFORMATION pi = {};
-	std::string mutableCmd = cmdLine; // CreateProcessA requires mutable buffer
-
-	BOOL ok = CreateProcessA(
-		NULL,                // application name (NULL = use command line)
-		mutableCmd.data(),   // command line (must be mutable)
-		NULL, NULL,          // process/thread security
-		FALSE,               // inherit handles
-		0,                   // creation flags
-		envBlock.data(),     // environment block with MEMFLOW_PLUGIN_PATH
-		dumperDir.c_str(),   // working directory = dumper folder
-		&si, &pi
-	);
-
-	if (!ok) {
-		LOG_ERROR("Config", "CreateProcessA failed: {}", GetLastError());
-		return false;
-	}
-
-	WaitForSingleObject(pi.hProcess, INFINITE);
-	DWORD exitCode = 1;
-	GetExitCodeProcess(pi.hProcess, &exitCode);
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
-
-	if (exitCode != 0) {
-		LOG_ERROR("Config", "cs2-dumper exited with code {}", exitCode);
-		return false;
-	}
-
-	// Copy offsets.json from dumper output to data/
-	std::string srcOffsets = outputDir + "\\offsets.json";
-	std::string dstOffsets = exeDir + "\\data\\offsets.json";
-	if (fs::exists(srcOffsets)) {
-		fs::copy_file(srcOffsets, dstOffsets, fs::copy_options::overwrite_existing);
-		LOG_INFO("Config", "Copied offsets.json");
-	} else {
-		LOG_WARNING("Config", "offsets.json not found in dumper output");
-		return false;
-	}
-
-	// Copy client_dll.json from dumper output to data/
-	std::string srcClient = outputDir + "\\client_dll.json";
-	std::string dstClient = exeDir + "\\data\\client_dll.json";
-	if (fs::exists(srcClient)) {
-		fs::copy_file(srcClient, dstClient, fs::copy_options::overwrite_existing);
-		LOG_INFO("Config", "Copied client_dll.json");
-	} else {
-		LOG_WARNING("Config", "client_dll.json not found in dumper output");
-		return false;
-	}
-
-	// Generate version.json from dumper info.json
-	std::string srcInfo = outputDir + "\\info.json";
-	std::string dstVersion = exeDir + "\\data\\version.json";
-	if (fs::exists(srcInfo)) {
-		Offset::GenerateVersionFromInfo(srcInfo, dstVersion);
-	} else {
-		LOG_WARNING("Config", "info.json not found in dumper output, skipping version.json generation");
-	}
-
-	return true;
 }
 
 void main(HMODULE module) {
@@ -402,20 +306,20 @@ void main(HMODULE module) {
 	// --- Version validation (DMA-based offset update) ---
 	bool versionMismatch = false;
 
-	// Check game version via Steam API against local version.json
+	// Check game version via steam.inf (SteamTracking repo) against local version.json
 	std::string versionData = readFile("data/version.json");
 	if (!versionData.empty()) {
 		if (!Offset::ParseVersion(versionData)) {
 			LOG_WARNING("Config", "version.json parse failed, skipping game version check");
 		} else {
-			LOG_INFO("Config", "Checking CS2 game version via Steam API...");
-			std::string steamNews = downloadUrl(L"api.steampowered.com", L"/ISteamNews/GetNewsForApp/v2/?appid=730&count=3&maxlength=0");
-			if (!steamNews.empty()) {
-				if (!Offset::CheckGameVersion(steamNews)) {
+			LOG_INFO("Config", "Checking CS2 game version via steam.inf...");
+			std::string steamInf = downloadUrl(L"raw.githubusercontent.com", L"/SteamTracking/GameTracking-CS2/master/game/csgo/steam.inf");
+			if (!steamInf.empty()) {
+				if (!Offset::CheckGameVersion(steamInf)) {
 					versionMismatch = true;
 				}
 			} else {
-				LOG_WARNING("Config", "Could not fetch Steam API, skipping game version check");
+				LOG_WARNING("Config", "Could not fetch steam.inf, skipping game version check");
 			}
 		}
 	} else {
@@ -424,8 +328,15 @@ void main(HMODULE module) {
 
 	// Prompt for DMA offset update if game version is newer
 	if (versionMismatch) {
+		// Build mismatch info: prefer patch version comparison, fallback to date
+		std::string mismatchInfo;
+		if (!Offset::LocalPatchVersion.empty() && !Offset::LatestPatchVersion.empty()) {
+			mismatchInfo = Offset::LatestPatchVersion + " vs " + Offset::LocalPatchVersion;
+		} else {
+			mismatchInfo = Offset::GameUpdateDate;
+		}
 		std::cout << "\n========================================" << std::endl;
-		std::cout << lang.console_version_mismatch_prefix << Offset::GameUpdateDate << lang.console_version_mismatch_suffix << std::endl;
+		std::cout << lang.console_version_mismatch_prefix << mismatchInfo << lang.console_version_mismatch_suffix << std::endl;
 		std::cout << "========================================\n" << std::endl;
 		std::cout << lang.console_fetch_offsets;
 		char choice = 'n';

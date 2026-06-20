@@ -18,7 +18,8 @@ typedef unsigned __int64 SOCKET;
 
 // Runtime statistics for WebRadar (Task 9). All counters are atomic so they
 // can be updated by the worker/broadcast threads and read by the GUI thread
-// without extra locking.
+// without extra locking. String fields (activeMap/statusText) are guarded by
+// m_textMutex since std::atomic doesn't support std::string.
 struct RuntimeStats {
 	std::atomic<uint64_t> framesSent{ 0 };
 	std::atomic<uint64_t> framesDropped{ 0 };
@@ -31,6 +32,13 @@ struct RuntimeStats {
 	std::atomic<size_t>   payloadBytesLast{ 0 };
 	std::atomic<size_t>   payloadBytesPeak{ 0 };
 	std::atomic<int>      clientCount{ 0 };
+	// Task 17: derived runtime stats.
+	std::atomic<uint64_t> bytesOutTotal{ 0 };   // cumulative bytes sent (for bytes/sec)
+	std::atomic<double>   sendHz{ 0.0 };        // actual send frequency (sliding window)
+	std::atomic<uint64_t> bytesOutPerSec{ 0 };  // bytes sent per second (sliding window)
+	mutable std::mutex    m_textMutex;          // guards activeMap / statusText
+	std::string           activeMap;            // current map name
+	std::string           statusText;           // human-readable status (e.g. "listening")
 };
 
 // Non-atomic snapshot of RuntimeStats, used to ferry stats from the
@@ -47,6 +55,12 @@ struct RuntimeStatsSnapshot {
 	size_t   payloadBytesLast = 0;
 	size_t   payloadBytesPeak = 0;
 	int      clientCount = 0;
+	// Task 17: derived runtime stats.
+	double   sendHz = 0.0;
+	uint64_t bytesOutPerSec = 0;
+	uint64_t bytesOutTotal = 0;
+	std::string activeMap;
+	std::string statusText;
 };
 
 // Lightweight WebSocket server for Web Radar (RFC 6455)
@@ -82,6 +96,9 @@ public:
 
 	// Returns a snapshot of runtime statistics (Task 9).
 	RuntimeStatsSnapshot GetStats() const;
+	// Task 17: update derived stats (sendHz / bytesOutPerSec / statusText)
+	// from the WebRadarThread. activeMap is updated inside WorkerLoop.
+	void UpdateRuntimeDerivedStats(double sendHz, uint64_t bytesPerSec, const std::string& statusText);
 	// Returns the latest payload for HTTP polling (/api/live) and SSE initial
 	// event. Does not consume the payload — safe to call from ClientLoop.
 	std::string GetLatestPayloadForPolling() const;

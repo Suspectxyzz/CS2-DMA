@@ -11,6 +11,7 @@
 #include "../game/Entity.h"
 #include "Cheats.h"
 #include "../game/MenuConfig.h"
+#include "../game/WeaponLookup.h"
 
 namespace Render
 {
@@ -18,8 +19,6 @@ namespace Render
 	inline bool IsValidScreenPos(const ImVec2& p) { return IsValidFloat(p.x) && IsValidFloat(p.y); }
 	inline bool IsValidRect(const ImVec4& r) { return IsValidFloat(r.x) && IsValidFloat(r.y) && IsValidFloat(r.z) && IsValidFloat(r.w) && r.z >= 1.f && r.w >= 1.f; }
 
-	void LineToEnemy(ImVec4 Rect, ImColor Color, float Thickness);
-	void DrawFov(const CEntity& LocalEntity, float Size, ImColor Color, float Thickness);
 	void DrawDistance(const CEntity& LocalEntity, const CEntity& Entity, ImVec4 Rect);
 
 	ImVec4 Get2DBox(const CEntity& Entity);
@@ -44,9 +43,8 @@ namespace Render
 		TimePoint_ BackupHealthTimePoint{};
 	public:
 		HealthBar() {}
-		void DrawHealthBar_Horizontal(float MaxHealth, float CurrentHealth, ImVec2 Pos, ImVec2 Size);
-		void DrawHealthBar_Vertical(float MaxHealth, float CurrentHealth, ImVec2 Pos, ImVec2 Size);
-	private:
+	void DrawHealthBar(float MaxHealth, float CurrentHealth, ImVec2 Pos, ImVec2 Size, bool vertical);
+private:
 		ImColor Mix(ImColor Col_1, ImColor Col_2, float t);
 		ImColor FirstStageColor = ImColor(96, 246, 113, 220);
 		ImColor SecondStageColor = ImColor(247, 214, 103, 220);
@@ -105,6 +103,18 @@ namespace Render
 	void DrawWorldESP(ImDrawList* drawList, const std::vector<GrenadeProjectile>& projectiles,
 	                  const float matrix[4][4], uint64_t nowUs);
 
+	// ESP gap-closure stage 3b: dropped-weapon world ESP (Task 12/16).
+	// Draws icon + name for each dropped weapon on the ground, filtered by
+	// EspItemEnabledMask. Reuses the weapon icon font loaded in OS-ImGui_Base.
+	void DrawDroppedWeapons(ImDrawList* drawList, const std::vector<DroppedWeapon>& weapons,
+	                        const float matrix[4][4]);
+
+	// ESP gap-closure stage 3b: weapon icon ESP (Task 13).
+	// Draws the active weapon's icon glyph above the weapon name. Falls back
+	// to no-op when the icon font is missing or the weapon is unknown.
+	void DrawWeaponIcon(ImDrawList* drawList, const ImVec2& pos, uint16_t weaponId,
+	                    float fontSize, ImU32 color, bool skipKnife);
+
 	// ESP gap-closure stage 3b: weapon ammo ESP (Task 13).
 	// Draws "Ammo XX/YY" below the weapon name; shows a red "LOW" tag when
 	// ammoClip <= maxClip/5. When maxClip<=0 (unknown weapon) only the
@@ -116,10 +126,29 @@ namespace Render
 	// Unknown weapons return 0 (caller should only show current ammo).
 	int WeaponMaxClip(const std::string& weaponName);
 
-	// ESP gap-closure stage 3b: bar value label (Task 14).
+	// ESP gap-closure stage 2: bar value label (Task 14).
 	// Draws a numeric label with a semi-transparent background box above a
 	// health/armor bar. The box has a 1px accent line at the bottom in the
 	// bar's color. screenW is used for edge avoidance.
 	void DrawBarLabel(ImDrawList* drawList, const ImVec2& barPos, float barHeight,
 	                  int value, ImU32 barColor, float fontSize, float screenW);
+
+	// ESP audit stage 2: unified health-color from ratio (Task 8).
+	// Returns IM_COL32 red→green color for the given health value (0..100).
+	// health is clamped to [0,100]; ratio = health/100; R=255*(1-r), G=255*r.
+	ImU32 HealthColorFromRatio(int health);
+
+	// ESP audit stage 2: box-type dispatch (Task 9).
+	// Returns the 2D box for the entity according to MenuConfig::BoxType:
+	// case 1 -> Get2DBoneRect, all other cases -> Get2DBox.
+	ImVec4 GetBoxByType(const CEntity& Entity);
+
+	// ESP audit stage 2: projectile timer computation (Task 10).
+	// Validates the projectile position, dispatches label + maxDuration by
+	// proj.Type, and computes the remaining effect time. Returns false for
+	// unknown types or invalid positions (caller skips). worldMode=true
+	// uses the WorldESP table (Smoke/Fire/Decoy, Decoy=15s); worldMode=false
+	// uses the ProjectileESP table (all 5 types, Decoy=0s/no timer).
+	bool ComputeProjectileTimer(const GrenadeProjectile& proj, bool worldMode,
+	                            const char** label, float* maxDuration, float* remaining);
 }

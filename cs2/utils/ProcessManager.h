@@ -20,6 +20,14 @@
 
 #include <string>
 
+#include <mutex>
+
+#include <atomic>
+
+#include <algorithm>
+
+#include <sstream>
+
 
 
 #define _is_invalid_ret(v) if(v==NULL) return false
@@ -328,20 +336,186 @@ public:
 			return FAILE_PROCESSID;
 		}
 
-		// Verify client.dll is accessible (module decryption check)
-		PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
-		BOOL moduleOk = VMMDLL_Map_GetModuleFromNameU(this->HANDLE, ProcessID, (LPSTR)"client.dll", &pModuleEntry, NULL);
-		if (!moduleOk || !pModuleEntry) {
-			LOG_WARNING("ProcessMgr", "Attach: client.dll not accessible (not decrypted yet), PID={}", ProcessID);
-			ProcessID = 0;
-			return FAILE_MODULE;
-		}
-		VMMDLL_MemFree(pModuleEntry);
+		// CR3/DTB remediation is deferred to InitAddress / GetProcessModuleHandle.
+		// Attach only resolves the PID; module acquisition + FixCr3 happens in
+		// INITIALIZING_GAME state. Calling FixCr3 here blocks Attach for 30s+
+		// (DTB remediation), keeping the UI stuck in SEARCHING_GAME.
+		LOG_INFO("ProcessMgr", "Attach: '{}' found, PID={}", ProcessName, ProcessID);
 
 		Attached = true;
-		LOG_INFO("ProcessMgr", "Attach: '{}' found, PID={}", ProcessName, ProcessID);
 		return SUCCEED;
 
+	}
+
+
+
+	// ============================================================
+	// CR3/DTB remediation — verifies module accessibility and
+	// tries candidate DTBs from dtb.txt when the current DTB
+	// is stale (e.g. after anti-cheat DTB hiding).
+	// ============================================================
+
+public:
+	// Verify a module is truly readable by checking the MZ magic.
+	// Refreshes VMM cache before probing to avoid stale module lists.
+	bool HasReadableModule(DWORD pid, const std::string& moduleName)
+	{
+		if (moduleName.empty()) return false;
+		if (this->HANDLE)
+			VMMDLL_ConfigSet(this->HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+		std::string nameCopy = moduleName;
+		DWORD64 base = VMMDLL_ProcessGetModuleBaseU(this->HANDLE, pid, const_cast<LPSTR>(nameCopy.data()));
+		if (base == 0) return false;
+
+		IMAGE_DOS_HEADER dos{};
+		if (!VMMDLL_MemReadEx(this->HANDLE, pid, base, (PBYTE)&dos, sizeof(IMAGE_DOS_HEADER), nullptr, VMMDLL_FLAG_NOCACHE))
+			return false;
+		return dos.e_magic == 0x5A4D; // "MZ"
+	}
+
+private:
+	static inline std::mutex g_fixCr3Mutex;
+	static inline bool s_fixCr3PluginsInitialized = false;
+	static inline std::atomic<uint64_t> s_dtbFileSize{ 0x80000 };
+
+	static VOID cbAddFileDtb(_Inout_ ::HANDLE, _In_ LPSTR uszName, _In_ ULONG64 cb, _In_opt_ PVMMDLL_VFS_FILELIST_EXINFO)
+	{
+		if (strcmp(uszName, "dtb.txt") == 0)
+			s_dtbFileSize.store(cb, std::memory_order_relaxed);
+	}
+
+	// CS2-aware probe: accept client.dll OR engine2.dll as proof of access.
+	bool CanAccessProbeModules(DWORD pid, const std::string& processName)
+	{
+		std::string lower = processName;
+		std::transform(lower.begin(), lower.end(), lower.begin(),
+			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+		bool isCs2 = (lower == "cs2.exe" || lower == "cs2");
+		if (isCs2)
+			return HasReadableModule(pid, "client.dll") || HasReadableModule(pid, "engine2.dll");
+
+		return HasReadableModule(pid, processName);
+	}
+
+public:
+	// Attempt CR3/DTB remediation. Returns true if probe modules are accessible.
+	bool FixCr3()
+	{
+		std::lock_guard<std::mutex> lock(g_fixCr3Mutex);
+
+		if (ProcessID == 0) {
+			LOG_WARNING("ProcessMgr", "FixCr3: ProcessID is 0, nothing to fix");
+			return false;
+		}
+
+		if (this->HANDLE)
+			VMMDLL_ConfigSet(this->HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+
+		// Fast path: modules already accessible
+		if (CanAccessProbeModules(ProcessID, AttachProcessName)) {
+			LOG_DEBUG("ProcessMgr", "FixCr3: modules already accessible, no fix needed");
+			return true;
+		}
+
+		LOG_INFO("ProcessMgr", "FixCr3: modules not accessible, starting DTB remediation...");
+
+		// Initialize VFS plugins once per VMM handle
+		if (!s_fixCr3PluginsInitialized) {
+			if (!VMMDLL_InitializePlugins(this->HANDLE)) {
+				LOG_ERROR("ProcessMgr", "FixCr3: VMMDLL_InitializePlugins failed");
+				return false;
+			}
+			s_fixCr3PluginsInitialized = true;
+			LOG_INFO("ProcessMgr", "FixCr3: VFS plugins initialized");
+		}
+
+		// Wait for plugin initialization to complete (poll progress_percent.txt)
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+		bool progressReady = false;
+		while (std::chrono::steady_clock::now() < deadline) {
+			BYTE bytes[4] = { 0 };
+			DWORD i = 0;
+			auto nt = VMMDLL_VfsReadW(this->HANDLE, (LPWSTR)L"\\misc\\procinfo\\progress_percent.txt", bytes, 3, &i, 0);
+			if (nt == VMMDLL_STATUS_SUCCESS && atoi(reinterpret_cast<LPSTR>(bytes)) == 100) {
+				progressReady = true;
+				break;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		if (!progressReady) {
+			LOG_WARNING("ProcessMgr", "FixCr3: plugin progress timed out (30s)");
+			return false;
+		}
+		LOG_INFO("ProcessMgr", "FixCr3: plugin progress ready");
+
+		// Query dtb.txt file size via VFS list callback
+		VMMDLL_VFS_FILELIST2 VfsFileList;
+		VfsFileList.dwVersion = VMMDLL_VFS_FILELIST_VERSION;
+		VfsFileList.h = 0;
+		VfsFileList.pfnAddDirectory = 0;
+		VfsFileList.pfnAddFile = cbAddFileDtb;
+		s_dtbFileSize.store(0x80000, std::memory_order_relaxed);
+
+		if (!VMMDLL_VfsListU(this->HANDLE, (LPSTR)"\\misc\\procinfo\\", &VfsFileList)) {
+			LOG_WARNING("ProcessMgr", "FixCr3: VfsListU failed");
+			return false;
+		}
+
+		const uint64_t fileSize = s_dtbFileSize.load(std::memory_order_relaxed);
+		if (fileSize == 0 || fileSize > 16ULL * 1024ULL * 1024ULL) {
+			LOG_WARNING("ProcessMgr", "FixCr3: invalid dtb.txt size {}", fileSize);
+			return false;
+		}
+
+		// Read dtb.txt content
+		const size_t bufferSize = static_cast<size_t>(fileSize) + 1;
+		std::vector<BYTE> bytes(bufferSize, 0);
+		DWORD bytesRead = 0;
+		if (VMMDLL_VfsReadW(this->HANDLE, (LPWSTR)L"\\misc\\procinfo\\dtb.txt",
+			bytes.data(), static_cast<DWORD>(bufferSize - 1), &bytesRead, 0) != VMMDLL_STATUS_SUCCESS) {
+			LOG_WARNING("ProcessMgr", "FixCr3: VfsReadW dtb.txt failed");
+			return false;
+		}
+
+		// Parse candidate DTBs
+		std::vector<uint64_t> possibleDtbs;
+		const size_t textSize = std::min(static_cast<size_t>(bytesRead), bufferSize - 1);
+		std::string lines(reinterpret_cast<char*>(bytes.data()), textSize);
+		std::istringstream iss(lines);
+		std::string line;
+
+		while (std::getline(iss, line)) {
+			Info info{};
+			std::istringstream info_ss(line);
+			if (info_ss >> std::hex >> info.index >> std::dec >> info.process_id >> std::hex >> info.dtb >> info.kernelAddr >> info.name) {
+				if (info.process_id == 0)
+					possibleDtbs.push_back(info.dtb);
+				if (AttachProcessName.find(info.name) != std::string::npos)
+					possibleDtbs.push_back(info.dtb);
+			}
+		}
+
+		LOG_INFO("ProcessMgr", "FixCr3: {} candidate DTBs to try", possibleDtbs.size());
+
+		// Try each candidate DTB
+		for (size_t i = 0; i < possibleDtbs.size(); i++) {
+			auto dtb = possibleDtbs[i];
+			LOG_DEBUG("ProcessMgr", "FixCr3: trying DTB 0x{:X} ({}/{})", dtb, i + 1, possibleDtbs.size());
+			VMMDLL_ConfigSet(this->HANDLE, VMMDLL_OPT_PROCESS_DTB | ProcessID, dtb);
+			VMMDLL_ConfigSet(this->HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+			if (CanAccessProbeModules(ProcessID, AttachProcessName)) {
+				LOG_INFO("ProcessMgr", "FixCr3: DTB 0x{:X} works, modules accessible", dtb);
+				return true;
+			}
+		}
+
+		// All candidates failed — reset DTB to avoid leaving stale state
+		LOG_WARNING("ProcessMgr", "FixCr3: no valid DTB found among {} candidates", possibleDtbs.size());
+		VMMDLL_ConfigSet(this->HANDLE, VMMDLL_OPT_PROCESS_DTB | ProcessID, 0);
+		VMMDLL_ConfigSet(this->HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+		return false;
 	}
 
 
@@ -375,6 +549,26 @@ public:
 	void Detach()
 
 	{
+
+		ProcessID = 0;
+
+		Attached = false;
+
+	}
+
+
+
+	void CloseDMA()
+
+	{
+
+		if (this->HANDLE) {
+
+			VMMDLL_Close(this->HANDLE);
+
+			this->HANDLE = nullptr;
+
+		}
 
 		ProcessID = 0;
 

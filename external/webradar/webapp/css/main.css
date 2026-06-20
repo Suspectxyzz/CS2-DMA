@@ -1,0 +1,689 @@
+:root {
+	--radar-primary: #b1d0e7;
+	--radar-secondary: #6492b4;
+	--radar-green: #50904c;
+	--radar-red: rgba(201, 11, 11, 0.9);
+	--team-t: #df7d29;
+	--team-ct: #84c8ed;
+}
+
+body {
+	margin: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: Arial, Helvetica, sans-serif;
+	-moz-user-select: none;
+	user-select: none;
+	cursor: not-allowed;
+	background: #000000;
+}
+
+body > div {
+	color: white;
+	height: 100vh;
+	width: 100vh;
+	max-width: 100vh;
+	max-height: 100vw;
+	position: relative;
+	overflow: hidden;
+}
+
+/* ===== 设置 UI ===== */
+
+/* 齿轮按钮 */
+.settings-toggle {
+	position: fixed;
+	top: 10px;
+	right: 10px;
+	z-index: 1000;
+	width: 36px;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	margin: 0;
+	border: none;
+	border-radius: 6px;
+	background: rgba(20, 20, 30, 0.8);
+	color: #a647c7;
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-toggle:hover {
+	background: rgba(40, 40, 55, 0.95);
+	color: #ffffff;
+}
+
+.settings-toggle svg {
+	display: block;
+	pointer-events: none;
+}
+
+/* popover 面板 */
+.settings-panel {
+	position: fixed;
+	top: 50px;
+	right: 10px;
+	z-index: 1001;
+	width: 280px;
+	max-height: 80vh;
+	overflow-y: auto;
+	box-sizing: border-box;
+	padding: 12px;
+	border-radius: 8px;
+	background: rgba(20, 20, 30, 0.95);
+	color: #ffffff;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+	font-family: Arial, Helvetica, sans-serif;
+}
+
+.settings-panel[hidden] {
+	display: none;
+}
+
+/* 面板头部 */
+.settings-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 10px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid rgba(166, 71, 199, 0.3);
+}
+
+.settings-header h2 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: #ffffff;
+}
+
+.settings-reset {
+	padding: 3px 10px;
+	font-size: 11px;
+	color: #a647c7;
+	background: transparent;
+	border: 1px solid rgba(166, 71, 199, 0.5);
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-reset:hover {
+	background: rgba(166, 71, 199, 0.2);
+	color: #ffffff;
+}
+
+/* 面板主体 */
+.settings-body {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+/* 分组 */
+.settings-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 6px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-group:last-child {
+	border-bottom: none;
+}
+
+.settings-group h3 {
+	margin: 0 0 4px 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: #a647c7;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+/* 通用控件行 */
+.settings-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.settings-row label {
+	font-size: 12px;
+	color: #c8c8d0;
+}
+
+/* range 滑块 */
+.settings-panel input[type="range"] {
+	width: 100px;
+	accent-color: #a647c7;
+	cursor: pointer;
+}
+
+/* checkbox 开关 */
+.settings-panel input[type="checkbox"] {
+	width: 14px;
+	height: 14px;
+	accent-color: #a647c7;
+	cursor: pointer;
+}
+
+/* select 下拉 */
+.settings-panel select {
+	background: rgba(20, 20, 30, 0.9);
+	color: #ffffff;
+	border: 1px solid rgba(166, 71, 199, 0.4);
+	border-radius: 4px;
+	padding: 2px 6px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+/* 数值显示 */
+.settings-value {
+	font-size: 11px;
+	color: #a647c7;
+	min-width: 32px;
+	text-align: right;
+}
+
+/* ===== 连接状态指示器 (Task 14) ===== */
+.conn-status {
+	position: fixed;
+	top: 10px;
+	right: 54px;
+	z-index: 1000;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	padding: 0 10px;
+	border-radius: 6px;
+	background: rgba(20, 20, 30, 0.8);
+	font-size: 12px;
+	font-weight: 600;
+	color: #888888;
+	pointer-events: none;
+	white-space: nowrap;
+}
+
+.conn-status--connecting {
+	color: #888888;
+}
+
+.conn-status--live {
+	color: #4caf50;
+}
+
+.conn-status--error {
+	color: #f44336;
+}
+
+/* ===== 炸弹计时器 ===== */
+.bomb-timer {
+	position: absolute;
+	top: 8px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	background: rgba(20, 20, 30, 0.85);
+	border-radius: 6px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+	font-family: Arial, Helvetica, sans-serif;
+	color: #fff;
+	min-width: 220px;
+	box-sizing: border-box;
+}
+
+.bomb-timer[hidden] {
+	display: none;
+}
+
+.bomb-timer-label {
+	font-weight: bold;
+	color: #ff4444;
+	font-size: 14px;
+}
+
+.bomb-timer-bar {
+	flex: 1;
+	height: 8px;
+	background: rgba(255, 255, 255, 0.15);
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.bomb-timer-fill {
+	height: 100%;
+	background: linear-gradient(to right, #ff4444, #ff8844);
+	border-radius: 4px;
+	width: 100%;
+}
+
+.bomb-timer-text {
+	font-weight: bold;
+	font-size: 14px;
+	min-width: 36px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.bomb-timer-defuse {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding-left: 8px;
+	border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.bomb-timer-defuse[hidden] {
+	display: none;
+}
+
+.bomb-timer-defuse-label {
+	font-size: 11px;
+	color: #4488ff;
+	font-weight: bold;
+}
+
+.bomb-timer-defuse-bar {
+	width: 60px;
+	height: 6px;
+	background: rgba(255, 255, 255, 0.15);
+	border-radius: 3px;
+	overflow: hidden;
+}
+
+.bomb-timer-defuse-fill {
+	height: 100%;
+	background: linear-gradient(to right, #4488ff, #66aaff);
+	border-radius: 3px;
+	width: 0%;
+}
+
+.bomb-timer.urgent {
+	animation: bomb-urgent 0.5s infinite;
+}
+
+@keyframes bomb-urgent {
+	0%, 100% {
+		background: rgba(20, 20, 30, 0.85);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+	}
+	50% {
+		background: rgba(255, 0, 0, 0.85);
+		box-shadow: 0 2px 12px rgba(255, 0, 0, 0.8);
+	}
+}
+
+.bomb-timer.urgent .bomb-timer-text {
+	color: #ff4444;
+}
+
+/* ===== 队伍面板 ===== */
+.team-panel {
+	position: fixed;
+	top: 50%;
+	transform: translateY(-50%);
+	z-index: 500;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	width: 260px;
+	max-height: 85vh;
+	overflow-y: auto;
+	background: rgba(15, 18, 25, 0.92);
+	border-radius: 10px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+	font-family: Arial, Helvetica, sans-serif;
+	box-sizing: border-box;
+}
+
+.team-panel-left {
+	left: 8px;
+}
+
+.team-panel-right {
+	right: 8px;
+}
+
+.team-panel:empty {
+	display: none;
+}
+
+/* 面板 header */
+.team-panel__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 8px 6px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	margin-bottom: 2px;
+}
+
+.team-panel__name {
+	font-size: 11px;
+	font-weight: bold;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.team-panel__count {
+	font-size: 12px;
+	font-weight: bold;
+	color: #fff;
+	background: rgba(255, 255, 255, 0.1);
+	padding: 1px 6px;
+	border-radius: 8px;
+}
+
+.team-panel__list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.team-panel__empty {
+	text-align: center;
+	color: rgba(255, 255, 255, 0.3);
+	font-size: 11px;
+	padding: 12px 0;
+}
+
+/* 玩家卡片 - 参考 KevqDMA viewer.css */
+.player-card {
+	--card-accent: #888;
+	position: relative;
+	min-height: 90px;
+	padding: 10px 10px 10px 80px;
+	border-radius: 10px;
+	border: 1px solid rgba(100, 146, 180, 0.13);
+	background: linear-gradient(180deg, rgba(9, 23, 35, 0.94), rgba(7, 19, 29, 0.92));
+	overflow: hidden;
+	box-sizing: border-box;
+	transition: opacity 0.2s;
+}
+
+.player-card::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 2px;
+	background: var(--card-accent);
+	opacity: 0.9;
+}
+
+.player-card.is-right {
+	padding: 10px 80px 10px 10px;
+}
+
+.player-card.is-right::before {
+	inset: 0 0 0 auto;
+}
+
+.player-card.is-dead {
+	opacity: 0.56;
+}
+
+/* 状态发光点 */
+.player-card__status {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--card-accent);
+	box-shadow: 0 0 8px var(--card-accent);
+	z-index: 2;
+}
+
+.player-card.is-right .player-card__status {
+	left: auto;
+	right: 8px;
+}
+
+.player-card.is-dead .player-card__status {
+	background: #666;
+	box-shadow: none;
+}
+
+/* 玩家模型图片 - 参考 KevqDMA viewer.css */
+.player-card__model {
+	position: absolute;
+	left: -4px;
+	bottom: -2px;
+	width: 90px;
+	height: 120px;
+	object-fit: contain;
+	object-position: center bottom;
+	pointer-events: none;
+}
+
+.player-card.is-right .player-card__model {
+	left: auto;
+	right: -4px;
+	transform: scaleX(-1);
+}
+
+/* 内容区 */
+.player-card__content {
+	min-height: 70px;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 4px;
+}
+
+.player-card.is-right .player-card__content {
+	align-items: flex-end;
+	text-align: right;
+}
+
+/* 顶部：名字 + 经济 */
+.player-card__top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+}
+
+.player-card.is-right .player-card__top {
+	flex-direction: row-reverse;
+}
+
+.player-card__name {
+	font-size: 12px;
+	font-weight: bold;
+	color: #d9eaf6;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+.player-card__money {
+	font-size: 11px;
+	font-weight: bold;
+	color: var(--radar-green);
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+/* 统计：血量 + 护甲 */
+.player-card__stats {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.player-card.is-right .player-card__stats {
+	flex-direction: row-reverse;
+}
+
+.player-card__stat {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	color: var(--radar-primary);
+	font-size: 11px;
+}
+
+/* mask 图标样式 - 参考 KevqDMA viewer.css */
+.player-card__stat-icon,
+.player-card__weapon-icon,
+.player-card__util-icon {
+	background-color: var(--radar-secondary);
+	-webkit-mask: no-repeat center / contain;
+	mask: no-repeat center / contain;
+}
+
+.player-card__stat-icon,
+.player-card__util-icon {
+	width: 14px;
+	height: 14px;
+}
+
+.player-card__weapon-icon {
+	width: 28px;
+	height: 18px;
+}
+
+.player-card__stat-value {
+	font-size: 11px;
+	font-weight: bold;
+	color: #ddd;
+}
+
+/* 武器行 */
+.player-card__weapon {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	color: var(--radar-secondary);
+}
+
+.player-card.is-right .player-card__weapon {
+	flex-direction: row-reverse;
+}
+
+.player-card__weapon-name {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* 道具栏 */
+.player-card__util {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.player-card.is-right .player-card__util {
+	flex-direction: row-reverse;
+}
+
+.player-card__util-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--radar-primary);
+	opacity: 0.3;
+}
+
+/* 响应式 */
+@media (max-width: 1200px) {
+	.team-panel {
+		width: 220px;
+		padding: 8px;
+	}
+	.player-card {
+		padding: 8px 8px 8px 70px;
+		min-height: 80px;
+	}
+	.player-card.is-right {
+		padding: 8px 70px 8px 8px;
+	}
+	.player-card__model {
+		width: 75px;
+		height: 100px;
+	}
+}
+
+@media (max-width: 768px) {
+	.team-panel {
+		display: none;
+	}
+}
+
+/* ===== 投掷物剩余时间标签 ===== */
+.smoke-timer,
+.inferno-timer {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	color: #ffffff;
+	font-size: 1.5vmin;
+	font-weight: bold;
+	text-shadow: 0 0 0.3vmin #000, 0 0 0.3vmin #000, 0 0 0.3vmin #000;
+	pointer-events: none;
+	z-index: 10;
+	white-space: nowrap;
+}
+
+/* ===== 观战列表面板 ===== */
+.spectator-panel {
+	position: fixed;
+	top: 20px;
+	right: 20px;
+	width: 180px;
+	background: rgba(0, 0, 0, 0.8);
+	border-radius: 8px;
+	padding: 8px;
+	color: #fff;
+	font-size: 12px;
+	z-index: 100;
+}
+
+.spectator-header {
+	font-weight: bold;
+	margin-bottom: 6px;
+	padding-bottom: 4px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.spectator-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.spectator-list li {
+	padding: 3px 6px;
+	margin: 2px 0;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.spectator-list li.T {
+	border-left: 3px solid #ffa701;
+}
+
+.spectator-list li.CT {
+	border-left: 3px solid #5ab8f4;
+}

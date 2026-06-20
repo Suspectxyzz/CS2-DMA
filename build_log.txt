@@ -1,1 +1,0 @@
-  Dll1.vcxproj -> C:\CS2-DMA\cs2.exe

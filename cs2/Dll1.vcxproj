@@ -159,6 +159,7 @@
     <ClCompile Include="game\Entity.cpp" />
     <ClCompile Include="game\Game.cpp" />
     <ClCompile Include="game\Offsets.cpp" />
+    <ClCompile Include="game\OffsetUpdater.cpp" />
     <ClCompile Include="game\map_registry.cpp" />
     <ClCompile Include="render\Cheats.cpp" />
     <ClCompile Include="render\Render.cpp" />
@@ -193,6 +194,7 @@
     <ClInclude Include="game\MemoryHelper.h" />
     <ClInclude Include="game\MenuConfig.h" />
     <ClInclude Include="game\Offsets.h" />
+    <ClInclude Include="game\OffsetUpdater.h" />
     <ClInclude Include="game\map_registry.h" />
     <ClInclude Include="game\View.h" />
     <ClInclude Include="render\Cheats.h" />

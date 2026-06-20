@@ -3,9 +3,21 @@
 
 bool CGame::InitAddress()
 {
-	LOG_INFO("Game", "InitAddress: resolving client.dll...");
+	LOG_INFO("Game", "InitAddress: resolving client.dll & engine2.dll...");
 	this->Address.ClientDLL = GetProcessModuleHandle(ProcessMgr.HANDLE, ProcessMgr.ProcessID, "client.dll");
 	LOG_INFO("Game", "InitAddress: client.dll = 0x{:X}", this->Address.ClientDLL);
+
+	this->Address.Engine2DLL = GetProcessModuleHandle(ProcessMgr.HANDLE, ProcessMgr.ProcessID, "engine2.dll");
+	LOG_INFO("Game", "InitAddress: engine2.dll = 0x{:X}", this->Address.Engine2DLL);
+
+	// Reference project (KevqDMA): both client.dll AND engine2.dll must be non-zero
+	// to consider the game ready. CS2 loads engine2.dll before client.dll; requiring
+	// both avoids false "ready" when only one module is resolved.
+	if (!this->Address.ClientDLL || !this->Address.Engine2DLL) {
+		LOG_WARNING("Game", "InitAddress: module(s) not resolved yet (client=0x{:X} engine2=0x{:X}), will retry",
+			this->Address.ClientDLL, this->Address.Engine2DLL);
+		return false;
+	}
 
 	this->Address.MatchDLL = GetProcessModuleHandle(ProcessMgr.HANDLE, ProcessMgr.ProcessID, "matchmaking.dll");
 	LOG_DEBUG("Game", "InitAddress: matchmaking.dll = 0x{:X}", this->Address.MatchDLL);
@@ -22,13 +34,18 @@ bool CGame::InitAddress()
 
 	UpdateEntityListEntry();
 
-	LOG_INFO("Game", "InitAddress: done (ClientDLL=0x{:X})", this->Address.ClientDLL);
-	return this->Address.ClientDLL != 0;
+	LOG_INFO("Game", "InitAddress: done (ClientDLL=0x{:X} Engine2DLL=0x{:X})", this->Address.ClientDLL, this->Address.Engine2DLL);
+	return true;
 }
 
 DWORD64 CGame::GetClientDLLAddress()
 {
 	return this->Address.ClientDLL;
+}
+
+DWORD64 CGame::GetEngine2DLLAddress()
+{
+	return this->Address.Engine2DLL;
 }
 
 DWORD64 CGame::GetMatchDLLAddress()
@@ -85,19 +102,13 @@ bool CGame::UpdateEntityListEntry()
 }
 
 
-uint64_t cbSize = 0x80000;
-
-VOID cbAddFile(_Inout_ HANDLE h, _In_ LPSTR uszName, _In_ ULONG64 cb, _In_opt_ PVMMDLL_VFS_FILELIST_EXINFO pExInfo)
-{
-	if (strcmp(uszName, "dtb.txt") == 0)
-		cbSize = cb;
-}
 DWORD64 GetProcessModuleHandle(VMM_HANDLE HANDLE, DWORD ProcessID, std::string ModuleName)
 {
 	PVMMDLL_MAP_MODULEENTRY module_entry;
 
-	// Try with refresh + retries first (handles post-init process discovery)
-	constexpr int MAX_RETRIES = 15;
+	// Short retry loop — INITIALIZING_GAME state controls the outer retry.
+	// Each retry sync-refreshes VMM cache to pick up newly loaded modules.
+	constexpr int MAX_RETRIES = 3;
 	for (int attempt = 0; attempt < MAX_RETRIES; attempt++)
 	{
 		if (attempt > 0) {
@@ -114,61 +125,16 @@ DWORD64 GetProcessModuleHandle(VMM_HANDLE HANDLE, DWORD ProcessID, std::string M
 
 	}
 
-	// Fallback: DTB patching via plugin procinfo
-	LOG_WARNING("Memory", "GetProcessModuleHandle: '{}' not found after {} retries, trying DTB patch...", ModuleName, MAX_RETRIES);
-	VMMDLL_InitializePlugins(HANDLE);
-	Sleep(3000);
-
-	VMMDLL_VFS_FILELIST2 VfsFileList;
-	VfsFileList.dwVersion = VMMDLL_VFS_FILELIST_VERSION;
-	VfsFileList.h = 0;
-	VfsFileList.pfnAddDirectory = 0;
-	VfsFileList.pfnAddFile = cbAddFile;
-
-	bool result = VMMDLL_VfsListU(HANDLE, (LPSTR)"\\misc\\procinfo\\", &VfsFileList);
-	if (!result)
-		return false;
-
-	const size_t buffer_size = cbSize;
-	std::unique_ptr<BYTE[]> bytes(new BYTE[buffer_size]);
-	DWORD j = 0;
-	auto nt = VMMDLL_VfsReadW(HANDLE, (LPWSTR)L"\\misc\\procinfo\\dtb.txt", bytes.get(), buffer_size - 1, &j, 0);
-	if (nt != VMMDLL_STATUS_SUCCESS)
-		return false;
-
-	std::vector<uint64_t> possible_dtbs;
-	std::string lines(reinterpret_cast<char*>(bytes.get()));
-	std::istringstream iss(lines);
-	std::string line;
-
-	while (std::getline(iss, line))
-	{
-		Info info = { };
-
-		std::istringstream info_ss(line);
-		if (info_ss >> std::hex >> info.index >> std::dec >> info.process_id >> std::hex >> info.dtb >> info.kernelAddr >> info.name)
-		{
-			if (info.process_id == 0) 
-				possible_dtbs.push_back(info.dtb);
-			if (ModuleName.find(info.name) != std::string::npos)
-				possible_dtbs.push_back(info.dtb);
-		}
-	}
-
-	LOG_DEBUG("Memory", "DTB: {} candidate DTBs to try", possible_dtbs.size());
-	for (size_t i = 0; i < possible_dtbs.size(); i++)
-	{
-		auto dtb = possible_dtbs[i];
-		LOG_TRACE("Memory", "DTB: trying 0x{:X} ({}/{})", dtb, i + 1, possible_dtbs.size());
-		VMMDLL_ConfigSet(HANDLE, VMMDLL_OPT_PROCESS_DTB, dtb);
-		bool found = VMMDLL_Map_GetModuleFromNameU(HANDLE, ProcessID, (LPSTR)ModuleName.c_str(), &module_entry, NULL);
-		if (found)
-		{
-			LOG_INFO("Memory", "DTB: '{}' found with DTB 0x{:X} at 0x{:X}", ModuleName, dtb, module_entry->vaBase);
+	// Fallback: CR3/DTB remediation via ProcessManager
+	LOG_WARNING("Memory", "GetProcessModuleHandle: '{}' not found after {} retries, trying CR3 fix...", ModuleName, MAX_RETRIES);
+	if (ProcessMgr.FixCr3()) {
+		bool result = VMMDLL_Map_GetModuleFromNameU(HANDLE, ProcessID, (LPSTR)ModuleName.c_str(), &module_entry, NULL);
+		if (result) {
+			LOG_INFO("Memory", "GetProcessModuleHandle: '{}' resolved at 0x{:X} after CR3 fix", ModuleName, module_entry->vaBase);
 			return module_entry->vaBase;
 		}
 	}
 
-	LOG_ERROR("Memory", "Failed to patch module");
+	LOG_ERROR("Memory", "GetProcessModuleHandle: '{}' failed after CR3 fix", ModuleName);
 	return false;
 }

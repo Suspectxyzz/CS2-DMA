@@ -31,6 +31,10 @@ void Cheats::Run()
 	static bool firstRun = true;
 	if (firstRun) {
 		LOG_INFO("Render", "Cheats::Run() first initialization");
+		// Task 16: default EspItemEnabledMask to all-enabled so dropped
+		// weapons render unless the user explicitly disables them. The
+		// bitset is zero-initialised; set() flips every bit to 1.
+		MenuConfig::EspItemEnabledMask.set();
 		firstRun = false;
 	}
 	try {
@@ -181,14 +185,18 @@ void Cheats::Run()
 
 			// Task 7: Offscreen arrow ESP — drawn before the ScreenPosValid skip so
 			// enemies outside the view frustum still get a directional indicator.
-			if (MenuConfig::ShowOffscreenArrows && !Entity.Pawn.ScreenPosValid)
+			// 屏外判定：不仅包括镜头后方(ScreenPosValid=false)，还包括镜头前方但超出屏幕边界的情况
+			ImVec2 _ds = ImGui::GetIO().DisplaySize;
+			bool _onScreen = Entity.Pawn.ScreenPosValid &&
+			                 Entity.Pawn.ScreenPos.x >= 0.f && Entity.Pawn.ScreenPos.x <= _ds.x &&
+			                 Entity.Pawn.ScreenPos.y >= 0.f && Entity.Pawn.ScreenPos.y <= _ds.y;
+			if (MenuConfig::ShowOffscreenArrows && !_onScreen)
 			{
 				if (std::isfinite(Entity.Pawn.Pos.x) && std::isfinite(Entity.Pawn.Pos.y) && std::isfinite(Entity.Pawn.Pos.z))
 				{
 					ImDrawList* dl = ImGui::GetBackgroundDrawList();
-					ImVec2 ds = ImGui::GetIO().DisplaySize;
 					Render::DrawOffscreenArrow(dl, Entity.Pawn.Pos, LocalPlayerSnapshot.Pawn.Pos,
-						LocalPlayerSnapshot.Pawn.ViewAngle.y, ds.x, ds.y,
+						LocalPlayerSnapshot.Pawn.ViewAngle.y, _ds.x, _ds.y,
 						ImGui::ColorConvertFloat4ToU32(MenuConfig::OffscreenArrowColor.Value),
 						MenuConfig::OffscreenArrowSize);
 				}
@@ -201,21 +209,7 @@ void Cheats::Run()
 			if (Entity.GetBone().BonePosCount <= (int)BONEINDEX::head) continue;
 
 			ImVec4 Rect;
-			switch (MenuConfig::BoxType)
-			{
-			case 0:
-				Rect = Render::Get2DBox(Entity);
-				break;
-			case 1:
-				Rect = Render::Get2DBoneRect(Entity);
-				break;
-			case 2:
-				Rect = Render::Get2DBox(Entity);
-				break;
-			default:
-				Rect = Render::Get2DBox(Entity);
-				break;
-			}
+			Rect = Render::GetBoxByType(Entity);
 
 			if (Rect.z < 1.f || Rect.w < 1.f) continue;
 			if (!std::isfinite(Rect.x) || !std::isfinite(Rect.y) || !std::isfinite(Rect.z) || !std::isfinite(Rect.w)) continue;
@@ -284,11 +278,7 @@ void Cheats::Run()
 			{
 				if (MenuConfig::HealthBarType == 2)
 				{
-					float hpRatio = std::clamp((float)Entity.Pawn.Health / 100.f, 0.f, 1.f);
-					ImColor hpColor = ImColor(
-						(int)(255 * (1.f - hpRatio)),
-						(int)(255 * hpRatio),
-						0, 255);
+					ImColor hpColor = ImColor(Render::HealthColorFromRatio(Entity.Pawn.Health));
 					float hpY = Rect.y - MenuConfig::NameFontSize;
 					if (MenuConfig::ShowPlayerName)
 						hpY -= MenuConfig::NameFontSize;
@@ -326,8 +316,7 @@ void Cheats::Run()
 				if (MenuConfig::ShowHealthText && MenuConfig::ShowHealthBar &&
 				    MenuConfig::HealthBarType == 0 && Entity.Pawn.Health < 100)
 				{
-					float hpRatio = std::clamp((float)Entity.Pawn.Health / 100.f, 0.f, 1.f);
-					ImU32 hpCol = IM_COL32((int)(255 * (1.f - hpRatio)), (int)(255 * hpRatio), 0, 255);
+					ImU32 hpCol = Render::HealthColorFromRatio(Entity.Pawn.Health);
 					ImVec2 hpBarPos(Rect.x - MenuConfig::HealthBarWidth - 3.f, Rect.y);
 					Render::DrawBarLabel(labelDL, hpBarPos, MenuConfig::HealthBarWidth,
 					                     Entity.Pawn.Health, hpCol, MenuConfig::BarLabelFontSize, screenW);
@@ -345,6 +334,22 @@ void Cheats::Run()
 
 			if (MenuConfig::ShowWeaponESP && !(inSafeZone && MenuConfig::SafeZoneSkipWeapon))
 				Gui.StrokeText(Entity.Pawn.WeaponName, Vec2(Rect.x, Rect.y + Rect.w), MenuConfig::WeaponColor, MenuConfig::WeaponFontSize);
+
+			// Task 13: Weapon icon ESP — render the active weapon's icon glyph
+			// (from weapons.ttf) above the weapon name. WeaponName is the
+			// visualKey (e.g. "ak47"), so we reverse-lookup the item id.
+			if (MenuConfig::ShowWeaponIcon && !(inSafeZone && MenuConfig::SafeZoneSkipWeapon))
+			{
+				const WeaponLookup::WeaponLookupEntry* entry =
+					WeaponLookup::FindWeaponLookupEntryByVisualKey(Entity.Pawn.WeaponName.c_str());
+				if (entry) {
+					ImVec2 iconPos(Rect.x + Rect.z * 0.5f, Rect.y + Rect.w + 2.f);
+					Render::DrawWeaponIcon(ImGui::GetBackgroundDrawList(), iconPos,
+					                       entry->id, MenuConfig::WeaponIconFontSize,
+					                       ImGui::ColorConvertFloat4ToU32(MenuConfig::WeaponIconColor.Value),
+					                       MenuConfig::WeaponIconNoKnife);
+				}
+			}
 
 			// Task 13: Weapon ammo ESP — "Ammo XX/YY" + LOW warning below weapon name.
 			if (MenuConfig::ShowWeaponAmmo && !(inSafeZone && MenuConfig::SafeZoneSkipWeapon))
@@ -364,8 +369,6 @@ void Cheats::Run()
 			if (MenuConfig::ShowPlayerName && !(inSafeZone && MenuConfig::SafeZoneSkipName))
 			{
 				std::string displayName = Entity.Controller.PlayerName;
-				if (Entity.Pawn.FlashDuration > 0.f)
-					displayName += " [FLASH]";
 				if (MenuConfig::HealthBarType == 1)
 					Gui.StrokeText(displayName, Vec2(Rect.x + Rect.z / 2, Rect.y - 13 - MenuConfig::NameFontSize), MenuConfig::NameColor, MenuConfig::NameFontSize, true);
 				else
@@ -410,6 +413,12 @@ void Cheats::Run()
 		if (MenuConfig::ShowWorldESP && !snap.Projectiles.empty())
 			Render::DrawWorldESP(ImGui::GetBackgroundDrawList(), snap.Projectiles, freshMatrix, 0);
 
+		// Task 12/16: Dropped-weapon world ESP — icon + name for weapons on
+		// the ground, filtered by EspItemEnabledMask. Drawn under
+		// ShowWorldESP (master toggle) + ShowWorldItems (sub-toggle).
+		if (MenuConfig::ShowWorldESP && MenuConfig::ShowWorldItems && !snap.DroppedWeapons.empty())
+			Render::DrawDroppedWeapons(ImGui::GetBackgroundDrawList(), snap.DroppedWeapons, freshMatrix);
+
 		// Crosshair overlay: drawn on top of ESP, below safe zone mask
 		if (MenuConfig::CrosshairEnabled) {
 			ImVec2 c = { ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f };
@@ -424,10 +433,7 @@ void Cheats::Run()
 					if (!Entity.Pawn.ScreenPosValid) continue;
 
 					ImVec4 eRect;
-					switch (MenuConfig::BoxType) {
-					case 1:  eRect = Render::Get2DBoneRect(Entity); break;
-					default: eRect = Render::Get2DBox(Entity); break;
-					}
+					eRect = Render::GetBoxByType(Entity);
 					if (eRect.z < 1.f || eRect.w < 1.f) continue;
 					if (c.x >= eRect.x && c.x <= eRect.x + eRect.z &&
 						c.y >= eRect.y && c.y <= eRect.y + eRect.w) {

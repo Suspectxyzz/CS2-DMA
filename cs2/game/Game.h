@@ -16,6 +16,7 @@ private:
 	struct
 	{
 		DWORD64 ClientDLL;
+		DWORD64 Engine2DLL;
 		DWORD64 MatchDLL;
 		DWORD64 EntityList;
 		DWORD64 Matrix;
@@ -33,6 +34,8 @@ public:
 	bool InitAddress();
 
 	DWORD64 GetClientDLLAddress();
+
+	DWORD64 GetEngine2DLLAddress();
 
 	DWORD64 GetMatchDLLAddress();
 

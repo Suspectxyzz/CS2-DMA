@@ -1,19 +1,21 @@
 # generate-rc.ps1
-# Scans the dist directory and generates webRadar_resources.rc for embedding
-# frontend assets into the cs2.exe binary via Windows RCDATA resources.
+# Scans the webapp source directory and generates webRadar_resources.rc for
+# embedding frontend assets into the cs2.exe binary via Windows RCDATA resources.
+#
+# The frontend is plain static files (HTML/CSS/JS/img/maps) living directly
+# under external\webradar\webapp\ — no Vite build step is required anymore.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File generate-rc.ps1
 #
-# Run this after `npm run build` whenever the frontend changes.
+# Run this whenever the frontend files change.
 
 $ErrorActionPreference = "Stop"
 
 $webappDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$distDir   = Join-Path $webappDir "dist"
 
-if (-not (Test-Path $distDir)) {
-    Write-Error "dist directory not found: $distDir. Run 'npm run build' first."
+if (-not (Test-Path (Join-Path $webappDir "index.html"))) {
+    Write-Error "index.html not found in: $webappDir"
     exit 1
 }
 
@@ -25,8 +27,19 @@ if (-not (Test-Path $rcDir)) {
 }
 $rcDir = (Resolve-Path $rcDir).Path
 
-# Collect every file under dist/ (sorted for stable diffs).
-$files = Get-ChildItem -Path $distDir -Recurse -File | Sort-Object FullName
+# Files/directories at the webapp root that are not frontend assets and must
+# not be embedded into the binary.
+$excludeNames = @(".gitignore", "generate-rc.ps1", "README.md", "node_modules", "dist")
+
+# Collect every file under the webapp directory (sorted for stable diffs),
+# skipping the excluded entries at the root level.
+$files = Get-ChildItem -Path $webappDir -Recurse -File |
+    Where-Object {
+        $rel = $_.FullName.Substring($webappDir.Length + 1).Replace('\', '/')
+        $firstSegment = ($rel -split '/')[0]
+        $excludeNames -notcontains $firstSegment
+    } |
+    Sort-Object FullName
 
 $lines = @()
 $lines += "#include <windows.h>"
@@ -42,10 +55,10 @@ $lines += ""
 Push-Location $rcDir
 try {
     foreach ($file in $files) {
-        # URL path served by the HTTP server: /index.html, /assets/index-xxxx.js, ...
-        # $file.FullName always starts with $distDir, so Substring is safe here.
-        $relativeToDist = $file.FullName.Substring($distDir.Length + 1).Replace('\', '/')
-        $urlPath = "/" + $relativeToDist
+        # URL path served by the HTTP server: /index.html, /css/main.css, ...
+        # $file.FullName always starts with $webappDir, so Substring is safe here.
+        $relativeToWebapp = $file.FullName.Substring($webappDir.Length + 1).Replace('\', '/')
+        $urlPath = "/" + $relativeToWebapp
 
         # Filesystem path relative to the .rc file's directory, backslashes doubled.
         $relativeToRc = (Resolve-Path -LiteralPath $file.FullName -Relative).Replace('\', '\\')

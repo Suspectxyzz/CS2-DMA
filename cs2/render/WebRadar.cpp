@@ -48,6 +48,7 @@ static std::string SanitizeUtf8(const std::string& s) {
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <cmath>
 #include <chrono>
 #include <shared_mutex>
 #include <fstream>
@@ -633,20 +634,41 @@ void WebRadarServer::ClientLoop(SOCKET clientSock) {
 				}
 
 				// Task 8: HTTP polling endpoint /api/live
-				if (cleanPath == "/api/live") {
-					std::string payload = GetLatestPayloadForPolling();
-					std::string resp =
-						"HTTP/1.1 200 OK\r\n"
-						"Content-Type: application/json\r\n"
-						"Cache-Control: no-store\r\n"
-						"Access-Control-Allow-Origin: " + corsOrigin + "\r\n"
-						"Content-Length: " + std::to_string(payload.size()) + "\r\n"
-						"Connection: close\r\n"
-						"\r\n" + payload;
-					send(clientSock, resp.c_str(), (int)resp.size(), 0);
-					closesocket(clientSock);
-					return;
-				}
+			if (cleanPath == "/api/live") {
+				std::string payload = GetLatestPayloadForPolling();
+				std::string resp =
+					"HTTP/1.1 200 OK\r\n"
+					"Content-Type: application/json\r\n"
+					"Cache-Control: no-store\r\n"
+					"Access-Control-Allow-Origin: " + corsOrigin + "\r\n"
+					"Content-Length: " + std::to_string(payload.size()) + "\r\n"
+					"Connection: close\r\n"
+					"\r\n" + payload;
+				send(clientSock, resp.c_str(), (int)resp.size(), 0);
+				closesocket(clientSock);
+				return;
+			}
+
+			// Task 14: RTT measurement endpoint — lightweight, no auth.
+			// Returns server-side unix-ms timestamp so the frontend can compute
+			// round-trip time via fetch("/api/ping").
+			if (cleanPath == "/api/ping") {
+				auto now = std::chrono::system_clock::now();
+				auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+					now.time_since_epoch()).count();
+				std::string body = "{\"t\":" + std::to_string(ms) + "}";
+				std::string resp =
+					"HTTP/1.1 200 OK\r\n"
+					"Content-Type: application/json\r\n"
+					"Cache-Control: no-store\r\n"
+					"Access-Control-Allow-Origin: " + corsOrigin + "\r\n"
+					"Content-Length: " + std::to_string(body.size()) + "\r\n"
+					"Connection: close\r\n"
+					"\r\n" + body;
+				send(clientSock, resp.c_str(), (int)resp.size(), 0);
+				closesocket(clientSock);
+				return;
+			}
 
 				if (cleanPath == "/cs2_auth_status") {
 					std::string json = "{\"password_required\":" + std::string(MenuConfig::WebRadarPasswordEnabled ? "true" : "false") + "}";
@@ -890,6 +912,8 @@ void WebRadarServer::Broadcast(const std::string& message) {
 				}
 			} else {
 				sentCount++;
+				// Task 17: accumulate bytes actually pushed to clients.
+				m_stats.bytesOutTotal += message.size();
 				++it;
 			}
 		}
@@ -913,6 +937,8 @@ void WebRadarServer::Broadcast(const std::string& message) {
 					}
 				} else {
 					sentCount++;
+					// Task 17: accumulate bytes actually pushed to clients.
+					m_stats.bytesOutTotal += sseMsg.size();
 					++it;
 				}
 			}
@@ -942,11 +968,10 @@ void WebRadarServer::RemoveSseClient(SOCKET sock) {
 }
 
 // ============================================================================
-//  Vite Dev Server process management (auto-start/stop with WebRadar toggle)
+//  Webapp directory discovery (filesystem fallback for dev mode)
+//  Embedded RCDATA resources are always tried first by ServeStaticFile;
+//  the filesystem is only used when the binary runs from a source checkout.
 // ============================================================================
-
-static HANDLE g_viteJob = nullptr;
-static HANDLE g_viteProcess = nullptr;
 
 static std::string FindWebappDir() {
 	char exePath[MAX_PATH]{};
@@ -954,91 +979,17 @@ static std::string FindWebappDir() {
 	std::string exeDir(exePath);
 	exeDir = exeDir.substr(0, exeDir.find_last_of("\\/"));
 
-	// Try known paths relative to exe
-	// First: built dist directory (for Release distribution, no Node.js needed)
-	const char* distCandidates[] = {
+	// Look for the webapp source directory (plain static files, no build step).
+	const char* candidates[] = {
+		"\\external\\webradar\\webapp",
 		"\\webapp",
-		"\\external\\webradar\\webapp\\dist",
 	};
-	for (auto rel : distCandidates) {
+	for (auto rel : candidates) {
 		std::string path = exeDir + rel;
 		if (GetFileAttributesA((path + "\\index.html").c_str()) != INVALID_FILE_ATTRIBUTES)
 			return path;
 	}
-
-	// Second: source directory (for development, needs Node.js + npx vite)
-	const char* srcCandidates[] = {
-		"\\external\\webradar\\webapp",
-	};
-	for (auto rel : srcCandidates) {
-		std::string path = exeDir + rel;
-		if (GetFileAttributesA((path + "\\package.json").c_str()) != INVALID_FILE_ATTRIBUTES)
-			return path;
-	}
 	return {};
-}
-
-static bool g_isDistDir = false;
-
-static void StartViteDevServer() {
-	if (g_viteProcess) return;
-
-	g_webappDir = FindWebappDir();
-	if (g_webappDir.empty()) {
-		LOG_ERROR("WebRadar", "Webapp directory not found, cannot start frontend");
-		return;
-	}
-
-	// If it's a dist directory (has index.html, no package.json),
-	// the built-in HTTP server will serve files — no Vite needed
-	g_isDistDir = (GetFileAttributesA((g_webappDir + "\\package.json").c_str()) == INVALID_FILE_ATTRIBUTES);
-	if (g_isDistDir) {
-		LOG_INFO("WebRadar", "Using built-in HTTP server for dist directory: {}", g_webappDir);
-		return;
-	}
-
-	// Job Object: kills entire process tree (cmd→npx→node) when handle is closed
-	g_viteJob = CreateJobObjectA(nullptr, nullptr);
-	if (g_viteJob) {
-		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli{};
-		jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-		SetInformationJobObject(g_viteJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
-	}
-
-	STARTUPINFOA si{};
-	PROCESS_INFORMATION pi{};
-	si.cb = sizeof(si);
-	si.dwFlags = STARTF_USESHOWWINDOW;
-	si.wShowWindow = SW_HIDE;
-
-	char cmd[] = "cmd /c npx vite --host";
-
-	if (CreateProcessA(nullptr, cmd, nullptr, nullptr, FALSE,
-		CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, g_webappDir.c_str(), &si, &pi))
-	{
-		if (g_viteJob)
-			AssignProcessToJobObject(g_viteJob, pi.hProcess);
-		ResumeThread(pi.hThread);
-		g_viteProcess = pi.hProcess;
-		CloseHandle(pi.hThread);
-		LOG_INFO("WebRadar", "Vite dev server started (PID: {}, dir: {})", pi.dwProcessId, g_webappDir);
-	} else {
-		LOG_ERROR("WebRadar", "Failed to start Vite: error {}", GetLastError());
-		if (g_viteJob) { CloseHandle(g_viteJob); g_viteJob = nullptr; }
-	}
-}
-
-static void StopViteDevServer() {
-	if (g_viteJob) {
-		TerminateJobObject(g_viteJob, 0);
-		CloseHandle(g_viteJob);
-		g_viteJob = nullptr;
-	}
-	if (g_viteProcess) {
-		CloseHandle(g_viteProcess);
-		g_viteProcess = nullptr;
-	}
-	LOG_INFO("WebRadar", "Vite dev server stopped");
 }
 
 // ============================================================================
@@ -1092,11 +1043,14 @@ static std::string CleanWeaponName(const std::string& raw) {
 
 // Build m_weapons JSON object from full weapon list + active weapon
 static void BuildWeaponsObject(rapidjson::Value& weapons, const std::string& rawActive,
-	const std::vector<std::string>& weaponList, rapidjson::Document::AllocatorType& a) {
+	const std::vector<std::string>& weaponList, int ammoClip, rapidjson::Document::AllocatorType& a) {
 	weapons.SetObject();
 	std::string active = CleanWeaponName(rawActive);
 	if (!active.empty())
 		weapons.AddMember("m_active", rapidjson::Value(active.c_str(), a), a);
+
+	if (ammoClip >= 0)
+		weapons.AddMember("m_ammo_clip", ammoClip, a);
 
 	// If we have a full weapon list, use it for proper categorization
 	const auto& src = weaponList.empty() ? std::vector<std::string>{active} : weaponList;
@@ -1148,13 +1102,29 @@ static void SerializePlayer(rapidjson::Value& players, const CEntity& e,
 	rapidjson::Value pos(rapidjson::kObjectType);
 	pos.AddMember("x", e.Pawn.Pos.x, a);
 	pos.AddMember("y", e.Pawn.Pos.y, a);
+	pos.AddMember("z", e.Pawn.Pos.z, a);
 	p.AddMember("m_position", pos, a);
 
-	p.AddMember("m_eye_angle", e.Pawn.ViewAngle.y, a);
+	// Convert CS2 ViewAngle.y (-180..180) to BoltObserv compass angle (0..360).
+	// BoltObserv's wrap-around logic in loopFast.js assumes 0..360 range;
+	// without this conversion, crossing the 180/-180 boundary causes the
+	// dot to spin 360 degrees.
+	float compassAngle = 90.0f - e.Pawn.ViewAngle.y;
+	compassAngle = fmodf(compassAngle, 360.0f);
+	if (compassAngle < 0) compassAngle += 360.0f;
+	p.AddMember("m_eye_angle", compassAngle, a);
+
+	// m_flashed: FlashDuration (seconds remaining). Populated by DataThread
+	// via Offset::flFlashDuration; defaults to 0.0f when unreadable.
+	p.AddMember("m_flashed", e.Pawn.FlashDuration, a);
 
 	rapidjson::Value weapons(rapidjson::kObjectType);
-	BuildWeaponsObject(weapons, e.Pawn.WeaponName, e.Pawn.WeaponList, a);
+	BuildWeaponsObject(weapons, e.Pawn.WeaponName, e.Pawn.WeaponList, e.Pawn.AmmoClip, a);
 	p.AddMember("m_weapons", weapons, a);
+
+	// m_ammo_clip at player root level: the frontend (_socket.js) reads
+	// p.m_ammo_clip directly. Also kept inside m_weapons for backward compat.
+	p.AddMember("m_ammo_clip", e.Pawn.AmmoClip, a);
 
 	p.AddMember("m_has_helmet", e.Pawn.HasHelmet, a);
 	p.AddMember("m_has_defuser", e.Pawn.HasDefuser, a);
@@ -1170,6 +1140,7 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 	auto& a = doc.GetAllocator();
 
 	doc.AddMember("m_local_team", snap.LocalPlayer.Controller.TeamID, a);
+	doc.AddMember("m_round_phase", rapidjson::Value(snap.roundPhase, a), a);
 
 	// Task 18: Resolve map name via registry. If the cleaned map name is
 	// known (in our map registry), use it directly. If unknown (workshop
@@ -1209,6 +1180,24 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 
 	doc.AddMember("m_players", players, a);
 
+	// m_observed_idx: index into m_players of the pawn the local player is
+	// currently spectating. Resolved by matching the local player's
+	// ObserverTarget handle (lower 16 bits = entity index) against each
+	// entity's Controller.Pawn handle. -1 when not spectating anyone
+	// (first-person, alive, or target unreadable).
+	int observedIdx = -1;
+	if (snap.LocalObserverTarget != 0) {
+		DWORD observedHandle = snap.LocalObserverTarget & 0xFFFF;
+		bool localAdded = (lp.Controller.TeamID >= 2);
+		for (size_t i = 0; i < snap.Entities.size(); i++) {
+			if ((snap.Entities[i].Controller.Pawn & 0xFFFF) == observedHandle) {
+				observedIdx = (int)i + (localAdded ? 1 : 0);
+				break;
+			}
+		}
+	}
+	doc.AddMember("m_observed_idx", observedIdx, a);
+
 	// Bomb data
 	if (snap.Bomb.isPlanted || (snap.Bomb.x != 0 || snap.Bomb.y != 0) || snap.Bomb.carrierPawnHandle != 0) {
 		rapidjson::Value bomb(rapidjson::kObjectType);
@@ -1220,6 +1209,11 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 			bomb.AddMember("m_is_defused", snap.Bomb.isDefused, a);
 			bomb.AddMember("m_is_defusing", snap.Bomb.isDefusing, a);
 			bomb.AddMember("m_defuse_time", snap.Bomb.defuseTime, a);
+			if (snap.Bomb.isDefusing) {
+				bomb.AddMember("m_defuser_handle", (int)snap.Bomb.defuserPawnHandle, a);
+			}
+		} else if (snap.Bomb.carrierPawnHandle != 0) {
+			bomb.AddMember("m_is_planting", snap.Bomb.isPlanting, a);
 		}
 		doc.AddMember("m_bomb", bomb, a);
 	}
@@ -1231,25 +1225,58 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 			const char* typeStr = nullptr;
 			float maxDuration = 0.f;
 			switch (proj.Type) {
-				case PROJ_FLASH:   typeStr = "flash";     break;
-				case PROJ_SMOKE:   typeStr = "smoke";     maxDuration = 18.0f; break;
+				case PROJ_FLASH:   typeStr = "flash";     maxDuration = 2.5f;  break;
+				case PROJ_SMOKE:   typeStr = "smoke";     maxDuration = 20.0f; break;
 				case PROJ_HE:      typeStr = "explosive"; break;
 				case PROJ_MOLOTOV: typeStr = "inferno";   maxDuration = 7.0f;  break;
 				case PROJ_DECOY:   typeStr = "decoy";     break;
 				default: continue;
 			}
+			// Only push detonated smoke/inferno/flash as effects.
+			// In-flight (not yet detonated) smoke/inferno/flash are pushed as
+			// projectiles (icons) so the frontend shows real-time position.
+			// HE (explosive) is always pushed as projectile icon regardless of detonation.
+			bool pushAsEffect = proj.Exploded &&
+				(proj.Type == PROJ_SMOKE || proj.Type == PROJ_MOLOTOV || proj.Type == PROJ_FLASH);
 			rapidjson::Value p(rapidjson::kObjectType);
-			p.AddMember("m_type", rapidjson::Value(typeStr, a), a);
-			rapidjson::Value pos(rapidjson::kObjectType);
-			pos.AddMember("x", proj.Position.x, a);
-			pos.AddMember("y", proj.Position.y, a);
-			p.AddMember("m_position", pos, a);
+		p.AddMember("m_type", rapidjson::Value(typeStr, a), a);
+		rapidjson::Value pos(rapidjson::kObjectType);
+		pos.AddMember("x", proj.Position.x, a);
+		pos.AddMember("y", proj.Position.y, a);
+		pos.AddMember("z", proj.Position.z, a);
+		p.AddMember("m_position", pos, a);
+		// Task 6: thrower team (2=T, 3=CT, 0=unknown)
+		p.AddMember("m_team", proj.Team, a);
+		// Stable entity ID for frontend DOM keying (avoids duplicate elements when position changes)
+		p.AddMember("m_entity_id", proj.EntityId, a);
+		// Detonation flag so frontend can distinguish in-flight vs detonated
+		p.AddMember("m_exploded", proj.Exploded, a);
+		// Whether this projectile should be rendered as a detonated effect (smoke cloud / fire / flash)
+		p.AddMember("m_is_effect", pushAsEffect, a);
 			float lifeRemaining = 0.f;
 			if (maxDuration > 0.f) {
 				lifeRemaining = maxDuration - proj.StationaryTimer - proj.DisappearTimer;
 				if (lifeRemaining < 0.f) lifeRemaining = 0.f;
 			}
 			p.AddMember("m_life_remaining", lifeRemaining, a);
+			// Task 7.1: flash maxDuration (CS2 flashbang max lifetime = 2.5s)
+			if (proj.Type == PROJ_FLASH) {
+				p.AddMember("maxDuration", 2.5f, a);
+			}
+			// Task 7.2-7.4: inferno multi-flame points (molotov/incendiary).
+			// Emit the full firePositions array so the frontend can render the
+			// fire spread polygon instead of a single center point.
+			if (proj.Type == PROJ_MOLOTOV && proj.FlameCount > 0) {
+				rapidjson::Value flames(rapidjson::kArrayType);
+				for (int fi = 0; fi < proj.FlameCount; fi++) {
+					rapidjson::Value fp(rapidjson::kObjectType);
+					fp.AddMember("x", proj.Flames[fi].x, a);
+					fp.AddMember("y", proj.Flames[fi].y, a);
+					fp.AddMember("z", proj.Flames[fi].z, a);
+					flames.PushBack(fp, a);
+				}
+				p.AddMember("m_flames", flames, a);
+			}
 			projectiles.PushBack(p, a);
 		}
 		doc.AddMember("m_projectiles", projectiles, a);
@@ -1324,6 +1351,13 @@ void WebRadarServer::WorkerLoop() {
 		m_stats.serializeUsTotal += us;
 		m_stats.serializeUsCount++;
 
+		// Task 17: update activeMap from the latest snapshot.
+		{
+			std::string cleanName = CleanMapName(snap.MapName);
+			std::lock_guard<std::mutex> lock(m_stats.m_textMutex);
+			m_stats.activeMap = cleanName;
+		}
+
 		size_t payloadBytes = json.size();
 		{
 			std::lock_guard<std::mutex> lock(m_payloadMutex);
@@ -1387,7 +1421,23 @@ RuntimeStatsSnapshot WebRadarServer::GetStats() const {
 	s.payloadBytesLast = m_stats.payloadBytesLast.load();
 	s.payloadBytesPeak = m_stats.payloadBytesPeak.load();
 	s.clientCount = GetClientCount();
+	// Task 17: derived stats.
+	s.sendHz = m_stats.sendHz.load();
+	s.bytesOutPerSec = m_stats.bytesOutPerSec.load();
+	s.bytesOutTotal = m_stats.bytesOutTotal.load();
+	{
+		std::lock_guard<std::mutex> lock(m_stats.m_textMutex);
+		s.activeMap = m_stats.activeMap;
+		s.statusText = m_stats.statusText;
+	}
 	return s;
+}
+
+void WebRadarServer::UpdateRuntimeDerivedStats(double sendHz, uint64_t bytesPerSec, const std::string& statusText) {
+	m_stats.sendHz.store(sendHz);
+	m_stats.bytesOutPerSec.store(bytesPerSec);
+	std::lock_guard<std::mutex> lock(m_stats.m_textMutex);
+	m_stats.statusText = statusText;
 }
 
 std::string WebRadarServer::GetLatestPayloadForPolling() const {
@@ -1418,7 +1468,6 @@ VOID WebRadarThread() {
 			if (!MenuConfig::ShowWebRadar) {
 				if (server.IsRunning()) {
 					server.Stop();   // stops worker + accept + closes clients
-					StopViteDevServer();
 					LOG_INFO("WebRadar", "Disabled by user");
 				}
 				g_webRadarRunning.store(false);
@@ -1435,13 +1484,45 @@ VOID WebRadarThread() {
 					Sleep(5000);
 					continue;
 				}
-				StartViteDevServer();
+				// Locate the webapp directory for filesystem fallback (dev mode).
+				// Embedded RCDATA resources are always tried first by ServeStaticFile.
+				g_webappDir = FindWebappDir();
+				if (g_webappDir.empty()) {
+					LOG_WARNING("WebRadar", "Webapp directory not found; relying on embedded assets only");
+				} else {
+					LOG_INFO("WebRadar", "Webapp directory: {}", g_webappDir);
+				}
 
 				// Start the serializer worker — it produces payloads off this
 				// broadcast path so slow clients can't stall serialization.
 				server.StartWorker();
 			}
 			g_webRadarRunning.store(true);
+
+			// ---- Task 17: compute derived stats (sendHz / bytesOutPerSec / statusText) ----
+			// Sample framesSent and bytesOutTotal every ~1s and push the rates
+			// back into the server so GetStats() / GUI can read them.
+			static auto prevStatsTime = std::chrono::steady_clock::now();
+			static uint64_t prevFramesSent = 0;
+			static uint64_t prevBytesOut = 0;
+			auto statsNow = std::chrono::steady_clock::now();
+			double statsElapsed = std::chrono::duration<double>(statsNow - prevStatsTime).count();
+			if (statsElapsed >= 1.0) {
+				RuntimeStatsSnapshot cur = server.GetStats();
+				double hz = (cur.framesSent > prevFramesSent)
+					? (double)(cur.framesSent - prevFramesSent) / statsElapsed
+					: 0.0;
+				uint64_t bytesDelta = (cur.bytesOutTotal > prevBytesOut)
+					? (cur.bytesOutTotal - prevBytesOut)
+					: 0;
+				uint64_t bps = (uint64_t)(bytesDelta / statsElapsed);
+				std::string status = "listening";
+				if (cur.clientCount == 0) status = "listening (no clients)";
+				server.UpdateRuntimeDerivedStats(hz, bps, status);
+				prevFramesSent = cur.framesSent;
+				prevBytesOut = cur.bytesOutTotal;
+				prevStatsTime = statsNow;
+			}
 
 			// ---- Update client count + stats for UI ----
 			g_webRadarClientCount.store(server.GetClientCount());

@@ -1,0 +1,89 @@
+// ============================= MAIN CONFIG FILE =============================
+// BoltObserv 雷达配置文件（CS2-DMA 移植版）
+// 可在此文件直接修改值，也可创建 config.override.json5 覆盖
+// 运行时可通过 localStorage 覆盖默认值
+
+{
+	"_version": "1.6.0",
+
+	// Settings that will change the way the radar is displayed
+	"radar": {
+		// Hide advisories on the radar
+		"hideAdvisories": false,
+		// When true, players higher on the map will show over lower ones
+		// If false, the player slot number determines the stacking order
+		// The spectated player is always visible on top of everything
+		"highestPlayerOnTop": true,
+		// Show the buyzones on the map, or only when players can buy
+		// Only works on SimpleRadar maps, can either be "never", "buytime" or "always"
+		"showBuyzones": "buytime",
+
+		// When the bomb is planted, show how far away players have to be to survive the blast, options are:
+		// "never"   disable this feature
+		// "active"  shown when bomb countdown under 10s, distance every player has to run to survive
+		"showBlastRadius": "active",
+
+		// Show the player name on the dot, options are:
+		// "never"  only show the spec number (observer slot)
+		// "both"   show the name of the player under the dot
+		// "always" replace the spec number by the player name
+		"showName": "never",
+		// Truncate the name of the player after this many characters
+		"maxNameLength": 8,
+
+		// Show muzzle flashes for players shooting
+		"shooting": true,
+		// Show red indicators on player dots when their health gets lower
+		"damage": true,
+		// Show flashed players in a lighter color
+		"flashes": true,
+		// Show flying projectiles on the map
+		"projectiles": true,
+
+		// Give active smokes the color of the team that threw it
+		"smokeColors": true,
+		// Show projectiles as very plain and clear letter combinations
+		"plainProjectiles": false,
+
+		// Frames to smooth out player movement
+		"playerSmoothing": 13,
+		// Frames to smooth out flying projectile movement
+		"projectileSmoothing": 5,
+		// Opacity between 0 and 1 of the dead player crosses, set to 0 to fully hide
+		"tombstoneOpacity": 0.4,
+
+		// Amount of scaling to apply to player dots on the radar
+		// Values above 1 might be blurry
+		"playerDotScale": 0.7,
+		// Same as the above, but for the bomb
+		"bombDotScale": 0.7
+	},
+
+	// Show a vertical indicator on every player dot, indicating how high the player is on the map
+	"vertIndicator": {
+		// Indicator type, can either be "none", "color" or "scale"
+		"type": "scale",
+
+		// RGB values for the color indicator, from lowest to highest
+		"colorRange": [[13, 255, 0], [255, 255, 255], [255, 0, 199]],
+		// Controls by how much dots should scale depending on height, works in combination with playerDotScale
+		// 0.5 halves the amount of scaling, 1 keeps it the default, 1.5 makes player dots scale more
+		"scaleDelta": 1
+	},
+
+	// Settings for automatically zooming in on alive players on the map
+	"autozoom": {
+		// Enable or disable autozoom
+		"enable": true,
+
+		// Frames to smooth out zoom movement
+		"smoothing": 32,
+
+		// Percentage of radar space to try to keep as padding between the outermost players and the edge of the radar
+		"padding": 0.3,
+
+		// Only apply autozoom if calculated zoom level would be at least this much
+		// In decimals, where 1.2 would mean 20% more zoomed in than the default radar
+		"minZoom": 1.3
+	}
+}

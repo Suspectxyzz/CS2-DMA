@@ -106,6 +106,70 @@ namespace MyConfigSaver {
         configFile << "ProjectileRangeAlpha " << MenuConfig::ProjectileRangeAlpha << std::endl;
         configFile << "MenuHotKey " << MenuConfig::MenuHotKey << std::endl;
 
+        // ======== ESP Gap-Closure Stage 3 (Task 7-14) ========
+        // Task 7: Offscreen Arrows
+        configFile << "ShowOffscreenArrows " << MenuConfig::ShowOffscreenArrows << std::endl;
+        configFile << "OffscreenArrowColor " << MenuConfig::OffscreenArrowColor.Value.x << " " << MenuConfig::OffscreenArrowColor.Value.y << " " << MenuConfig::OffscreenArrowColor.Value.z << " " << MenuConfig::OffscreenArrowColor.Value.w << std::endl;
+        configFile << "OffscreenArrowSize " << MenuConfig::OffscreenArrowSize << std::endl;
+        // Task 8: Player Flags
+        configFile << "ShowPlayerFlags " << MenuConfig::ShowPlayerFlags << std::endl;
+        configFile << "FlagBlindEnabled " << MenuConfig::FlagBlindEnabled << std::endl;
+        configFile << "FlagBlindColor " << MenuConfig::FlagBlindColor.Value.x << " " << MenuConfig::FlagBlindColor.Value.y << " " << MenuConfig::FlagBlindColor.Value.z << " " << MenuConfig::FlagBlindColor.Value.w << std::endl;
+        configFile << "FlagScopedEnabled " << MenuConfig::FlagScopedEnabled << std::endl;
+        configFile << "FlagScopedColor " << MenuConfig::FlagScopedColor.Value.x << " " << MenuConfig::FlagScopedColor.Value.y << " " << MenuConfig::FlagScopedColor.Value.z << " " << MenuConfig::FlagScopedColor.Value.w << std::endl;
+        configFile << "FlagDefusingEnabled " << MenuConfig::FlagDefusingEnabled << std::endl;
+        configFile << "FlagDefusingColor " << MenuConfig::FlagDefusingColor.Value.x << " " << MenuConfig::FlagDefusingColor.Value.y << " " << MenuConfig::FlagDefusingColor.Value.z << " " << MenuConfig::FlagDefusingColor.Value.w << std::endl;
+        configFile << "FlagKitEnabled " << MenuConfig::FlagKitEnabled << std::endl;
+        configFile << "FlagKitColor " << MenuConfig::FlagKitColor.Value.x << " " << MenuConfig::FlagKitColor.Value.y << " " << MenuConfig::FlagKitColor.Value.z << " " << MenuConfig::FlagKitColor.Value.w << std::endl;
+        configFile << "FlagMoneyEnabled " << MenuConfig::FlagMoneyEnabled << std::endl;
+        configFile << "FlagMoneyColor " << MenuConfig::FlagMoneyColor.Value.x << " " << MenuConfig::FlagMoneyColor.Value.y << " " << MenuConfig::FlagMoneyColor.Value.z << " " << MenuConfig::FlagMoneyColor.Value.w << std::endl;
+        configFile << "FlagFontSize " << MenuConfig::FlagFontSize << std::endl;
+        // Task 9: Visibility Coloring
+        configFile << "VisibilityColoring " << MenuConfig::VisibilityColoring << std::endl;
+        configFile << "VisibleColor " << MenuConfig::VisibleColor.Value.x << " " << MenuConfig::VisibleColor.Value.y << " " << MenuConfig::VisibleColor.Value.z << " " << MenuConfig::VisibleColor.Value.w << std::endl;
+        configFile << "HiddenColor " << MenuConfig::HiddenColor.Value.x << " " << MenuConfig::HiddenColor.Value.y << " " << MenuConfig::HiddenColor.Value.z << " " << MenuConfig::HiddenColor.Value.w << std::endl;
+        // Task 10: Sound ESP
+        configFile << "ShowSoundESP " << MenuConfig::ShowSoundESP << std::endl;
+        configFile << "SoundESPColor " << MenuConfig::SoundESPColor.Value.x << " " << MenuConfig::SoundESPColor.Value.y << " " << MenuConfig::SoundESPColor.Value.z << " " << MenuConfig::SoundESPColor.Value.w << std::endl;
+        // Task 11: C4 Bomb Timer
+        configFile << "ShowBombTimer " << MenuConfig::ShowBombTimer << std::endl;
+        configFile << "BombTimerX " << MenuConfig::BombTimerX << std::endl;
+        configFile << "BombTimerY " << MenuConfig::BombTimerY << std::endl;
+        // Task 12: World ESP
+        configFile << "ShowWorldESP " << MenuConfig::ShowWorldESP << std::endl;
+        configFile << "ShowWorldProjectileTimers " << MenuConfig::ShowWorldProjectileTimers << std::endl;
+        configFile << "ShowWorldSmokeTimer " << MenuConfig::ShowWorldSmokeTimer << std::endl;
+        configFile << "ShowWorldInfernoTimer " << MenuConfig::ShowWorldInfernoTimer << std::endl;
+        configFile << "ShowWorldDecoyTimer " << MenuConfig::ShowWorldDecoyTimer << std::endl;
+        configFile << "WorldESPColor " << MenuConfig::WorldESPColor.Value.x << " " << MenuConfig::WorldESPColor.Value.y << " " << MenuConfig::WorldESPColor.Value.z << " " << MenuConfig::WorldESPColor.Value.w << std::endl;
+        // Task 13: Weapon Ammo
+        configFile << "ShowWeaponAmmo " << MenuConfig::ShowWeaponAmmo << std::endl;
+        configFile << "WeaponAmmoFontSize " << MenuConfig::WeaponAmmoFontSize << std::endl;
+        configFile << "WeaponAmmoColor " << MenuConfig::WeaponAmmoColor.Value.x << " " << MenuConfig::WeaponAmmoColor.Value.y << " " << MenuConfig::WeaponAmmoColor.Value.z << " " << MenuConfig::WeaponAmmoColor.Value.w << std::endl;
+        configFile << "WeaponLowAmmoColor " << MenuConfig::WeaponLowAmmoColor.Value.x << " " << MenuConfig::WeaponLowAmmoColor.Value.y << " " << MenuConfig::WeaponLowAmmoColor.Value.z << " " << MenuConfig::WeaponLowAmmoColor.Value.w << std::endl;
+        // Task 13: Weapon Icon
+        configFile << "ShowWeaponIcon " << MenuConfig::ShowWeaponIcon << std::endl;
+        configFile << "WeaponIconFontSize " << MenuConfig::WeaponIconFontSize << std::endl;
+        configFile << "WeaponIconColor " << MenuConfig::WeaponIconColor.Value.x << " " << MenuConfig::WeaponIconColor.Value.y << " " << MenuConfig::WeaponIconColor.Value.z << " " << MenuConfig::WeaponIconColor.Value.w << std::endl;
+        configFile << "WeaponIconNoKnife " << MenuConfig::WeaponIconNoKnife << std::endl;
+        // Task 12/16: Dropped-weapon world ESP
+        configFile << "ShowWorldItems " << MenuConfig::ShowWorldItems << std::endl;
+        configFile << "WorldItemFontSize " << MenuConfig::WorldItemFontSize << std::endl;
+        // Task 16: EspItemEnabledMask serialized as a 0/1 string (1200 chars).
+        {
+            std::string maskStr(MenuConfig::EspItemEnabledMask.size(), '0');
+            for (size_t i = 0; i < MenuConfig::EspItemEnabledMask.size(); i++)
+                maskStr[i] = MenuConfig::EspItemEnabledMask.test(i) ? '1' : '0';
+            configFile << "EspItemMask " << maskStr << std::endl;
+        }
+        // Task 14: Bar Value Labels
+        configFile << "ShowHealthText " << MenuConfig::ShowHealthText << std::endl;
+        configFile << "ShowArmorText " << MenuConfig::ShowArmorText << std::endl;
+        configFile << "BarLabelFontSize " << MenuConfig::BarLabelFontSize << std::endl;
+        // Stage 2: Render Quality
+        configFile << "InterpolationEnabled " << MenuConfig::InterpolationEnabled << std::endl;
+        configFile << "BoneReliabilityEnabled " << MenuConfig::BoneReliabilityEnabled << std::endl;
+
         // Hotkey bindings
         for (int i = 0; i < MenuConfig::HOTKEY_COUNT; i++) {
             configFile << "Hotkey_" << i << " " << MenuConfig::Hotkeys[i].vkCode << std::endl;
@@ -219,6 +283,72 @@ namespace MyConfigSaver {
                     iss >> MenuConfig::MenuHotKey;
                     strcpy_s(MenuConfig::MenuHotKeyName, GrenadeHelper::GetKeyName(MenuConfig::MenuHotKey));
                 }
+                // ======== ESP Gap-Closure Stage 3 (Task 7-14) ========
+                // Note: using independent if (not else-if) to avoid MSVC C1061
+                // (block nesting limit) from an overly long else-if chain.
+                // Safe because each key is unique.
+                // Task 7: Offscreen Arrows
+                if (key == "ShowOffscreenArrows") iss >> MenuConfig::ShowOffscreenArrows;
+                else if (key == "OffscreenArrowColor") iss >> MenuConfig::OffscreenArrowColor.Value.x >> MenuConfig::OffscreenArrowColor.Value.y >> MenuConfig::OffscreenArrowColor.Value.z >> MenuConfig::OffscreenArrowColor.Value.w;
+                else if (key == "OffscreenArrowSize") iss >> MenuConfig::OffscreenArrowSize;
+                // Task 8: Player Flags
+                else if (key == "ShowPlayerFlags") iss >> MenuConfig::ShowPlayerFlags;
+                else if (key == "FlagBlindEnabled") iss >> MenuConfig::FlagBlindEnabled;
+                else if (key == "FlagBlindColor") iss >> MenuConfig::FlagBlindColor.Value.x >> MenuConfig::FlagBlindColor.Value.y >> MenuConfig::FlagBlindColor.Value.z >> MenuConfig::FlagBlindColor.Value.w;
+                else if (key == "FlagScopedEnabled") iss >> MenuConfig::FlagScopedEnabled;
+                else if (key == "FlagScopedColor") iss >> MenuConfig::FlagScopedColor.Value.x >> MenuConfig::FlagScopedColor.Value.y >> MenuConfig::FlagScopedColor.Value.z >> MenuConfig::FlagScopedColor.Value.w;
+                else if (key == "FlagDefusingEnabled") iss >> MenuConfig::FlagDefusingEnabled;
+                else if (key == "FlagDefusingColor") iss >> MenuConfig::FlagDefusingColor.Value.x >> MenuConfig::FlagDefusingColor.Value.y >> MenuConfig::FlagDefusingColor.Value.z >> MenuConfig::FlagDefusingColor.Value.w;
+                else if (key == "FlagKitEnabled") iss >> MenuConfig::FlagKitEnabled;
+                else if (key == "FlagKitColor") iss >> MenuConfig::FlagKitColor.Value.x >> MenuConfig::FlagKitColor.Value.y >> MenuConfig::FlagKitColor.Value.z >> MenuConfig::FlagKitColor.Value.w;
+                else if (key == "FlagMoneyEnabled") iss >> MenuConfig::FlagMoneyEnabled;
+                else if (key == "FlagMoneyColor") iss >> MenuConfig::FlagMoneyColor.Value.x >> MenuConfig::FlagMoneyColor.Value.y >> MenuConfig::FlagMoneyColor.Value.z >> MenuConfig::FlagMoneyColor.Value.w;
+                else if (key == "FlagFontSize") iss >> MenuConfig::FlagFontSize;
+                // Task 9: Visibility Coloring
+                else if (key == "VisibilityColoring") iss >> MenuConfig::VisibilityColoring;
+                else if (key == "VisibleColor") iss >> MenuConfig::VisibleColor.Value.x >> MenuConfig::VisibleColor.Value.y >> MenuConfig::VisibleColor.Value.z >> MenuConfig::VisibleColor.Value.w;
+                else if (key == "HiddenColor") iss >> MenuConfig::HiddenColor.Value.x >> MenuConfig::HiddenColor.Value.y >> MenuConfig::HiddenColor.Value.z >> MenuConfig::HiddenColor.Value.w;
+                // Task 10: Sound ESP
+                else if (key == "ShowSoundESP") iss >> MenuConfig::ShowSoundESP;
+                else if (key == "SoundESPColor") iss >> MenuConfig::SoundESPColor.Value.x >> MenuConfig::SoundESPColor.Value.y >> MenuConfig::SoundESPColor.Value.z >> MenuConfig::SoundESPColor.Value.w;
+                // Task 11: C4 Bomb Timer
+                else if (key == "ShowBombTimer") iss >> MenuConfig::ShowBombTimer;
+                else if (key == "BombTimerX") iss >> MenuConfig::BombTimerX;
+                else if (key == "BombTimerY") iss >> MenuConfig::BombTimerY;
+                // Task 12: World ESP
+                else if (key == "ShowWorldESP") iss >> MenuConfig::ShowWorldESP;
+                else if (key == "ShowWorldProjectileTimers") iss >> MenuConfig::ShowWorldProjectileTimers;
+                else if (key == "ShowWorldSmokeTimer") iss >> MenuConfig::ShowWorldSmokeTimer;
+                else if (key == "ShowWorldInfernoTimer") iss >> MenuConfig::ShowWorldInfernoTimer;
+                else if (key == "ShowWorldDecoyTimer") iss >> MenuConfig::ShowWorldDecoyTimer;
+                else if (key == "WorldESPColor") iss >> MenuConfig::WorldESPColor.Value.x >> MenuConfig::WorldESPColor.Value.y >> MenuConfig::WorldESPColor.Value.z >> MenuConfig::WorldESPColor.Value.w;
+                // Task 13: Weapon Ammo
+                else if (key == "ShowWeaponAmmo") iss >> MenuConfig::ShowWeaponAmmo;
+                else if (key == "WeaponAmmoFontSize") iss >> MenuConfig::WeaponAmmoFontSize;
+                else if (key == "WeaponAmmoColor") iss >> MenuConfig::WeaponAmmoColor.Value.x >> MenuConfig::WeaponAmmoColor.Value.y >> MenuConfig::WeaponAmmoColor.Value.z >> MenuConfig::WeaponAmmoColor.Value.w;
+                else if (key == "WeaponLowAmmoColor") iss >> MenuConfig::WeaponLowAmmoColor.Value.x >> MenuConfig::WeaponLowAmmoColor.Value.y >> MenuConfig::WeaponLowAmmoColor.Value.z >> MenuConfig::WeaponLowAmmoColor.Value.w;
+                // Task 13: Weapon Icon
+                else if (key == "ShowWeaponIcon") iss >> MenuConfig::ShowWeaponIcon;
+                else if (key == "WeaponIconFontSize") iss >> MenuConfig::WeaponIconFontSize;
+                else if (key == "WeaponIconColor") iss >> MenuConfig::WeaponIconColor.Value.x >> MenuConfig::WeaponIconColor.Value.y >> MenuConfig::WeaponIconColor.Value.z >> MenuConfig::WeaponIconColor.Value.w;
+                else if (key == "WeaponIconNoKnife") iss >> MenuConfig::WeaponIconNoKnife;
+                // Task 12/16: Dropped-weapon world ESP
+                else if (key == "ShowWorldItems") iss >> MenuConfig::ShowWorldItems;
+                else if (key == "WorldItemFontSize") iss >> MenuConfig::WorldItemFontSize;
+                // Task 16: EspItemEnabledMask — 0/1 string of 1200 chars.
+                else if (key == "EspItemMask") {
+                    std::string maskStr;
+                    iss >> maskStr;
+                    for (size_t i = 0; i < MenuConfig::EspItemEnabledMask.size() && i < maskStr.size(); i++)
+                        MenuConfig::EspItemEnabledMask.set(i, maskStr[i] == '1');
+                }
+                // Task 14: Bar Value Labels
+                else if (key == "ShowHealthText") iss >> MenuConfig::ShowHealthText;
+                else if (key == "ShowArmorText") iss >> MenuConfig::ShowArmorText;
+                else if (key == "BarLabelFontSize") iss >> MenuConfig::BarLabelFontSize;
+                // Stage 2: Render Quality
+                else if (key == "InterpolationEnabled") iss >> MenuConfig::InterpolationEnabled;
+                else if (key == "BoneReliabilityEnabled") iss >> MenuConfig::BoneReliabilityEnabled;
                 else if (key.substr(0, 7) == "Hotkey_" && key.size() > 7) {
                     int idx = std::atoi(key.substr(7).c_str());
                     if (idx >= 0 && idx < MenuConfig::HOTKEY_COUNT) {

@@ -9,6 +9,7 @@ bool CBone::ResolveBoneAddress(const DWORD64& EntityPawnAddress) {
     DWORD64 GameSceneNode = 0;
     if (!ProcessMgr.ReadMemory<DWORD64>(EntityPawnAddress + Offset::GameSceneNode, GameSceneNode))
         return false;
+    this->SceneNodeAddress = GameSceneNode;
     if (!ProcessMgr.ReadMemory<DWORD64>(GameSceneNode + Offset::BoneArray, this->BoneArrayAddress))
         return false;
 

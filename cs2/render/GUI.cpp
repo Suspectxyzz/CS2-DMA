@@ -11,6 +11,17 @@
 #include <shellapi.h>
 #include <thread>
 #include <chrono>
+#include "../game/OffsetUpdater.h"
+#include "../game/Offsets.h"
+#include "qrcodegen.h"
+#include <atomic>
+
+// Offset update state (for GUI-triggered offset refetch)
+static std::atomic<bool> s_offsetUpdateRunning{false};
+static std::atomic<bool> s_offsetUpdateSuccess{false};
+static std::atomic<bool> s_offsetUpdateDone{false};
+static bool s_triggerSuccessPopup = false;
+static bool s_triggerFailPopup = false;
 
 // ============================================================================
 // Color Scheme: Dark Purple-Blue Accent (UITheme)
@@ -131,35 +142,75 @@ static void SectionHeader(const char* label) {
 	dl->AddRectFilled(ImVec2(afterText.x + 4, afterText.y - 1), ImVec2(afterText.x + ImGui::GetContentRegionAvail().x, afterText.y), ImGui::ColorConvertFloat4ToU32(UITheme::BorderSubtle), 0.0f);
 }
 
+// Render a QR code encoding `url` at the given pixel size using the current
+// window's ImDrawList. The QR is drawn as filled rectangles (white background,
+// dark modules). On failure (e.g. URL too long for QR capacity) a fallback
+// message is shown instead.
+static void DrawQRCode(const char* url, float size) {
+	if (!url || !url[0]) return;
+	try {
+		qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(url, qrcodegen::QrCode::Ecc::MEDIUM);
+		int modules = qr.getSize();
+		if (modules <= 0) {
+			ImGui::TextDisabled("QR code: empty module grid");
+			return;
+		}
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		float moduleSize = size / static_cast<float>(modules);
+		// White background with subtle border
+		draw->AddRectFilled(pos, ImVec2(pos.x + size, pos.y + size), IM_COL32(255, 255, 255, 255));
+		// Dark modules
+		ImU32 dark = IM_COL32(0, 0, 0, 255);
+		for (int y = 0; y < modules; y++) {
+			for (int x = 0; x < modules; x++) {
+				if (qr.getModule(x, y)) {
+					draw->AddRectFilled(
+						ImVec2(pos.x + x * moduleSize, pos.y + y * moduleSize),
+						ImVec2(pos.x + (x + 1) * moduleSize, pos.y + (y + 1) * moduleSize),
+						dark);
+				}
+			}
+		}
+		ImGui::Dummy(ImVec2(size, size));
+	} catch (const std::exception& e) {
+		ImGui::TextDisabled("QR code failed: %s", e.what());
+	}
+}
+
 // ============================================================================
 // Tab 0: Visuals
 // ============================================================================
 static void DrawTab_Visuals() {
+	// Task 22: tooltip helper - shows "(?)" indicator with bilingual tooltip
+	auto tip = [](const char* en, const char* zh) {
+		ImGui::SameLine(); ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip(MenuConfig::SelectedLanguage == 0 ? en : zh);
+	};
+
 	if (ImGui::CollapsingHeader(lang.header_playerbox.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		Gui.MyCheckBox(lang.visuals_showbox.c_str(), &MenuConfig::ShowBoxESP);
 		if (MenuConfig::ShowBoxESP) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4(lang.visuals_boxcolor.c_str(), reinterpret_cast<float*>(&MenuConfig::BoxColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 8);
-			ImGui::TextDisabled("(%s)", lang.visuals_boxcolor.c_str());
+			ImGui::ColorEdit4(lang.visuals_boxcolor.c_str(), reinterpret_cast<float*>(&MenuConfig::BoxColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(180);
 			ImGui::Combo(lang.visuals_boxtype.c_str(), &MenuConfig::BoxType, lang.visuals_boxtypeselect, IM_ARRAYSIZE(lang.visuals_boxtypeselect));
 
 			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat((lang.visuals_thickness + "##box").c_str(), &MenuConfig::BoxThickness, 0.5f, 5.0f, "%.1f");
+			ImGui::SliderFloat((lang.visuals_box_thickness + "##box").c_str(), &MenuConfig::BoxThickness, 0.5f, 5.0f, "%.1f px");
 			if (MenuConfig::BoxType != 2) {
 				ImGui::SetNextItemWidth(150);
-				ImGui::SliderFloat((lang.visuals_rounding + "##box").c_str(), &MenuConfig::BoxRounding, 0.f, 10.f, "%.1f");
+				ImGui::SliderFloat((lang.visuals_rounding + "##box").c_str(), &MenuConfig::BoxRounding, 0.f, 10.f, "%.1f px");
 			}
 			if (MenuConfig::BoxType == 2) {
 				ImGui::SetNextItemWidth(150);
-				ImGui::SliderFloat(lang.visuals_cornersize.c_str(), &MenuConfig::CornerLength, 0.1f, 0.5f, "%.2f");
+				ImGui::SliderFloat(lang.visuals_cornersize.c_str(), &MenuConfig::CornerLength, 0.1f, 0.5f, "%.1f px");
 			}
 			Gui.MyCheckBox((lang.visuals_filled + "##box").c_str(), &MenuConfig::BoxFilled);
 			if (MenuConfig::BoxFilled) {
 				ImGui::SameLine(0, 16);
 				ImGui::SetNextItemWidth(120);
-				ImGui::SliderFloat(lang.visuals_fillalpha.c_str(), &MenuConfig::BoxFillAlpha, 0.01f, 0.5f, "%.2f");
+				ImGui::SliderFloat(lang.visuals_fillalpha.c_str(), &MenuConfig::BoxFillAlpha, 0.01f, 0.5f, "%.0f");
 			}
 		}
 	}
@@ -168,34 +219,31 @@ static void DrawTab_Visuals() {
 		Gui.MyCheckBox(lang.visuals_showbone.c_str(), &MenuConfig::ShowBoneESP);
 		if (MenuConfig::ShowBoneESP) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4(lang.visuals_bonecolor.c_str(), reinterpret_cast<float*>(&MenuConfig::BoneColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 8);
-			ImGui::TextDisabled("(%s)", lang.visuals_bonecolor.c_str());
+			ImGui::ColorEdit4(lang.visuals_bonecolor.c_str(), reinterpret_cast<float*>(&MenuConfig::BoneColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat((lang.visuals_thickness + "##bone").c_str(), &MenuConfig::BoneThickness, 0.5f, 5.0f, "%.1f");
+			ImGui::SliderFloat((lang.visuals_bone_thickness + "##bone").c_str(), &MenuConfig::BoneThickness, 0.5f, 5.0f, "%.1f px");
 		}
 
 		Gui.MyCheckBox(lang.visuals_headdot.c_str(), &MenuConfig::ShowHeadDot);
 		if (MenuConfig::ShowHeadDot) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4("##headdotcol", reinterpret_cast<float*>(&MenuConfig::HeadDotColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+			ImGui::ColorEdit4(lang.visuals_headdot_color.c_str(), reinterpret_cast<float*>(&MenuConfig::HeadDotColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(120);
-			ImGui::SliderFloat(lang.visuals_dotsize.c_str(), &MenuConfig::HeadDotSize, 1.f, 8.f, "%.1f");
+			ImGui::SliderFloat(lang.visuals_dotsize.c_str(), &MenuConfig::HeadDotSize, 1.f, 8.f, "%.0f px");
 		}
 
 		Gui.MyCheckBox(lang.visuals_showeyeray.c_str(), &MenuConfig::ShowEyeRay);
 		if (MenuConfig::ShowEyeRay) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4(lang.visuals_eyeraycolor.c_str(), reinterpret_cast<float*>(&MenuConfig::EyeRayColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 8);
-			ImGui::TextDisabled("(%s)", lang.visuals_eyeraycolor.c_str());
+			ImGui::ColorEdit4(lang.visuals_eyeraycolor.c_str(), reinterpret_cast<float*>(&MenuConfig::EyeRayColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat((lang.visuals_length + "##ray").c_str(), &MenuConfig::EyeRayLength, 10.f, 200.f, "%.0f");
+			ImGui::SliderFloat((lang.visuals_length + "##ray").c_str(), &MenuConfig::EyeRayLength, 10.f, 200.f, "%.0f px");
 			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat((lang.visuals_thickness + "##ray").c_str(), &MenuConfig::EyeRayThickness, 0.5f, 5.0f, "%.1f");
+			ImGui::SliderFloat((lang.visuals_eyeray_thickness + "##ray").c_str(), &MenuConfig::EyeRayThickness, 0.5f, 5.0f, "%.1f px");
 		}
 	}
 
+	// ======== Health & Armor (merged with Bar Value Labels - Task 15) ========
 	if (ImGui::CollapsingHeader(lang.header_health.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		Gui.MyCheckBox(lang.visuals_showbar.c_str(), &MenuConfig::ShowHealthBar);
 		if (MenuConfig::ShowHealthBar) {
@@ -204,96 +252,311 @@ static void DrawTab_Visuals() {
 			ImGui::Combo(lang.visuals_barpos.c_str(), &MenuConfig::HealthBarType, lang.visuals_heathbarselect, IM_ARRAYSIZE(lang.visuals_heathbarselect));
 			if (MenuConfig::HealthBarType == 0) {
 				ImGui::SetNextItemWidth(120);
-				ImGui::SliderFloat((lang.visuals_barwidth + "##hp").c_str(), &MenuConfig::HealthBarWidth, 2.f, 10.f, "%.1f");
+				ImGui::SliderFloat((lang.visuals_healthbar_width + "##hp").c_str(), &MenuConfig::HealthBarWidth, 2.f, 10.f, "%.1f px");
 			}
 		}
 
 		Gui.MyCheckBox(lang.visuals_armorbar.c_str(), &MenuConfig::ShowArmorBar);
 		if (MenuConfig::ShowArmorBar) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4("##armorcol", reinterpret_cast<float*>(&MenuConfig::ArmorBarColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+			ImGui::ColorEdit4(lang.visuals_armorbar_color.c_str(), reinterpret_cast<float*>(&MenuConfig::ArmorBarColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(120);
-			ImGui::Combo((lang.grenade_position + "##armor").c_str(), &MenuConfig::ArmorBarType, lang.armorbar_typeselect, IM_ARRAYSIZE(lang.armorbar_typeselect));
+			ImGui::Combo((lang.visuals_armorbar_position + "##armor").c_str(), &MenuConfig::ArmorBarType, lang.armorbar_typeselect, IM_ARRAYSIZE(lang.armorbar_typeselect));
 			ImGui::SetNextItemWidth(120);
-			ImGui::SliderFloat((lang.visuals_width + "##armor").c_str(), &MenuConfig::ArmorBarWidth, 1.f, 8.f, "%.1f");
+			ImGui::SliderFloat((lang.visuals_armorbar_width + "##armor").c_str(), &MenuConfig::ArmorBarWidth, 1.f, 8.f, "%.1f px");
+		}
+
+		// --- Bar Value Labels (Task 15, moved from Advanced ESP) ---
+		Gui.MyCheckBox(lang.visuals_health_text.c_str(), &MenuConfig::ShowHealthText);
+		Gui.MyCheckBox(lang.visuals_armor_text.c_str(), &MenuConfig::ShowArmorText);
+		if (MenuConfig::ShowHealthText || MenuConfig::ShowArmorText) {
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.visuals_bar_label_fontsize.c_str(), &MenuConfig::BarLabelFontSize, 8.f, 16.f, "%.0f px");
 		}
 	}
 
+	// ======== Weapon (Task 14, new section: WeaponESP + WeaponAmmo + WeaponIcon) ========
+	if (ImGui::CollapsingHeader(lang.header_weapon.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		// --- Weapon ESP (moved from Info & Text) ---
+		Gui.MyCheckBox(lang.visuals_weaponesp.c_str(), &MenuConfig::ShowWeaponESP);
+		if (MenuConfig::ShowWeaponESP) {
+			ImGui::SameLine(0, 16);
+			ImGui::ColorEdit4(lang.visuals_weapon_color.c_str(), reinterpret_cast<float*>(&MenuConfig::WeaponColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::SetNextItemWidth(120);
+			ImGui::SliderFloat((lang.visuals_weapon_size + "##weapon").c_str(), &MenuConfig::WeaponFontSize, 8.f, 24.f, "%.0f px");
+		}
+
+		// --- Weapon Ammo (moved from Advanced ESP) ---
+		Gui.MyCheckBox(lang.visuals_weapon_ammo.c_str(), &MenuConfig::ShowWeaponAmmo);
+		if (MenuConfig::ShowWeaponAmmo) {
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.visuals_ammo_fontsize.c_str(), &MenuConfig::WeaponAmmoFontSize, 8.f, 20.f, "%.0f px");
+			ImGui::ColorEdit4(lang.visuals_ammo_color.c_str(), reinterpret_cast<float*>(&MenuConfig::WeaponAmmoColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::ColorEdit4(lang.visuals_low_ammo_color.c_str(), reinterpret_cast<float*>(&MenuConfig::WeaponLowAmmoColor), ImGuiColorEditFlags_NoInputs);
+		}
+
+		// --- Weapon Icon (moved from Advanced ESP) ---
+		Gui.MyCheckBox(lang.visuals_weapon_icon.c_str(), &MenuConfig::ShowWeaponIcon);
+		if (MenuConfig::ShowWeaponIcon) {
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.visuals_weapon_icon_fontsize.c_str(), &MenuConfig::WeaponIconFontSize, 10.f, 28.f, "%.0f px");
+			ImGui::ColorEdit4(lang.visuals_weapon_icon_color.c_str(), reinterpret_cast<float*>(&MenuConfig::WeaponIconColor), ImGuiColorEditFlags_NoInputs);
+			Gui.MyCheckBox(lang.visuals_weapon_icon_noknife.c_str(), &MenuConfig::WeaponIconNoKnife);
+		}
+	}
+
+	// ======== Info & Text (Task 17: removed WeaponESP, added Spectator List) ========
 	if (ImGui::CollapsingHeader(lang.header_info.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		Gui.MyCheckBox(lang.visuals_name.c_str(), &MenuConfig::ShowPlayerName);
 		if (MenuConfig::ShowPlayerName) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4("##namecol", reinterpret_cast<float*>(&MenuConfig::NameColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+			ImGui::ColorEdit4(lang.visuals_name_color.c_str(), reinterpret_cast<float*>(&MenuConfig::NameColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(120);
-			ImGui::SliderFloat((lang.visuals_size + "##name").c_str(), &MenuConfig::NameFontSize, 8.f, 24.f, "%.0f");
-		}
-
-		Gui.MyCheckBox(lang.visuals_weaponesp.c_str(), &MenuConfig::ShowWeaponESP);
-		if (MenuConfig::ShowWeaponESP) {
-			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4("##weaponcol", reinterpret_cast<float*>(&MenuConfig::WeaponColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SetNextItemWidth(120);
-			ImGui::SliderFloat((lang.visuals_size + "##weapon").c_str(), &MenuConfig::WeaponFontSize, 8.f, 24.f, "%.0f");
+			ImGui::SliderFloat((lang.visuals_name_size + "##name").c_str(), &MenuConfig::NameFontSize, 8.f, 24.f, "%.0f px");
 		}
 
 		Gui.MyCheckBox(lang.visuals_distance.c_str(), &MenuConfig::ShowDistance);
 		if (MenuConfig::ShowDistance) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4("##distcol", reinterpret_cast<float*>(&MenuConfig::DistanceColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+			ImGui::ColorEdit4(lang.visuals_distance_color.c_str(), reinterpret_cast<float*>(&MenuConfig::DistanceColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(120);
-			ImGui::SliderFloat((lang.visuals_size + "##dist").c_str(), &MenuConfig::DistanceFontSize, 8.f, 24.f, "%.0f");
+			ImGui::SliderFloat((lang.visuals_distance_size + "##dist").c_str(), &MenuConfig::DistanceFontSize, 8.f, 24.f, "%.0f px");
 		}
+
+		// --- Spectator List (moved from its own section - Task 17) ---
+		Gui.MyCheckBox(lang.visuals_spectatorlist.c_str(), &MenuConfig::ShowSpectatorList);
 	}
 
 	if (ImGui::CollapsingHeader(lang.header_snapline.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		Gui.MyCheckBox(lang.visuals_line.c_str(), &MenuConfig::ShowLineToEnemy);
 		if (MenuConfig::ShowLineToEnemy) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4(lang.visuals_linecolor.c_str(), reinterpret_cast<float*>(&MenuConfig::LineToEnemyColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 8);
-			ImGui::TextDisabled("(%s)", lang.visuals_linecolor.c_str());
+			ImGui::ColorEdit4(lang.visuals_linecolor.c_str(), reinterpret_cast<float*>(&MenuConfig::LineToEnemyColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat((lang.visuals_thickness + "##line").c_str(), &MenuConfig::LineToEnemyThickness, 0.5f, 5.0f, "%.1f");
+			ImGui::SliderFloat((lang.visuals_line_thickness + "##line").c_str(), &MenuConfig::LineToEnemyThickness, 0.5f, 5.0f, "%.1f px");
 			ImGui::SetNextItemWidth(120);
 			ImGui::Combo((lang.visuals_origin + "##line").c_str(), &MenuConfig::LineToEnemyOrigin, lang.snapline_originselect, IM_ARRAYSIZE(lang.snapline_originselect));
 		}
 	}
 
+	// ======== C4 / Bomb (Task 13: merged with BombTimer) ========
 	if (ImGui::CollapsingHeader(lang.header_bomb.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		Gui.MyCheckBox(lang.visuals_bombesp.c_str(), &MenuConfig::ShowBombESP);
 		if (MenuConfig::ShowBombESP) {
 			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4("##bombplanted", reinterpret_cast<float*>(&MenuConfig::BombPlantedColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("%s", lang.visuals_bombplanted.c_str());
+			ImGui::ColorEdit4(lang.visuals_bombplanted.c_str(), reinterpret_cast<float*>(&MenuConfig::BombPlantedColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SameLine(0, 12);
-			ImGui::ColorEdit4("##bombdefuse", reinterpret_cast<float*>(&MenuConfig::BombDefusingColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("%s", lang.visuals_bombdefusing.c_str());
+			ImGui::ColorEdit4(lang.visuals_bombdefusing.c_str(), reinterpret_cast<float*>(&MenuConfig::BombDefusingColor), ImGuiColorEditFlags_NoInputs);
 
-			ImGui::ColorEdit4("##bombcarrier", reinterpret_cast<float*>(&MenuConfig::BombCarrierColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("%s", lang.visuals_bombcarrier.c_str());
+			ImGui::ColorEdit4(lang.visuals_bombcarrier.c_str(), reinterpret_cast<float*>(&MenuConfig::BombCarrierColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SameLine(0, 12);
-			ImGui::ColorEdit4("##bombdropped", reinterpret_cast<float*>(&MenuConfig::BombDroppedColor), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-			ImGui::SameLine(0, 4);
-			ImGui::TextDisabled("%s", lang.visuals_bombdropped.c_str());
+			ImGui::ColorEdit4(lang.visuals_bombdropped.c_str(), reinterpret_cast<float*>(&MenuConfig::BombDroppedColor), ImGuiColorEditFlags_NoInputs);
 		}
+
+		// --- C4 Bomb Timer (moved from Advanced ESP - Task 13) ---
+		Gui.MyCheckBox(lang.visuals_bomb_timer.c_str(), &MenuConfig::ShowBombTimer);
+		tip("C4 countdown window (draggable)", "C4 倒计时窗口（可拖动）");
 	}
 
-	if (ImGui::CollapsingHeader(lang.proj_header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+	// ======== World & Projectiles (Task 17: merged Grenade Projectile ESP + World ESP) ========
+	if (ImGui::CollapsingHeader(lang.header_world_proj.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		// --- Grenade Projectile ESP (moved from its own section) ---
 		Gui.MyCheckBox(lang.proj_enable.c_str(), &MenuConfig::ShowProjectileESP);
+		tip("Projectile real-time position and range circle", "投掷物实时位置和范围圈");
 		if (MenuConfig::ShowProjectileESP) {
 			Gui.MyCheckBox(lang.proj_range.c_str(), &MenuConfig::ShowProjectileRange);
+			tip("Projectile effect range circle", "投掷物生效范围圈");
 			if (MenuConfig::ShowProjectileRange) {
 				ImGui::SetNextItemWidth(180);
-				ImGui::SliderFloat(lang.proj_rangealpha.c_str(), &MenuConfig::ProjectileRangeAlpha, 0.02f, 0.5f, "%.2f");
+				ImGui::SliderFloat(lang.proj_rangealpha.c_str(), &MenuConfig::ProjectileRangeAlpha, 0.02f, 0.5f, "%.0f");
+			}
+		}
+
+		// --- World ESP (moved from Advanced ESP) ---
+		Gui.MyCheckBox(lang.visuals_world_esp.c_str(), &MenuConfig::ShowWorldESP);
+		tip("Grenade effect timers in the world", "世界中的手雷效果计时器");
+		if (MenuConfig::ShowWorldESP) {
+			Gui.MyCheckBox(lang.visuals_world_timers.c_str(), &MenuConfig::ShowWorldProjectileTimers);
+			ImGui::SameLine(0, 16);
+			ImGui::ColorEdit4(lang.visuals_world_color.c_str(), reinterpret_cast<float*>(&MenuConfig::WorldESPColor), ImGuiColorEditFlags_NoInputs);
+
+			// Task 12: per-type grenade timer sub-switches
+			Gui.MyCheckBox(lang.visuals_world_smoke_timer.c_str(), &MenuConfig::ShowWorldSmokeTimer);
+			Gui.MyCheckBox(lang.visuals_world_inferno_timer.c_str(), &MenuConfig::ShowWorldInfernoTimer);
+			Gui.MyCheckBox(lang.visuals_world_decoy_timer.c_str(), &MenuConfig::ShowWorldDecoyTimer);
+
+			// Task 12/16: dropped-weapon world ESP + per-weapon-id filter.
+			Gui.MyCheckBox(lang.visuals_world_items.c_str(), &MenuConfig::ShowWorldItems);
+			tip("Dropped weapons on the ground", "地面掉落武器显示");
+			if (MenuConfig::ShowWorldItems) {
+				ImGui::SetNextItemWidth(150);
+				ImGui::SliderFloat(lang.visuals_world_item_fontsize.c_str(), &MenuConfig::WorldItemFontSize, 8.f, 20.f, "%.0f px");
+
+				if (ImGui::TreeNode(lang.visuals_item_filter.c_str())) {
+					// Quick actions: enable / disable all known weapons.
+					if (ImGui::Button(lang.visuals_item_filter_all.c_str())) {
+						for (const auto& e : WeaponLookup::kWeaponLookup)
+							MenuConfig::EspItemEnabledMask.set(e.id);
+					}
+					ImGui::SameLine();
+					if (ImGui::Button(lang.visuals_item_filter_none.c_str())) {
+						for (const auto& e : WeaponLookup::kWeaponLookup)
+							MenuConfig::EspItemEnabledMask.reset(e.id);
+					}
+
+					// Group weapons by item-id lists (WeaponSlotKind::Primary
+					// covers SMG/rifle/sniper/heavy, so we sub-classify here).
+					auto drawGroup = [&](const char* title, const uint16_t* ids, size_t count) {
+						if (!ImGui::TreeNode(title)) return;
+						for (size_t i = 0; i < count; i++) {
+							const WeaponLookup::WeaponLookupEntry* e =
+								WeaponLookup::FindWeaponLookupEntry(ids[i]);
+							if (!e) continue;
+							bool enabled = MenuConfig::EspItemEnabledMask.test(e->id);
+							ImGui::Checkbox(e->name, &enabled);
+							MenuConfig::EspItemEnabledMask.set(e->id, enabled);
+						}
+						ImGui::TreePop();
+					};
+					static const uint16_t kPistols[]  = { 1, 2, 3, 4, 30, 32, 36, 61, 63, 64 };
+					static const uint16_t kSmgs[]     = { 17, 19, 23, 24, 26, 33, 34 };
+					static const uint16_t kRifles[]   = { 7, 8, 10, 13, 16, 39, 60 };
+					static const uint16_t kSnipers[]  = { 9, 11, 38, 40 };
+					static const uint16_t kHeavy[]    = { 14, 25, 27, 28, 29, 35 };
+					static const uint16_t kGear[]     = { 31, 57 };
+					drawGroup(lang.visuals_item_filter_pistols.c_str(),  kPistols,  sizeof(kPistols)/sizeof(kPistols[0]));
+					drawGroup(lang.visuals_item_filter_smgs.c_str(),     kSmgs,     sizeof(kSmgs)/sizeof(kSmgs[0]));
+					drawGroup(lang.visuals_item_filter_rifles.c_str(),   kRifles,   sizeof(kRifles)/sizeof(kRifles[0]));
+					drawGroup(lang.visuals_item_filter_snipers.c_str(),  kSnipers,  sizeof(kSnipers)/sizeof(kSnipers[0]));
+					drawGroup(lang.visuals_item_filter_heavy.c_str(),    kHeavy,    sizeof(kHeavy)/sizeof(kHeavy[0]));
+					drawGroup(lang.visuals_item_filter_gear.c_str(),     kGear,     sizeof(kGear)/sizeof(kGear[0]));
+					ImGui::TreePop();
+				}
 			}
 		}
 	}
 
-	if (ImGui::CollapsingHeader(lang.header_spectator.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-		Gui.MyCheckBox(lang.visuals_spectatorlist.c_str(), &MenuConfig::ShowSpectatorList);
+	// ======== Crosshair (Task 11: moved from Fusion Tab) ========
+	if (ImGui::CollapsingHeader(lang.header_crosshair.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.crosshair_enable.c_str(), &MenuConfig::CrosshairEnabled);
+		if (MenuConfig::CrosshairEnabled) {
+			ImGui::SetNextItemWidth(150);
+			ImGui::Combo(lang.crosshair_style.c_str(), &MenuConfig::CrosshairStyle, lang.crosshair_styleselect, IM_ARRAYSIZE(lang.crosshair_styleselect));
+
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.crosshair_size.c_str(), &MenuConfig::CrosshairSize, 1.f, 30.f, "%.0f px");
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.crosshair_thickness.c_str(), &MenuConfig::CrosshairThickness, 0.5f, 5.f, "%.1f");
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.crosshair_gap.c_str(), &MenuConfig::CrosshairGap, 0.f, 20.f, "%.0f px");
+
+			ImGui::ColorEdit4(lang.crosshair_color.c_str(), reinterpret_cast<float*>(&MenuConfig::CrosshairColor), ImGuiColorEditFlags_NoInputs);
+
+			Gui.MyCheckBox(lang.crosshair_onenemycolor.c_str(), &MenuConfig::CrosshairOnEnemyColor);
+			if (MenuConfig::CrosshairOnEnemyColor) {
+				ImGui::SameLine(0, 16);
+				ImGui::ColorEdit4(lang.crosshair_enemycolor.c_str(), reinterpret_cast<float*>(&MenuConfig::CrosshairEnemyColor), ImGuiColorEditFlags_NoInputs);
+			}
+		}
+	}
+
+	// ======== Safe Zone (Task 11: moved from Fusion Tab) ========
+	if (ImGui::CollapsingHeader(lang.header_safezone.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.safezone_enable.c_str(), &MenuConfig::SafeZoneEnabled);
+		if (MenuConfig::SafeZoneEnabled) {
+			ImGui::SetNextItemWidth(180);
+			ImGui::SliderFloat(lang.safezone_radius.c_str(), &MenuConfig::SafeZoneRadius, 1.f, 300.f, "%.0f px");
+			ImGui::SetNextItemWidth(120);
+			ImGui::Combo(lang.safezone_shape.c_str(), &MenuConfig::SafeZoneShape, lang.safezone_shapeselect, IM_ARRAYSIZE(lang.safezone_shapeselect));
+			ImGui::SetNextItemWidth(150);
+			ImGui::Combo(lang.safezone_mode.c_str(), &MenuConfig::SafeZoneMode, lang.safezone_modeselect, IM_ARRAYSIZE(lang.safezone_modeselect));
+
+			if (MenuConfig::SafeZoneMode == 1) {
+				ImGui::Spacing();
+				Gui.MyCheckBox(lang.safezone_skip_box.c_str(), &MenuConfig::SafeZoneSkipBox);
+				Gui.MyCheckBox(lang.safezone_skip_bone.c_str(), &MenuConfig::SafeZoneSkipBone);
+				Gui.MyCheckBox(lang.safezone_skip_healthbar.c_str(), &MenuConfig::SafeZoneSkipHealthBar);
+				Gui.MyCheckBox(lang.safezone_skip_armorbar.c_str(), &MenuConfig::SafeZoneSkipArmorBar);
+				Gui.MyCheckBox(lang.safezone_skip_weapon.c_str(), &MenuConfig::SafeZoneSkipWeapon);
+				Gui.MyCheckBox(lang.safezone_skip_name.c_str(), &MenuConfig::SafeZoneSkipName);
+				Gui.MyCheckBox(lang.safezone_skip_snapline.c_str(), &MenuConfig::SafeZoneSkipSnapline);
+				Gui.MyCheckBox(lang.safezone_skip_eyeray.c_str(), &MenuConfig::SafeZoneSkipEyeRay);
+				Gui.MyCheckBox(lang.safezone_skip_headdot.c_str(), &MenuConfig::SafeZoneSkipHeadDot);
+				Gui.MyCheckBox(lang.safezone_skip_distance.c_str(), &MenuConfig::SafeZoneSkipDistance);
+			}
+		}
+	}
+
+	// ======== Team Filter (Task 12: moved from Settings Tab) ========
+	if (ImGui::CollapsingHeader(lang.header_teamfilter.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.utilities_teamcheck.c_str(), &MenuConfig::TeamCheck);
+	}
+
+	// ======== Offscreen Arrows (Task 17: independent section from Advanced ESP) ========
+	if (ImGui::CollapsingHeader(lang.visuals_offscreen_arrows.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.visuals_offscreen_arrows.c_str(), &MenuConfig::ShowOffscreenArrows);
+		tip("Offscreen enemy direction arrows", "屏外敌人方向指示箭头");
+		if (MenuConfig::ShowOffscreenArrows) {
+			ImGui::SameLine(0, 16);
+			ImGui::ColorEdit4(lang.visuals_arrow_color.c_str(), reinterpret_cast<float*>(&MenuConfig::OffscreenArrowColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat((lang.visuals_arrow_size + "##arrow").c_str(), &MenuConfig::OffscreenArrowSize, 5.f, 30.f, "%.0f px");
+		}
+	}
+
+	// ======== Player Flags (Task 17: independent section from Advanced ESP) ========
+	if (ImGui::CollapsingHeader(lang.visuals_player_flags.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.visuals_player_flags.c_str(), &MenuConfig::ShowPlayerFlags);
+		tip("Player status flags (Blind/Scoped/Defusing/Kit/Money)", "玩家状态标签（Blind/Scoped/Defusing/Kit/Money）");
+		if (MenuConfig::ShowPlayerFlags) {
+			Gui.MyCheckBox(lang.visuals_flag_blind.c_str(), &MenuConfig::FlagBlindEnabled);
+			if (MenuConfig::FlagBlindEnabled) {
+				ImGui::SameLine(0, 16);
+				ImGui::ColorEdit4(lang.visuals_flag_blind_color.c_str(), reinterpret_cast<float*>(&MenuConfig::FlagBlindColor), ImGuiColorEditFlags_NoInputs);
+			}
+			Gui.MyCheckBox(lang.visuals_flag_scoped.c_str(), &MenuConfig::FlagScopedEnabled);
+			if (MenuConfig::FlagScopedEnabled) {
+				ImGui::SameLine(0, 16);
+				ImGui::ColorEdit4(lang.visuals_flag_scoped_color.c_str(), reinterpret_cast<float*>(&MenuConfig::FlagScopedColor), ImGuiColorEditFlags_NoInputs);
+			}
+			Gui.MyCheckBox(lang.visuals_flag_defusing.c_str(), &MenuConfig::FlagDefusingEnabled);
+			if (MenuConfig::FlagDefusingEnabled) {
+				ImGui::SameLine(0, 16);
+				ImGui::ColorEdit4(lang.visuals_flag_defusing_color.c_str(), reinterpret_cast<float*>(&MenuConfig::FlagDefusingColor), ImGuiColorEditFlags_NoInputs);
+			}
+			Gui.MyCheckBox(lang.visuals_flag_kit.c_str(), &MenuConfig::FlagKitEnabled);
+			if (MenuConfig::FlagKitEnabled) {
+				ImGui::SameLine(0, 16);
+				ImGui::ColorEdit4(lang.visuals_flag_kit_color.c_str(), reinterpret_cast<float*>(&MenuConfig::FlagKitColor), ImGuiColorEditFlags_NoInputs);
+			}
+			Gui.MyCheckBox(lang.visuals_flag_money.c_str(), &MenuConfig::FlagMoneyEnabled);
+			if (MenuConfig::FlagMoneyEnabled) {
+				ImGui::SameLine(0, 16);
+				ImGui::ColorEdit4(lang.visuals_flag_money_color.c_str(), reinterpret_cast<float*>(&MenuConfig::FlagMoneyColor), ImGuiColorEditFlags_NoInputs);
+			}
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.visuals_flag_fontsize.c_str(), &MenuConfig::FlagFontSize, 8.f, 20.f, "%.0f px");
+		}
+	}
+
+	// ======== Visibility Coloring (Task 17: independent section from Advanced ESP) ========
+	if (ImGui::CollapsingHeader(lang.visuals_visibility.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.visuals_visibility.c_str(), &MenuConfig::VisibilityColoring);
+		tip("Color by visibility (different color for enemies behind walls)", "根据可见性着色（墙后敌人用不同颜色）");
+		if (MenuConfig::VisibilityColoring) {
+			ImGui::ColorEdit4(lang.visuals_visible_color.c_str(), reinterpret_cast<float*>(&MenuConfig::VisibleColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::ColorEdit4(lang.visuals_hidden_color.c_str(), reinterpret_cast<float*>(&MenuConfig::HiddenColor), ImGuiColorEditFlags_NoInputs);
+		}
+	}
+
+	// ======== Sound ESP (Task 17: independent section from Advanced ESP) ========
+	if (ImGui::CollapsingHeader(lang.visuals_sound_esp.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.visuals_sound_esp.c_str(), &MenuConfig::ShowSoundESP);
+		tip("Player firing sound waves", "玩家开火声波纹");
+		if (MenuConfig::ShowSoundESP) {
+			ImGui::SameLine(0, 16);
+			ImGui::ColorEdit4(lang.visuals_sound_color.c_str(), reinterpret_cast<float*>(&MenuConfig::SoundESPColor), ImGuiColorEditFlags_NoInputs);
+		}
 	}
 }
 
@@ -386,8 +649,12 @@ static void DrawTab_Radar() {
 			ImGui::Text("Serialize avg:  %llu us", (unsigned long long)avgSerUs);
 			ImGui::Text("Broadcast avg:  %llu us", (unsigned long long)avgBcUs);
 			ImGui::Text("Payload last:   %zu bytes", snap.payloadBytesLast);
-			ImGui::Text("Payload peak:   %zu bytes", snap.payloadBytesPeak);
-		}
+		ImGui::Text("Payload peak:   %zu bytes", snap.payloadBytesPeak);
+		// Task 17: derived runtime stats from the backend.
+		ImGui::Text("Bytes/sec:      %llu", (unsigned long long)snap.bytesOutPerSec);
+		ImGui::Text("Active map:     %s", snap.activeMap.empty() ? "-" : snap.activeMap.c_str());
+		ImGui::Text("Status:         %s", snap.statusText.empty() ? "-" : snap.statusText.c_str());
+	}
 
 		// ---- Local / LAN Access ----
 		SectionHeader(lang.webradar_local_access.c_str());
@@ -413,6 +680,21 @@ static void DrawTab_Radar() {
 			if (ImGui::SmallButton((lang.webradar_copy_url + "##lan").c_str())) {
 				ImGui::SetClipboardText(lanUrl);
 			}
+		}
+
+		// ---- QR Code (scan to open on mobile) ----
+		// Prefer LAN URL for mobile scanning; fall back to localhost if LAN IP unavailable.
+		const char* qrUrl = lanUrl[0] ? lanUrl : localUrl;
+		if (qrUrl[0] && ImGui::CollapsingHeader("QR Code##webradar")) {
+			// Center the QR code within the available content width
+			const float qrSize = 180.0f;
+			float avail = ImGui::GetContentRegionAvail().x;
+			if (avail > qrSize) {
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - qrSize) * 0.5f);
+			}
+			DrawQRCode(qrUrl, qrSize);
+			ImGui::Spacing();
+			ImGui::TextDisabled("Scan with phone camera to open");
 		}
 
 		// ---- Cloudflare Tunnel (Public Access) ----
@@ -569,9 +851,13 @@ static void DrawTab_Radar() {
 // Tab 2: Settings
 // ============================================================================
 static void DrawTab_Settings() {
-	if (ImGui::CollapsingHeader(lang.header_general.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-		Gui.MyCheckBox(lang.utilities_teamcheck.c_str(), &MenuConfig::TeamCheck);
+	// Task 22: tooltip helper - shows "(?)" indicator with bilingual tooltip
+	auto tip = [](const char* en, const char* zh) {
+		ImGui::SameLine(); ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip(MenuConfig::SelectedLanguage == 0 ? en : zh);
+	};
 
+	if (ImGui::CollapsingHeader(lang.header_general.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
 		ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
 		Gui.MyCheckBox(lang.settings_vsync.c_str(), &MenuConfig::VSync);
@@ -581,6 +867,14 @@ static void DrawTab_Settings() {
 			if (MenuConfig::MaxFrameRate < 0) MenuConfig::MaxFrameRate = 0;
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", lang.settings_unlimitedtip.c_str());
 		}
+	}
+
+	// ======== Render Quality (Task 16: moved from Advanced ESP) ========
+	if (ImGui::CollapsingHeader(lang.header_render_quality.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.visuals_interpolation.c_str(), &MenuConfig::InterpolationEnabled);
+		tip("Player position interpolation smoothing", "玩家位置插值平滑");
+		Gui.MyCheckBox(lang.visuals_bone_reliability.c_str(), &MenuConfig::BoneReliabilityEnabled);
+		tip("Bone data reliability check", "骨骼数据可靠性检查");
 	}
 
 	if (ImGui::CollapsingHeader(lang.header_display.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -688,6 +982,106 @@ static void DrawTab_Settings() {
 				Logger::SetDebugMode(MenuConfig::DebugLog);
 		}
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", lang.settings_debuglog_tip.c_str());
+
+		// --- Offset refetch section ---
+		ImGui::Spacing();
+		ImGui::Separator();
+		// Show local offset version + date
+		if (!Offset::LocalPatchVersion.empty()) {
+			ImGui::TextColored(UITheme::TextMuted, lang.offset_local_version.c_str(), Offset::LocalPatchVersion.c_str(), Offset::GameUpdateDate.c_str());
+		} else if (!Offset::GameUpdateDate.empty()) {
+			ImGui::TextColored(UITheme::TextMuted, lang.offset_current_date.c_str(), Offset::GameUpdateDate.c_str());
+		}
+		// Show latest game version + match status
+		if (!Offset::LatestPatchVersion.empty()) {
+			if (Offset::VersionMismatch) {
+				ImGui::TextColored(UITheme::Danger, lang.offset_latest_mismatch.c_str(), Offset::LatestPatchVersion.c_str());
+			} else {
+				ImGui::TextColored(UITheme::Success, lang.offset_latest_match.c_str(), Offset::LatestPatchVersion.c_str());
+			}
+		}
+		if (ImGui::Button(lang.offset_refetch_button.c_str(), ImVec2(200, 28))) {
+			if (!s_offsetUpdateRunning.load()) {
+				ImGui::OpenPopup("##OffsetGuide");
+			}
+		}
+
+		// Guide dialog
+		if (ImGui::BeginPopupModal("##OffsetGuide", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("%s", lang.offset_guide_title.c_str());
+			ImGui::Separator();
+			ImGui::TextWrapped("%s", lang.offset_guide_body.c_str());
+			ImGui::Spacing();
+			if (ImGui::Button(lang.offset_guide_confirm.c_str(), ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+				s_offsetUpdateRunning.store(true);
+				s_offsetUpdateDone.store(false);
+				std::thread([]() {
+					bool ok = RunOffsetUpdateWithDma();
+					s_offsetUpdateSuccess.store(ok);
+					s_offsetUpdateDone.store(true);
+					s_offsetUpdateRunning.store(false);
+				}).detach();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button(lang.offset_guide_cancel.c_str(), ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+
+		// Status display (while running)
+		if (s_offsetUpdateRunning.load()) {
+			ImGui::TextColored(UITheme::Warning, "%s", lang.offset_status_running.c_str());
+		}
+
+		// Check if update just finished
+		if (s_offsetUpdateDone.load()) {
+			if (s_offsetUpdateSuccess.load()) {
+				s_triggerSuccessPopup = true;
+			} else {
+				s_triggerFailPopup = true;
+			}
+			s_offsetUpdateDone.store(false);
+		}
+
+		// Trigger result popups
+		if (s_triggerSuccessPopup) {
+			ImGui::OpenPopup("##OffsetSuccess");
+			s_triggerSuccessPopup = false;
+		}
+		if (s_triggerFailPopup) {
+			ImGui::OpenPopup("##OffsetFail");
+			s_triggerFailPopup = false;
+		}
+
+		// Success dialog
+		if (ImGui::BeginPopupModal("##OffsetSuccess", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("%s", lang.offset_result_success_title.c_str());
+			ImGui::Separator();
+			ImGui::TextWrapped("%s", lang.offset_result_success_body.c_str());
+			ImGui::Spacing();
+			if (ImGui::Button(lang.offset_result_restart.c_str(), ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+				RestartSelf();
+			}
+			ImGui::EndPopup();
+		}
+
+		// Failure dialog
+		if (ImGui::BeginPopupModal("##OffsetFail", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("%s", lang.offset_result_fail_title.c_str());
+			ImGui::Separator();
+			ImGui::TextWrapped("%s", lang.offset_result_fail_body.c_str());
+			ImGui::Spacing();
+			if (ImGui::Button(lang.offset_result_fail_ok.c_str(), ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+				ReattachDma();
+			}
+			ImGui::EndPopup();
+		}
+		ImGui::Separator();
+		// --- End offset refetch section ---
 
 		ImGui::Spacing();
 		if (ImGui::Button(lang.utilities_reloadhack.c_str(), ImVec2(200, 28))) {
@@ -799,62 +1193,6 @@ static void DrawTab_Hotkeys() {
 
 	ImGui::Spacing();
 	ImGui::TextColored(UITheme::Warning, "%s", lang.grenade_hotkeytip.c_str());
-}
-
-// ============================================================================
-// Tab 5: Fusion Optimizer (融合器优化)
-// ============================================================================
-static void DrawTab_Fusion() {
-	// ---- Crosshair Overlay ----
-	if (ImGui::CollapsingHeader(lang.header_crosshair.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-		Gui.MyCheckBox(lang.crosshair_enable.c_str(), &MenuConfig::CrosshairEnabled);
-		if (MenuConfig::CrosshairEnabled) {
-			ImGui::SetNextItemWidth(150);
-			ImGui::Combo(lang.crosshair_style.c_str(), &MenuConfig::CrosshairStyle, lang.crosshair_styleselect, IM_ARRAYSIZE(lang.crosshair_styleselect));
-
-			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat(lang.crosshair_size.c_str(), &MenuConfig::CrosshairSize, 1.f, 30.f, "%.0f px");
-			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat(lang.crosshair_thickness.c_str(), &MenuConfig::CrosshairThickness, 0.5f, 5.f, "%.1f");
-			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat(lang.crosshair_gap.c_str(), &MenuConfig::CrosshairGap, 0.f, 20.f, "%.0f px");
-
-			ImGui::ColorEdit4(lang.crosshair_color.c_str(), reinterpret_cast<float*>(&MenuConfig::CrosshairColor), ImGuiColorEditFlags_NoInputs);
-
-			Gui.MyCheckBox(lang.crosshair_onenemycolor.c_str(), &MenuConfig::CrosshairOnEnemyColor);
-			if (MenuConfig::CrosshairOnEnemyColor) {
-				ImGui::SameLine(0, 16);
-				ImGui::ColorEdit4(lang.crosshair_enemycolor.c_str(), reinterpret_cast<float*>(&MenuConfig::CrosshairEnemyColor), ImGuiColorEditFlags_NoInputs);
-			}
-		}
-	}
-
-	// ---- Safe Zone ----
-	if (ImGui::CollapsingHeader(lang.header_safezone.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-		Gui.MyCheckBox(lang.safezone_enable.c_str(), &MenuConfig::SafeZoneEnabled);
-		if (MenuConfig::SafeZoneEnabled) {
-			ImGui::SetNextItemWidth(180);
-			ImGui::SliderFloat(lang.safezone_radius.c_str(), &MenuConfig::SafeZoneRadius, 1.f, 300.f, "%.0f px");
-			ImGui::SetNextItemWidth(120);
-			ImGui::Combo(lang.safezone_shape.c_str(), &MenuConfig::SafeZoneShape, lang.safezone_shapeselect, IM_ARRAYSIZE(lang.safezone_shapeselect));
-			ImGui::SetNextItemWidth(150);
-			ImGui::Combo(lang.safezone_mode.c_str(), &MenuConfig::SafeZoneMode, lang.safezone_modeselect, IM_ARRAYSIZE(lang.safezone_modeselect));
-
-			if (MenuConfig::SafeZoneMode == 1) {
-				ImGui::Spacing();
-				Gui.MyCheckBox(lang.safezone_skip_box.c_str(), &MenuConfig::SafeZoneSkipBox);
-				Gui.MyCheckBox(lang.safezone_skip_bone.c_str(), &MenuConfig::SafeZoneSkipBone);
-				Gui.MyCheckBox(lang.safezone_skip_healthbar.c_str(), &MenuConfig::SafeZoneSkipHealthBar);
-				Gui.MyCheckBox(lang.safezone_skip_armorbar.c_str(), &MenuConfig::SafeZoneSkipArmorBar);
-				Gui.MyCheckBox(lang.safezone_skip_weapon.c_str(), &MenuConfig::SafeZoneSkipWeapon);
-				Gui.MyCheckBox(lang.safezone_skip_name.c_str(), &MenuConfig::SafeZoneSkipName);
-				Gui.MyCheckBox(lang.safezone_skip_snapline.c_str(), &MenuConfig::SafeZoneSkipSnapline);
-				Gui.MyCheckBox(lang.safezone_skip_eyeray.c_str(), &MenuConfig::SafeZoneSkipEyeRay);
-				Gui.MyCheckBox(lang.safezone_skip_headdot.c_str(), &MenuConfig::SafeZoneSkipHeadDot);
-				Gui.MyCheckBox(lang.safezone_skip_distance.c_str(), &MenuConfig::SafeZoneSkipDistance);
-			}
-		}
-	}
 }
 
 // ============================================================================
@@ -1239,8 +1577,7 @@ void Cheats::Menu()
 
 			ImGui::TextColored(UITheme::TextDisabled, "  TOOLS");
 			if (NavButton(lang.tab_grenade.c_str(), active_tab == 4, btnW)) active_tab = 4;
-			if (NavButton(lang.tab_fusion.c_str(), active_tab == 5, btnW)) active_tab = 5;
-			if (NavButton(lang.tab_hotkeys.c_str(), active_tab == 6, btnW)) active_tab = 6;
+			if (NavButton(lang.tab_hotkeys.c_str(), active_tab == 5, btnW)) active_tab = 5;
 
 			ImGui::TextColored(UITheme::TextDisabled, "  SYSTEM");
 			if (NavButton(lang.tab_settings.c_str(), active_tab == 2, btnW)) active_tab = 2;
@@ -1290,8 +1627,7 @@ void Cheats::Menu()
 			case 2: DrawTab_Settings(); break;
 			case 3: DrawTab_Config(); break;
 			case 4: DrawTab_Grenade(); break;
-			case 5: DrawTab_Fusion(); break;
-			case 6: DrawTab_Hotkeys(); break;
+			case 5: DrawTab_Hotkeys(); break;
 			default: break;
 			}
 			ImGui::PopStyleVar();

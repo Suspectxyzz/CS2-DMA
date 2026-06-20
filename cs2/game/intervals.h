@@ -11,7 +11,6 @@ namespace intervals {
 	constexpr int64_t kWeaponUpdateUs = 10000;       // 10ms  - active weapon
 	constexpr int64_t kWrExtraUs = 50000;            // 50ms  - WebRadar extra
 	constexpr int64_t kWrSlowUs = 5000000;           // 5s    - WebRadar slow
-	constexpr int64_t kProjectileScanUs = 20000;     // 20ms  - projectile scan (legacy baseline)
 	// P5 Task 14: Adaptive world-scan intervals (selected by entity-count tier)
 	constexpr int64_t kWorldScanBaseUs = 50000;      // 50ms  - entities <= 800
 	constexpr int64_t kWorldScanHighUs = 70000;      // 70ms  - entities 800-1200
@@ -19,9 +18,5 @@ namespace intervals {
 	constexpr int64_t kWorldScanLowUs = 120000;      // 120ms - entities > 2000
 	constexpr int64_t kPeriodicRefreshUs = 100000;   // 100ms - periodic refresh (was frameCounter % 50)
 	// ESP gap-closure stage 1: extended tactical field refresh intervals
-	constexpr int64_t kPlayerMoneyAuxUs = 500000;     // 500ms - money (controller-side, shared with WR)
 	constexpr int64_t kPlayerStatusAuxUs = 100000;     // 100ms - scoped/defusing/velocity status
-	constexpr int64_t kPlayerDefuserAuxUs = 500000;    // 500ms - defuser kit presence
-	constexpr int64_t kPlayerEyeAuxUs = 100000;        // 100ms - eye yaw / view angle
-	constexpr int64_t kPlayerVisibilityAuxUs = 200000; // 200ms - visibility (spotted mask) refresh
 }

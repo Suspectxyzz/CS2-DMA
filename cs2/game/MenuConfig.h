@@ -6,6 +6,7 @@
 
 #include <map>
 #include <vector>
+#include <bitset>
 
 
 
@@ -201,7 +202,7 @@ namespace MenuConfig
 	inline ImColor FlagDefusingColor = ImColor(255, 100, 100, 255);
 	inline bool    FlagKitEnabled = true;
 	inline ImColor FlagKitColor = ImColor(100, 255, 100, 255);
-	inline bool    FlagMoneyEnabled = true;
+	inline bool    FlagMoneyEnabled = false;
 	inline ImColor FlagMoneyColor = ImColor(100, 255, 100, 255);
 	inline float   FlagFontSize = 12.f;
 
@@ -224,6 +225,9 @@ namespace MenuConfig
 	// drives the grenade effect timers (Smoke/Inferno/Decoy) overlay.
 	inline bool    ShowWorldESP = false;
 	inline bool    ShowWorldProjectileTimers = true;
+	inline bool    ShowWorldSmokeTimer = true;
+	inline bool    ShowWorldInfernoTimer = true;
+	inline bool    ShowWorldDecoyTimer = true;
 	inline ImColor WorldESPColor = ImColor(255, 255, 255, 200);
 
 	// ======== ESP gap-closure stage 3b: Weapon Ammo ESP (Task 13) ========
@@ -231,6 +235,24 @@ namespace MenuConfig
 	inline float   WeaponAmmoFontSize = 12.f;
 	inline ImColor WeaponAmmoColor = ImColor(255, 255, 255, 255);
 	inline ImColor WeaponLowAmmoColor = ImColor(255, 50, 50, 255);
+
+	// ======== ESP gap-closure stage 3b: Weapon Icon ESP (Task 13) ========
+	// Renders the active weapon's icon glyph (from weapons.ttf) above the
+	// weapon name. Falls back to the weapon name text when the icon font
+	// is unavailable or the weapon is unknown.
+	inline bool    ShowWeaponIcon = false;
+	inline float   WeaponIconFontSize = 18.f;
+	inline ImColor WeaponIconColor = ImColor(240, 240, 240, 240);
+	// Skip the icon for knives (they all share one glyph and add clutter).
+	inline bool    WeaponIconNoKnife = true;
+
+	// ======== ESP gap-closure stage 3b: Dropped-Weapon World ESP (Task 12/16) ========
+	// When ShowWorldESP is on, dropped weapons on the ground are rendered
+	// with their icon + name. EspItemEnabledMask gates which weapon ids
+	// are drawn (default: all enabled).
+	inline bool    ShowWorldItems = false;
+	inline float   WorldItemFontSize = 13.f;
+	inline std::bitset<1200> EspItemEnabledMask;
 
 	// ======== ESP gap-closure stage 3b: Bar Value Labels (Task 14) ========
 	inline bool    ShowHealthText = false;

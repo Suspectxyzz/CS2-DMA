@@ -28,19 +28,12 @@ public:
 	bool GetIsAlive();
 	bool GetPlayerName();
 	bool GetArmor();
-	bool GetMoney();
 	DWORD64 GetPlayerPawnAddress();
 };
 
 class PlayerPawn
 {
 public:
-	enum class Flags
-	{
-		NONE,
-		IN_AIR = 1 << 0
-	};
-
 	DWORD64 Address = 0;
 	CBone BoneData;
 	Vec2 ViewAngle;
@@ -66,38 +59,9 @@ public:
 	bool Scoped = false;
 	bool Defusing = false;
 	int AmmoClip = -1;
-	bool HasBomb = false;
-	float EyeYaw = 0.f;
 	uint64_t SoundUntilMs = 0;
 	Vec3 Velocity;
 	Vec3 PrevPos;          // previous frame position (snapshot interpolation)
-	uint16_t WeaponIconId = 0;
-	uint16_t GrenadeIds[4] = {};
-	int GrenadeCount = 0;
-	int Ping = 0;
-public:
-	bool GetPos();
-	bool GetViewAngle();
-	bool GetCameraPos();
-	bool GetWeaponName();
-	bool GetShotsFired();
-	bool GetAimPunchAngle();
-	bool GetHealth();
-	bool GetTeamID();
-	bool GetFov();
-	bool GetSpotted();
-	bool GetFFlags();
-	bool GetScoped();
-	bool GetDefusing();
-	bool GetAmmoClip();
-	bool GetHasBomb();
-	bool GetEyeYaw();
-	bool GetVelocity();
-	bool GetPing();
-
-	constexpr bool HasFlag(const Flags Flag) const noexcept {
-		return fFlags & (int)Flag;
-	}
 };
 
 class CEntity
@@ -108,9 +72,6 @@ public:
 	int LocalPlayerControllerIndex = 0;
 public:
 	bool UpdateController(const DWORD64& PlayerControllerAddress);
-
-	// Full pawn read (used by TriggerBot and initial discovery)
-	bool UpdatePawn(const DWORD64& PlayerPawnAddress);
 
 	// Lightweight: only resolves PawnAddress + BoneArrayAddress for scatter
 	bool InitPawnAddress(const DWORD64& PlayerPawnAddress);

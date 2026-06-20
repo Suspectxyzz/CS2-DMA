@@ -8,7 +8,6 @@ public:
 	std::string tab_settings;
 	std::string tab_config;
 	std::string tab_grenade;
-	std::string tab_fusion;
 	std::string tab_hotkeys;
 
 	std::string visuals_showbox;
@@ -91,8 +90,11 @@ public:
 	std::string header_recording;
 	std::string header_pending;
 	std::string header_savededitor;
-	std::string header_spectator;
 	std::string header_bomb;
+	std::string header_weapon;
+	std::string header_teamfilter;
+	std::string header_world_proj;
+	std::string header_render_quality;
 	std::string visuals_bombesp;
 	std::string visuals_bombplanted;
 	std::string visuals_bombdefusing;
@@ -217,6 +219,24 @@ public:
 	std::string console_dma_dumper_missing;
 	std::string console_dma_restart;
 
+	// Offset refetch (GUI)
+	std::string offset_refetch_button;
+	std::string offset_current_date;
+	std::string offset_local_version;
+	std::string offset_latest_mismatch;
+	std::string offset_latest_match;
+	std::string offset_guide_title;
+	std::string offset_guide_body;
+	std::string offset_guide_confirm;
+	std::string offset_guide_cancel;
+	std::string offset_status_running;
+	std::string offset_result_success_title;
+	std::string offset_result_success_body;
+	std::string offset_result_restart;
+	std::string offset_result_fail_title;
+	std::string offset_result_fail_body;
+	std::string offset_result_fail_ok;
+
 	// Status Messages
 	std::string status_dma_init;
 	std::string status_dma_failed;
@@ -226,7 +246,6 @@ public:
 	std::string status_unknown;
 
 	// Projectile ESP
-	std::string proj_header;
 	std::string proj_enable;
 	std::string proj_range;
 	std::string proj_rangealpha;
@@ -267,6 +286,80 @@ public:
 	std::string crosshair_enemycolor;
 	const char* crosshair_styleselect[4];
 
+	// ESP Gap-Closure Stage 3 (Task 7-14)
+	std::string visuals_offscreen_arrows;
+	std::string visuals_arrow_color;
+	std::string visuals_player_flags;
+	std::string visuals_flag_blind;
+	std::string visuals_flag_scoped;
+	std::string visuals_flag_defusing;
+	std::string visuals_flag_kit;
+	std::string visuals_flag_money;
+	std::string visuals_flag_fontsize;
+	std::string visuals_visibility;
+	std::string visuals_visible_color;
+	std::string visuals_hidden_color;
+	std::string visuals_sound_esp;
+	std::string visuals_sound_color;
+	std::string visuals_bomb_timer;
+	std::string visuals_world_esp;
+	std::string visuals_world_timers;
+	std::string visuals_world_smoke_timer;
+	std::string visuals_world_inferno_timer;
+	std::string visuals_world_decoy_timer;
+	std::string visuals_world_color;
+	std::string visuals_weapon_ammo;
+	std::string visuals_ammo_fontsize;
+	std::string visuals_ammo_color;
+	std::string visuals_low_ammo_color;
+	std::string visuals_weapon_icon;
+	std::string visuals_weapon_icon_fontsize;
+	std::string visuals_weapon_icon_color;
+	std::string visuals_weapon_icon_noknife;
+	std::string visuals_world_items;
+	std::string visuals_world_item_fontsize;
+	std::string visuals_item_filter;
+	std::string visuals_item_filter_pistols;
+	std::string visuals_item_filter_smgs;
+	std::string visuals_item_filter_rifles;
+	std::string visuals_item_filter_snipers;
+	std::string visuals_item_filter_heavy;
+	std::string visuals_item_filter_gear;
+	std::string visuals_item_filter_all;
+	std::string visuals_item_filter_none;
+	std::string visuals_health_text;
+	std::string visuals_armor_text;
+	std::string visuals_bar_label_fontsize;
+	std::string visuals_interpolation;
+	std::string visuals_bone_reliability;
+
+	// Task 18: independent color labels (no longer reuse generic labels)
+	std::string visuals_headdot_color;
+	std::string visuals_armorbar_color;
+	std::string visuals_weapon_color;
+	std::string visuals_name_color;
+	std::string visuals_distance_color;
+	std::string visuals_flag_blind_color;
+	std::string visuals_flag_scoped_color;
+	std::string visuals_flag_defusing_color;
+	std::string visuals_flag_kit_color;
+	std::string visuals_flag_money_color;
+
+	// Task 20: independent thickness/size/width labels
+	std::string visuals_box_thickness;
+	std::string visuals_bone_thickness;
+	std::string visuals_eyeray_thickness;
+	std::string visuals_line_thickness;
+	std::string visuals_name_size;
+	std::string visuals_weapon_size;
+	std::string visuals_distance_size;
+	std::string visuals_arrow_size;
+	std::string visuals_healthbar_width;
+	std::string visuals_armorbar_width;
+
+	// Task 21: Armor Bar position label (semantically independent from grenade_position)
+	std::string visuals_armorbar_position;
+
 	Language() { english(); }
 
 	void english() {
@@ -275,7 +368,6 @@ public:
 		this->tab_settings = "Settings";
 		this->tab_config = "Config";
 		this->tab_grenade = "Grenade";
-		this->tab_fusion = "Crosshair";
 		this->tab_hotkeys = "Hotkeys";
 
 		this->visuals_showbox = "Show Box";
@@ -354,8 +446,11 @@ public:
 		this->header_recording = "Recording / Hotkey";
 		this->header_pending = "Pending Throws";
 		this->header_savededitor = "Saved Throws Editor";
-		this->header_spectator = "Spectator List";
 		this->header_bomb = "C4 / Bomb";
+		this->header_weapon = "Weapon";
+		this->header_teamfilter = "Team Filter";
+		this->header_world_proj = "World & Projectiles";
+		this->header_render_quality = "Render Quality";
 		this->visuals_bombesp = "Show Bomb ESP";
 		this->visuals_bombplanted = "Planted";
 		this->visuals_bombdefusing = "Defusing";
@@ -451,7 +546,6 @@ public:
 		this->dir_up = "Up"; this->dir_down = "Down";
 		this->dir_f = "F"; this->dir_b = "B"; this->dir_l = "L"; this->dir_r = "R";
 
-		this->proj_header = "Grenade Projectile ESP";
 		this->proj_enable = "Show Projectile ESP";
 		this->proj_range = "Show Effect Range";
 		this->proj_rangealpha = "Range Alpha";
@@ -505,10 +599,84 @@ public:
 		this->crosshair_enemycolor = "Enemy Color";
 		this->crosshair_styleselect[0] = "Cross"; this->crosshair_styleselect[1] = "Dot"; this->crosshair_styleselect[2] = "Circle"; this->crosshair_styleselect[3] = "Cross+Dot";
 
+		// ESP Gap-Closure Stage 3 (Task 7-14)
+		this->visuals_offscreen_arrows = "Offscreen Arrows";
+		this->visuals_arrow_color = "Arrow Color";
+		this->visuals_player_flags = "Player Flags";
+		this->visuals_flag_blind = "Blind";
+		this->visuals_flag_scoped = "Scoped";
+		this->visuals_flag_defusing = "Defusing";
+		this->visuals_flag_kit = "Defuse Kit";
+		this->visuals_flag_money = "Money";
+		this->visuals_flag_fontsize = "Flag Font Size";
+		this->visuals_visibility = "Visibility Coloring";
+		this->visuals_visible_color = "Visible Color";
+		this->visuals_hidden_color = "Hidden Color";
+		this->visuals_sound_esp = "Sound ESP";
+		this->visuals_sound_color = "Sound Color";
+		this->visuals_bomb_timer = "C4 Bomb Timer";
+		this->visuals_world_esp = "World ESP";
+		this->visuals_world_timers = "Projectile Timers";
+		this->visuals_world_smoke_timer = "Smoke Timer";
+		this->visuals_world_inferno_timer = "Inferno Timer";
+		this->visuals_world_decoy_timer = "Decoy Timer";
+		this->visuals_world_color = "World Color";
+		this->visuals_weapon_ammo = "Weapon Ammo";
+		this->visuals_ammo_fontsize = "Ammo Font Size";
+		this->visuals_ammo_color = "Ammo Color";
+		this->visuals_low_ammo_color = "Low Ammo Color";
+		this->visuals_weapon_icon = "Weapon Icon";
+		this->visuals_weapon_icon_fontsize = "Icon Font Size";
+		this->visuals_weapon_icon_color = "Icon Color";
+		this->visuals_weapon_icon_noknife = "Hide Knife Icon";
+		this->visuals_world_items = "Dropped Weapons";
+		this->visuals_world_item_fontsize = "Item Font Size";
+		this->visuals_item_filter = "Item Filter";
+		this->visuals_item_filter_pistols = "Pistols";
+		this->visuals_item_filter_smgs = "SMG";
+		this->visuals_item_filter_rifles = "Rifles";
+		this->visuals_item_filter_snipers = "Snipers";
+		this->visuals_item_filter_heavy = "Heavy";
+		this->visuals_item_filter_gear = "Gear";
+		this->visuals_item_filter_all = "All";
+		this->visuals_item_filter_none = "None";
+		this->visuals_health_text = "Health Text";
+		this->visuals_armor_text = "Armor Text";
+		this->visuals_bar_label_fontsize = "Label Font Size";
+		this->visuals_interpolation = "Position Interpolation";
+		this->visuals_bone_reliability = "Bone Reliability Check";
+
+		// Task 18: independent color labels
+		this->visuals_headdot_color = "Head Dot Color";
+		this->visuals_armorbar_color = "Armor Bar Color";
+		this->visuals_weapon_color = "Weapon Color";
+		this->visuals_name_color = "Name Color";
+		this->visuals_distance_color = "Distance Color";
+		this->visuals_flag_blind_color = "Blind Color";
+		this->visuals_flag_scoped_color = "Scoped Color";
+		this->visuals_flag_defusing_color = "Defusing Color";
+		this->visuals_flag_kit_color = "Defuse Kit Color";
+		this->visuals_flag_money_color = "Money Color";
+
+		// Task 20: independent thickness/size/width labels
+		this->visuals_box_thickness = "Box Thickness";
+		this->visuals_bone_thickness = "Bone Thickness";
+		this->visuals_eyeray_thickness = "Eye Ray Thickness";
+		this->visuals_line_thickness = "Snapline Thickness";
+		this->visuals_name_size = "Name Size";
+		this->visuals_weapon_size = "Weapon Size";
+		this->visuals_distance_size = "Distance Size";
+		this->visuals_arrow_size = "Arrow Size";
+		this->visuals_healthbar_width = "Health Bar Width";
+		this->visuals_armorbar_width = "Armor Bar Width";
+
+		// Task 21: Armor Bar position label
+		this->visuals_armorbar_position = "Position";
+
 		this->console_offset_mismatch = "Local offsets differ from GitHub repository, may be outdated.";
-		this->console_version_mismatch_prefix = "CS2 update date exceeds local offset date (";
+		this->console_version_mismatch_prefix = "CS2 version mismatch (";
 		this->console_version_mismatch_suffix = "), offsets may be expired.";
-		this->console_fetch_offsets = "Update offsets via DMA? (y/n): ";
+		this->console_fetch_offsets = "Update offsets via DMA? Make sure CS2 is running at main menu. (y/n): ";
 		this->console_new_version = "New version available: ";
 		this->console_open_releases = "Open Releases page to download latest version? (y/n): ";
 		this->console_dma_updating = "Running DMA offset dumper...";
@@ -516,6 +684,24 @@ public:
 		this->console_dma_update_fail = "DMA offset update failed!";
 		this->console_dma_dumper_missing = "cs2-dumper.exe not found. Build it: cd external\\dumper && cargo build --release";
 		this->console_dma_restart = "Please restart the program to apply new offsets.";
+
+		// Offset refetch (GUI)
+		this->offset_refetch_button = "Re-acquire Offsets";
+		this->offset_current_date = "Current offset date: %s";
+		this->offset_local_version = "Local offset: %s (%s)";
+		this->offset_latest_mismatch = "Latest game: %s (MISMATCH!)";
+		this->offset_latest_match = "Latest game: %s (OK)";
+		this->offset_guide_title = "Re-acquire Offsets";
+		this->offset_guide_body = "Please ensure CS2 is running and you are at the MAIN MENU (not in a match).\n\nThe acquisition process will temporarily disconnect DMA. After completion, the program will need to restart.\n\nClick \"Confirm\" to start acquiring offsets.";
+		this->offset_guide_confirm = "Confirm";
+		this->offset_guide_cancel = "Cancel";
+		this->offset_status_running = "Acquiring offsets, please wait...";
+		this->offset_result_success_title = "Offsets Updated";
+		this->offset_result_success_body = "Offsets have been successfully updated. The program needs to restart to apply the new offsets.";
+		this->offset_result_restart = "Restart Now";
+		this->offset_result_fail_title = "Acquisition Failed";
+		this->offset_result_fail_body = "Failed to acquire offsets. DMA connection will be restored.";
+		this->offset_result_fail_ok = "OK";
 
 		this->status_dma_init = "Initializing DMA...";
 		this->status_dma_failed = "DMA Connection Failed!";
@@ -531,7 +717,6 @@ public:
 		this->tab_settings = u8"\u8bbe\u7f6e";
 		this->tab_config = u8"\u914d\u7f6e";
 		this->tab_grenade = u8"\u6295\u63b7\u7269";
-		this->tab_fusion = u8"\u51c6\u661f";
 		this->tab_hotkeys = u8"\u5feb\u6377\u952e";
 
 		this->visuals_showbox = u8"\u663e\u793a\u900f\u89c6\u6846";
@@ -610,8 +795,11 @@ public:
 		this->header_recording = u8"\u5f55\u5236 / \u5feb\u6377\u952e";
 		this->header_pending = u8"\u5f85\u547d\u540d\u6295\u63b7\u70b9";
 		this->header_savededitor = u8"\u5df2\u4fdd\u5b58\u6295\u63b7\u70b9\u7f16\u8f91";
-		this->header_spectator = u8"\u89c2\u4f17\u5217\u8868";
 		this->header_bomb = u8"C4 \u70b8\u5f39";
+		this->header_weapon = u8"\u6b66\u5668";
+		this->header_teamfilter = u8"\u961f\u4f0d\u8fc7\u6ee4";
+		this->header_world_proj = u8"\u4e16\u754c\u4e0e\u6295\u63b7\u7269";
+		this->header_render_quality = u8"\u6e32\u67d3\u8d28\u91cf";
 		this->visuals_bombesp = u8"\u663e\u793a\u70b8\u5f39ESP";
 		this->visuals_bombplanted = u8"\u5df2\u5b89\u88c5";
 		this->visuals_bombdefusing = u8"\u62c6\u9664\u4e2d";
@@ -707,7 +895,6 @@ public:
 		this->dir_up = u8"\u4e0a\u65b9"; this->dir_down = u8"\u4e0b\u65b9";
 		this->dir_f = u8"\u524d"; this->dir_b = u8"\u540e"; this->dir_l = u8"\u5de6"; this->dir_r = u8"\u53f3";
 
-		this->proj_header = u8"\u6295\u63b7\u7269\u5b9e\u65f6ESP";
 		this->proj_enable = u8"\u663e\u793a\u6295\u63b7\u7269ESP";
 		this->proj_range = u8"\u663e\u793a\u751f\u6548\u8303\u56f4";
 		this->proj_rangealpha = u8"\u8303\u56f4\u900f\u660e\u5ea6";
@@ -761,10 +948,84 @@ public:
 		this->crosshair_enemycolor = u8"\u654c\u4eba\u989c\u8272";
 		this->crosshair_styleselect[0] = u8"\u5341\u5b57"; this->crosshair_styleselect[1] = u8"\u5706\u70b9"; this->crosshair_styleselect[2] = u8"\u5706\u5708"; this->crosshair_styleselect[3] = u8"\u5341\u5b57+\u5706\u70b9";
 
+		// ESP Gap-Closure Stage 3 (Task 7-14)
+		this->visuals_offscreen_arrows = u8"\u5c4f\u5916\u7bad\u5934";
+		this->visuals_arrow_color = u8"\u7bad\u5934\u989c\u8272";
+		this->visuals_player_flags = u8"\u73a9\u5bb6\u72b6\u6001\u6807\u7b7e";
+		this->visuals_flag_blind = u8"\u95ea\u5149";
+		this->visuals_flag_scoped = u8"\u5f00\u955c";
+		this->visuals_flag_defusing = u8"\u62c6\u5f39";
+		this->visuals_flag_kit = u8"\u62c6\u5f39\u5668";
+		this->visuals_flag_money = u8"\u91d1\u94b1";
+		this->visuals_flag_fontsize = u8"\u6807\u7b7e\u5b57\u53f7";
+		this->visuals_visibility = u8"\u53ef\u89c1\u6027\u7740\u8272";
+		this->visuals_visible_color = u8"\u53ef\u89c1\u989c\u8272";
+		this->visuals_hidden_color = u8"\u4e0d\u53ef\u89c1\u989c\u8272";
+		this->visuals_sound_esp = u8"\u58f0\u97f3 ESP";
+		this->visuals_sound_color = u8"\u58f0\u97f3\u989c\u8272";
+		this->visuals_bomb_timer = u8"C4 \u5012\u8ba1\u65f6\u7a97\u53e3";
+		this->visuals_world_esp = u8"\u4e16\u754c ESP";
+		this->visuals_world_timers = u8"\u6295\u63b7\u7269\u8ba1\u65f6\u5668";
+		this->visuals_world_smoke_timer = u8"\u70df\u96fe\u8ba1\u65f6\u5668";
+		this->visuals_world_inferno_timer = u8"\u706b\u7130\u8ba1\u65f6\u5668";
+		this->visuals_world_decoy_timer = u8"\u8bf1\u9975\u8ba1\u65f6\u5668";
+		this->visuals_world_color = u8"\u4e16\u754c\u989c\u8272";
+		this->visuals_weapon_ammo = u8"\u6b66\u5668\u5f39\u836f";
+		this->visuals_ammo_fontsize = u8"\u5f39\u836f\u5b57\u53f7";
+		this->visuals_ammo_color = u8"\u5f39\u836f\u989c\u8272";
+		this->visuals_low_ammo_color = u8"\u4f4e\u5f39\u836f\u989c\u8272";
+		this->visuals_weapon_icon = u8"\u6b66\u5668\u56fe\u6807";
+		this->visuals_weapon_icon_fontsize = u8"\u56fe\u6807\u5b57\u53f7";
+		this->visuals_weapon_icon_color = u8"\u56fe\u6807\u989c\u8272";
+		this->visuals_weapon_icon_noknife = u8"\u9690\u85cf\u5315\u9996\u56fe\u6807";
+		this->visuals_world_items = u8"\u6389\u843d\u6b66\u5668";
+		this->visuals_world_item_fontsize = u8"\u7269\u54c1\u5b57\u53f7";
+		this->visuals_item_filter = u8"\u7269\u54c1\u7b5b\u9009";
+		this->visuals_item_filter_pistols = u8"\u624b\u67aa";
+		this->visuals_item_filter_smgs = u8"\u51b2\u950b\u67aa";
+		this->visuals_item_filter_rifles = u8"\u6b65\u67aa";
+		this->visuals_item_filter_snipers = u8"\u72d9\u51fb\u67aa";
+		this->visuals_item_filter_heavy = u8"\u91cd\u578b";
+		this->visuals_item_filter_gear = u8"\u88c5\u5907";
+		this->visuals_item_filter_all = u8"\u5168\u9009";
+		this->visuals_item_filter_none = u8"\u5168\u4e0d\u9009";
+		this->visuals_health_text = u8"\u8840\u91cf\u6570\u503c";
+		this->visuals_armor_text = u8"\u62a4\u7532\u6570\u503c";
+		this->visuals_bar_label_fontsize = u8"\u6807\u7b7e\u5b57\u53f7";
+		this->visuals_interpolation = u8"\u4f4d\u7f6e\u63d2\u503c\u5e73\u6ed1";
+		this->visuals_bone_reliability = u8"\u9aa8\u9abc\u53ef\u9760\u6027\u68c0\u67e5";
+
+		// Task 18: independent color labels
+		this->visuals_headdot_color = u8"\u5934\u90e8\u5706\u70b9\u989c\u8272";
+		this->visuals_armorbar_color = u8"\u62a4\u7532\u6761\u989c\u8272";
+		this->visuals_weapon_color = u8"\u6b66\u5668\u989c\u8272";
+		this->visuals_name_color = u8"\u540d\u79f0\u989c\u8272";
+		this->visuals_distance_color = u8"\u8ddd\u79bb\u989c\u8272";
+		this->visuals_flag_blind_color = u8"\u95ea\u5149\u989c\u8272";
+		this->visuals_flag_scoped_color = u8"\u5f00\u955c\u989c\u8272";
+		this->visuals_flag_defusing_color = u8"\u62c6\u5f39\u989c\u8272";
+		this->visuals_flag_kit_color = u8"\u62c6\u5f39\u5668\u989c\u8272";
+		this->visuals_flag_money_color = u8"\u91d1\u94b1\u989c\u8272";
+
+		// Task 20: independent thickness/size/width labels
+		this->visuals_box_thickness = u8"\u65b9\u6846\u7c97\u7ec6";
+		this->visuals_bone_thickness = u8"\u9aa8\u9abc\u7c97\u7ec6";
+		this->visuals_eyeray_thickness = u8"\u89c6\u7ebf\u7c97\u7ec6";
+		this->visuals_line_thickness = u8"\u6307\u793a\u7ebf\u7c97\u7ec6";
+		this->visuals_name_size = u8"\u540d\u79f0\u5927\u5c0f";
+		this->visuals_weapon_size = u8"\u6b66\u5668\u5927\u5c0f";
+		this->visuals_distance_size = u8"\u8ddd\u79bb\u5927\u5c0f";
+		this->visuals_arrow_size = u8"\u7bad\u5934\u5927\u5c0f";
+		this->visuals_healthbar_width = u8"\u8840\u6761\u5bbd\u5ea6";
+		this->visuals_armorbar_width = u8"\u62a4\u7532\u6761\u5bbd\u5ea6";
+
+		// Task 21: Armor Bar position label
+		this->visuals_armorbar_position = u8"\u4f4d\u7f6e";
+
 		this->console_offset_mismatch = u8"\u504f\u79fb\u503c\u4e0eGitHub\u4ed3\u5e93\u4e0d\u4e00\u81f4\uff0c\u53ef\u80fd\u4e0d\u662f\u6700\u65b0\u504f\u79fb\u503c\u3002";
-		this->console_version_mismatch_prefix = u8"CS2\u66f4\u65b0\u65e5\u671f\u8d85\u8fc7\u672c\u5730\u504f\u79fb\u503c\u65e5\u671f(";
+		this->console_version_mismatch_prefix = u8"CS2\u7248\u672c\u4e0d\u5339\u914d(";
 		this->console_version_mismatch_suffix = u8"),\u504f\u79fb\u503c\u53ef\u80fd\u5df2\u8fc7\u671f\u3002";
-		this->console_fetch_offsets = u8"\u662f\u5426\u901a\u8fc7DMA\u66f4\u65b0\u504f\u79fb\u503c? (y/n): ";
+		this->console_fetch_offsets = u8"\u662f\u5426\u901a\u8fc7DMA\u66f4\u65b0\u504f\u79fb\u503c? \u8bf7\u786e\u4fddCS2\u5df2\u542f\u52a8\u5e76\u5728\u4e3b\u83dc\u5355\u3002 (y/n): ";
 		this->console_new_version = u8"\u65b0\u7248\u672c\u53ef\u7528: ";
 		this->console_open_releases = u8"\u662f\u5426\u8df3\u8f6c\u5230 Releases \u9875\u9762\u4e0b\u8f7d\u6700\u65b0\u7248\u672c? (y/n): ";
 		this->console_dma_updating = u8"\u6b63\u5728\u8fd0\u884cDMA\u504f\u79fb\u503c\u63d0\u53d6...";
@@ -772,6 +1033,24 @@ public:
 		this->console_dma_update_fail = u8"DMA\u504f\u79fb\u503c\u66f4\u65b0\u5931\u8d25!";
 		this->console_dma_dumper_missing = u8"\u672a\u627e\u5230cs2-dumper.exe\uff0c\u8bf7\u5148\u6784\u5efa: cd external\\dumper && cargo build --release";
 		this->console_dma_restart = u8"\u504f\u79fb\u503c\u5df2\u66f4\u65b0\uff0c\u8bf7\u91cd\u542f\u7a0b\u5e8f\u4ee5\u751f\u6548\u3002";
+
+		// Offset refetch (GUI)
+		this->offset_refetch_button = u8"\u91cd\u65b0\u83b7\u53d6\u504f\u79fb\u503c";
+		this->offset_current_date = u8"\u5f53\u524d\u504f\u79fb\u65e5\u671f: %s";
+		this->offset_local_version = u8"\u672c\u5730\u504f\u79fb: %s (%s)";
+		this->offset_latest_mismatch = u8"\u6700\u65b0\u6e38\u620f: %s (\u4e0d\u5339\u914d!)";
+		this->offset_latest_match = u8"\u6700\u65b0\u6e38\u620f: %s (\u5339\u914d)";
+		this->offset_guide_title = u8"\u91cd\u65b0\u83b7\u53d6\u504f\u79fb\u503c";
+		this->offset_guide_body = u8"\u8bf7\u786e\u4fdd CS2 \u5df2\u542f\u52a8\u5e76\u505c\u7559\u5728\u4e3b\u83dc\u5355\uff08\u800c\u975e\u6e38\u620f\u5bf9\u5c40\u4e2d\uff09\u3002\n\n\u83b7\u53d6\u8fc7\u7a0b\u5c06\u4e34\u65f6\u65ad\u5f00 DMA \u8fde\u63a5\u3002\u83b7\u53d6\u5b8c\u6210\u540e\u9700\u8981\u91cd\u542f\u7a0b\u5e8f\u3002\n\n\u70b9\u51fb\"\u786e\u8ba4\"\u5f00\u59cb\u83b7\u53d6\u504f\u79fb\u503c\u3002";
+		this->offset_guide_confirm = u8"\u786e\u8ba4";
+		this->offset_guide_cancel = u8"\u53d6\u6d88";
+		this->offset_status_running = u8"\u6b63\u5728\u83b7\u53d6\u504f\u79fb\u503c\uff0c\u8bf7\u7a0d\u5019...";
+		this->offset_result_success_title = u8"\u504f\u79fb\u503c\u5df2\u66f4\u65b0";
+		this->offset_result_success_body = u8"\u504f\u79fb\u503c\u5df2\u6210\u529f\u66f4\u65b0\u3002\u7a0b\u5e8f\u9700\u8981\u91cd\u542f\u4ee5\u5e94\u7528\u65b0\u504f\u79fb\u503c\u3002";
+		this->offset_result_restart = u8"\u7acb\u5373\u91cd\u542f";
+		this->offset_result_fail_title = u8"\u83b7\u53d6\u5931\u8d25";
+		this->offset_result_fail_body = u8"\u504f\u79fb\u503c\u83b7\u53d6\u5931\u8d25\uff0cDMA \u8fde\u63a5\u5c06\u6062\u590d\u3002";
+		this->offset_result_fail_ok = u8"\u786e\u5b9a";
 
 		this->status_dma_init = u8"\u521d\u59cb\u5316DMA...";
 		this->status_dma_failed = u8"DMA\u8fde\u63a5\u5931\u8d25!";

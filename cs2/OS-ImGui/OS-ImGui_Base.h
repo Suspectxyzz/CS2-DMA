@@ -67,6 +67,9 @@ namespace OSImGui
 		bool EndFlag = false;
 
 		ImFont* iconFont;
+		// ESP gap-closure stage 3b: weapon icon font (Task 13).
+		// Loaded from embedded weapons.ttf; glyph range 0x20-0x7E (ASCII).
+		ImFont* weaponIconFont = nullptr;
 	public:
 		// 窗口数据
 		WindowData Window;

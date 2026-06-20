@@ -1,6 +1,7 @@
 #include "OS-ImGui_Base.h"
 
 #include "../CustomFont.h"
+#include "../CustomFont_Weapons.h"
 
 
 /****************************************************
@@ -25,6 +26,19 @@ namespace OSImGui
         ImFont* font = io.Fonts->AddFontFromMemoryTTF((void*)myFont, sizeof(myFont), 15.0f, NULL, io.Fonts->GetGlyphRangesChineseFull());
 
         iconFont = io.Fonts->AddFontFromMemoryTTF((void*)myFont, sizeof(myFont), 18.0f, NULL, io.Fonts->GetGlyphRangesChineseFull());
+
+        // ESP gap-closure stage 3b: weapon icon font (Task 13).
+        // The weapons.ttf only contains icon glyphs in the ASCII range,
+        // so we restrict glyph ranges to 0x20-0x7E to keep atlas small.
+        {
+            ImFontConfig weaponCfg = {};
+            weaponCfg.FontDataOwnedByAtlas = false;
+            static const ImWchar weaponRanges[] = { 0x20, 0x7E, 0 };
+            weaponIconFont = io.Fonts->AddFontFromMemoryTTF(
+                (void*)resources::fonts::weapons,
+                sizeof(resources::fonts::weapons),
+                16.0f, &weaponCfg, weaponRanges);
+        }
 
         io.Fonts->Build();
 

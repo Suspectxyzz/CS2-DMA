@@ -7,6 +7,10 @@
 #include <fstream>
 #include <sstream>
 #include <ctime>
+#include <unordered_map>
+#include <windows.h>
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
 
 using namespace rapidjson;
 
@@ -15,6 +19,55 @@ static uint64_t SafeGetUint64(const Value& obj, const char* key, uint64_t defaul
 	if (obj.HasMember(key) && obj[key].IsUint64())
 		return obj[key].GetUint64();
 	return defaultVal;
+}
+
+// Trim whitespace
+static std::string TrimSpace(const std::string& s) {
+	size_t start = s.find_first_not_of(" \t\r\n");
+	if (start == std::string::npos) return "";
+	size_t end = s.find_last_not_of(" \t\r\n");
+	return s.substr(start, end - start + 1);
+}
+
+// Fetch steam.inf from SteamTracking repo (used by GenerateVersionFromInfo)
+// Note: uses default proxy; main.cpp's CheckGameVersion path uses downloadUrl which supports system proxy.
+static std::string FetchSteamInf() {
+	std::string result;
+	HINTERNET hSession = WinHttpOpen(L"CS2-DMA/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+	if (!hSession) return result;
+
+	HINTERNET hConnect = WinHttpConnect(hSession, L"raw.githubusercontent.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
+	if (!hConnect) { WinHttpCloseHandle(hSession); return result; }
+
+	HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET",
+		L"/SteamTracking/GameTracking-CS2/master/game/csgo/steam.inf",
+		NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+	if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return result; }
+
+	DWORD connectTimeout = 5000, receiveTimeout = 8000;
+	WinHttpSetOption(hRequest, WINHTTP_OPTION_CONNECT_TIMEOUT, &connectTimeout, sizeof(connectTimeout));
+	WinHttpSetOption(hRequest, WINHTTP_OPTION_RECEIVE_TIMEOUT, &receiveTimeout, sizeof(receiveTimeout));
+
+	if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+		WinHttpReceiveResponse(hRequest, NULL)) {
+		DWORD statusCode = 0, size = sizeof(statusCode);
+		WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+			NULL, &statusCode, &size, NULL);
+		if (statusCode == 200) {
+			char buffer[4096];
+			DWORD bytesRead = 0;
+			while (WinHttpReadData(hRequest, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+				result.append(buffer, bytesRead);
+				bytesRead = 0;
+			}
+		}
+	}
+
+	WinHttpCloseHandle(hRequest);
+	WinHttpCloseHandle(hConnect);
+	WinHttpCloseHandle(hSession);
+	return result;
 }
 
 bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
@@ -40,22 +93,19 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 		const auto& clientDll = offsets["client.dll"];
 		Offset::EntityList = SafeGetUint64(clientDll, "dwEntityList");
 		Offset::Matrix = SafeGetUint64(clientDll, "dwViewMatrix");
+		Offset::ViewAngles = SafeGetUint64(clientDll, "dwViewAngles");
 		Offset::LocalPlayerController = SafeGetUint64(clientDll, "dwLocalPlayerController");
 		Offset::LocalPlayerPawn = SafeGetUint64(clientDll, "dwLocalPlayerPawn");
 		Offset::GlobalVars = SafeGetUint64(clientDll, "dwGlobalVars");
 		Offset::PlantedC4 = SafeGetUint64(clientDll, "dwPlantedC4");
 		Offset::WeaponC4 = SafeGetUint64(clientDll, "dwWeaponC4");
-		LOG_INFO("Offsets", "client.dll: EntityList=0x{:X} Matrix=0x{:X} LocalCtrl=0x{:X} LocalPawn=0x{:X} GlobalVars=0x{:X} PlantedC4=0x{:X} WeaponC4=0x{:X}",
-			Offset::EntityList, Offset::Matrix, Offset::LocalPlayerController, Offset::LocalPlayerPawn, Offset::GlobalVars, Offset::PlantedC4, Offset::WeaponC4);
+		Offset::GameRules = SafeGetUint64(clientDll, "dwGameRules");
+		LOG_INFO("Offsets", "client.dll: EntityList=0x{:X} Matrix=0x{:X} ViewAngles=0x{:X} LocalCtrl=0x{:X} LocalPawn=0x{:X} GlobalVars=0x{:X} PlantedC4=0x{:X} WeaponC4=0x{:X} GameRules=0x{:X}",
+			Offset::EntityList, Offset::Matrix, Offset::ViewAngles, Offset::LocalPlayerController, Offset::LocalPlayerPawn, Offset::GlobalVars, Offset::PlantedC4, Offset::WeaponC4, Offset::GameRules);
 	} else {
 		LOG_INFO("Offsets", "client.dll section NOT FOUND in offsets.json");
 	}
 
-	// Parse offsets.json - matchmaking.dll (optional)
-	if (offsets.HasMember("matchmaking.dll") && offsets["matchmaking.dll"].IsObject()) {
-		const auto& matchmaking = offsets["matchmaking.dll"];
-		Offset::MapName = SafeGetUint64(matchmaking, "dwGameTypes_mapName");
-	}
 
 	// Parse client_dll.json
 	if (client.HasMember("client.dll") && client["client.dll"].HasMember("classes") && client["client.dll"]["classes"].IsObject()) {
@@ -66,11 +116,9 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			const auto& fields = classes["C_BaseEntity"]["fields"];
 			Offset::Health = SafeGetUint64(fields, "m_iHealth");
 			Offset::TeamID = SafeGetUint64(fields, "m_iTeamNum");
-			Offset::MaxHealth = SafeGetUint64(fields, "m_iMaxHealth");
 			Offset::CurrentHealth = SafeGetUint64(fields, "m_iHealth");
 			Offset::GameSceneNode = SafeGetUint64(fields, "m_pGameSceneNode");
 			Offset::fFlags = SafeGetUint64(fields, "m_fFlags");
-			Offset::OwnerEntity = SafeGetUint64(fields, "m_hOwnerEntity");
 			Offset::vecVelocity = SafeGetUint64(fields, "m_vecVelocity");
 			LOG_INFO("Offsets", "C_BaseEntity: Health=0x{:X} TeamID=0x{:X} GameSceneNode=0x{:X} fFlags=0x{:X}",
 				Offset::Health, Offset::TeamID, Offset::GameSceneNode, Offset::fFlags);
@@ -84,8 +132,7 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::MoneyService = SafeGetUint64(fields, "m_pInGameMoneyServices");
 			Offset::PlayerPawn = SafeGetUint64(fields, "m_hPlayerPawn");
 			Offset::CompTeammateColor = SafeGetUint64(fields, "m_iCompTeammateColor");
-			Offset::iPing = SafeGetUint64(fields, "m_iPing");
-			LOG_INFO("Offsets", "CCSPlayerController: Armor=0x{:X} IsAlive=0x{:X} PlayerPawn=0x{:X} MoneyService=0x{:X}",
+		LOG_INFO("Offsets", "CCSPlayerController: Armor=0x{:X} IsAlive=0x{:X} PlayerPawn=0x{:X} MoneyService=0x{:X}",
 				Offset::Armor, Offset::IsAlive, Offset::PlayerPawn, Offset::MoneyService);
 		}
 
@@ -126,7 +173,6 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::angEyeAngles = SafeGetUint64(fields, "m_angEyeAngles");
 			Offset::iShotsFired = SafeGetUint64(fields, "m_iShotsFired");
 			Offset::AimPunchServices = SafeGetUint64(fields, "m_pAimPunchServices");
-			Offset::iIDEntIndex = SafeGetUint64(fields, "m_iIDEntIndex");
 			Offset::PawnArmor = SafeGetUint64(fields, "m_ArmorValue");
 			Offset::bIsScoped = SafeGetUint64(fields, "m_bIsScoped");
 			Offset::bIsDefusing = SafeGetUint64(fields, "m_bIsDefusing");
@@ -177,6 +223,26 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::BombDefused = SafeGetUint64(fields, "m_bBombDefused");
 			Offset::BeingDefused = SafeGetUint64(fields, "m_bBeingDefused");
 			Offset::DefuseCountDown = SafeGetUint64(fields, "m_flDefuseCountDown");
+			Offset::PlantedC4_m_hBombDefuser = SafeGetUint64(fields, "m_hBombDefuser");
+		}
+
+		// C_CSGameRulesProxy
+		if (classes.HasMember("C_CSGameRulesProxy") && classes["C_CSGameRulesProxy"].HasMember("fields")) {
+			const auto& fields = classes["C_CSGameRulesProxy"]["fields"];
+			Offset::GameRulesProxy_m_pGameRules = SafeGetUint64(fields, "m_pGameRules");
+		}
+
+		// C_CSGameRules
+		if (classes.HasMember("C_CSGameRules") && classes["C_CSGameRules"].HasMember("fields")) {
+			const auto& fields = classes["C_CSGameRules"]["fields"];
+			Offset::CSGameRules_m_bFreezePeriod = SafeGetUint64(fields, "m_bFreezePeriod");
+			Offset::CSGameRules_m_iRoundWinStatus = SafeGetUint64(fields, "m_iRoundWinStatus");
+		}
+
+		// C_C4
+		if (classes.HasMember("C_C4") && classes["C_C4"].HasMember("fields")) {
+			const auto& fields = classes["C_C4"]["fields"];
+			Offset::C4_m_bIsPlantingViaUse = SafeGetUint64(fields, "m_bIsPlantingViaUse");
 		}
 
 		// CCSPlayer_ItemServices
@@ -206,9 +272,6 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 		// C_BaseGrenade
 		if (classes.HasMember("C_BaseGrenade") && classes["C_BaseGrenade"].HasMember("fields")) {
 			const auto& fields = classes["C_BaseGrenade"]["fields"];
-			Offset::GrenadeIsLive = SafeGetUint64(fields, "m_bIsLive");
-			Offset::GrenadeDmgRadius = SafeGetUint64(fields, "m_DmgRadius");
-			Offset::GrenadeDetonateTime = SafeGetUint64(fields, "m_flDetonateTime");
 			Offset::GrenadeThrower = SafeGetUint64(fields, "m_hThrower");
 		}
 
@@ -221,9 +284,21 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 		// C_BaseCSGrenadeProjectile
 		if (classes.HasMember("C_BaseCSGrenadeProjectile") && classes["C_BaseCSGrenadeProjectile"].HasMember("fields")) {
 			const auto& fields = classes["C_BaseCSGrenadeProjectile"]["fields"];
-			Offset::ProjSpawnTime = SafeGetUint64(fields, "m_flSpawnTime");
-			Offset::ProjInitialVelocity = SafeGetUint64(fields, "m_vInitialVelocity");
-			Offset::ProjBounces = SafeGetUint64(fields, "m_nBounces");
+		Offset::ExplodeEffectTickBegin = SafeGetUint64(fields, "m_nExplodeEffectTickBegin");
+		}
+
+		// C_SmokeGrenadeProjectile (m_nSmokeEffectTickBegin: detonation signal)
+		if (classes.HasMember("C_SmokeGrenadeProjectile") && classes["C_SmokeGrenadeProjectile"].HasMember("fields")) {
+			const auto& fields = classes["C_SmokeGrenadeProjectile"]["fields"];
+			Offset::SmokeEffectTickBegin = SafeGetUint64(fields, "m_nSmokeEffectTickBegin");
+		}
+
+		// C_Inferno (Task 7.2-7.4: multi-flame points for molotov/incendiary)
+		if (classes.HasMember("C_Inferno") && classes["C_Inferno"].HasMember("fields")) {
+			const auto& fields = classes["C_Inferno"]["fields"];
+			Offset::InfernoFireCount = SafeGetUint64(fields, "m_fireCount");
+			Offset::InfernoFirePositions = SafeGetUint64(fields, "m_firePositions");
+		Offset::FireEffectTickBegin = SafeGetUint64(fields, "m_nFireEffectTickBegin");
 		}
 
 		// C_BasePlayerWeapon (active weapon ammo clip)
@@ -232,28 +307,30 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::iClip1 = SafeGetUint64(fields, "m_iClip1");
 		}
 
-		// C_EconEntity (weapon item definition chain)
+		// C_EconEntity / C_AttributeContainer / C_EconItemView (reliable weapon name lookup via item definition index)
 		if (classes.HasMember("C_EconEntity") && classes["C_EconEntity"].HasMember("fields")) {
 			const auto& fields = classes["C_EconEntity"]["fields"];
 			Offset::AttributeManager = SafeGetUint64(fields, "m_AttributeManager");
 		}
-
-		// C_AttributeContainer
 		if (classes.HasMember("C_AttributeContainer") && classes["C_AttributeContainer"].HasMember("fields")) {
 			const auto& fields = classes["C_AttributeContainer"]["fields"];
 			Offset::Item = SafeGetUint64(fields, "m_Item");
 		}
-
-		// C_EconItemView (weapon item id for icon mapping)
 		if (classes.HasMember("C_EconItemView") && classes["C_EconItemView"].HasMember("fields")) {
 			const auto& fields = classes["C_EconItemView"]["fields"];
-			Offset::iItemDefinitionIndex = SafeGetUint64(fields, "m_iItemDefinitionIndex");
+			Offset::ItemDefinitionIndex = SafeGetUint64(fields, "m_iItemDefinitionIndex");
 		}
+		LOG_INFO("Offsets", "WeaponItem: AttributeManager=0x{:X} Item=0x{:X} ItemDefinitionIndex=0x{:X}",
+			Offset::AttributeManager, Offset::Item, Offset::ItemDefinitionIndex);
+
 	}
 
 	LOG_INFO("Config", "Successfully loaded offsets");
 	LOG_DEBUG("Offsets", "Bomb: Ticking=0x{:X} C4Blow=0x{:X} Defused=0x{:X} BeingDefused=0x{:X} DefuseCD=0x{:X}",
 		Offset::BombTicking, Offset::C4Blow, Offset::BombDefused, Offset::BeingDefused, Offset::DefuseCountDown);
+	LOG_INFO("Offsets", "GameRules: GameRules=0x{:X} Proxy_m_pGameRules=0x{:X} FreezePeriod=0x{:X} RoundWinStatus=0x{:X} BombDefuser=0x{:X} C4PlantingViaUse=0x{:X}",
+		Offset::GameRules, Offset::GameRulesProxy_m_pGameRules, Offset::CSGameRules_m_bFreezePeriod,
+		Offset::CSGameRules_m_iRoundWinStatus, Offset::PlantedC4_m_hBombDefuser, Offset::C4_m_bIsPlantingViaUse);
 	return true;
 }
 
@@ -284,7 +361,10 @@ bool Offset::ParseVersion(const std::string& versionData)
 			GameUpdateTimestamp = doc["game_update_timestamp"].GetInt();
 	}
 
-	LOG_INFO("Config", "Version info: date={}, timestamp={}", GameUpdateDate, GameUpdateTimestamp);
+	if (doc.HasMember("patch_version") && doc["patch_version"].IsString())
+		LocalPatchVersion = doc["patch_version"].GetString();
+
+	LOG_INFO("Config", "Version info: date={}, timestamp={}, patch={}", GameUpdateDate, GameUpdateTimestamp, LocalPatchVersion);
 
 	// Load software version from file (overrides compile-time default)
 	if (doc.HasMember("software_version") && doc["software_version"].IsString()) {
@@ -298,51 +378,81 @@ bool Offset::ParseVersion(const std::string& versionData)
 	return !GameUpdateDate.empty() && GameUpdateTimestamp > 0;
 }
 
-bool Offset::CheckGameVersion(const std::string& steamNewsData)
+bool Offset::ParseSteamInf(const std::string& data, SteamInfInfo& out)
 {
-	Document doc;
-	doc.Parse(steamNewsData.c_str());
-	if (doc.HasParseError()) {
-		LOG_WARNING("Config", "Failed to parse Steam API response");
+	out = {};
+	std::unordered_map<std::string, std::string> kv;
+	std::istringstream stream(data);
+	std::string line;
+	while (std::getline(stream, line)) {
+		if (!line.empty() && line.back() == '\r') line.pop_back();
+		size_t equals = line.find('=');
+		if (equals == std::string::npos) continue;
+		std::string key = TrimSpace(line.substr(0, equals));
+		std::string val = TrimSpace(line.substr(equals + 1));
+		if (key.empty()) continue;
+		kv[key] = val;
+	}
+
+	out.patchVersion = kv["PatchVersion"];
+	out.versionDate = kv["VersionDate"];
+	out.versionTime = kv["VersionTime"];
+	try { out.clientVersion = std::stoi(kv["ClientVersion"]); } catch (...) {}
+	try { out.sourceRevision = std::stoi(kv["SourceRevision"]); } catch (...) {}
+
+	return !out.patchVersion.empty();
+}
+
+bool Offset::CheckGameVersion(const std::string& steamInfData)
+{
+	SteamInfInfo info = {};
+	if (!ParseSteamInf(steamInfData, info)) {
+		LOG_WARNING("Config", "Failed to parse steam.inf, skipping version check");
 		return true; // assume OK if can't parse
 	}
 
-	if (!doc.HasMember("appnews") || !doc["appnews"].IsObject()) return true;
-	const auto& appnews = doc["appnews"];
-	if (!appnews.HasMember("newsitems") || !appnews["newsitems"].IsArray()) return true;
+	LatestPatchVersion = info.patchVersion;
+	LatestGameUpdateDate = info.versionDate;
 
-	const auto& items = appnews["newsitems"];
-	int64_t latestUpdate = 0;
-	for (SizeType i = 0; i < items.Size(); i++) {
-		if (items[i].HasMember("date")) {
-			int64_t d = 0;
-			if (items[i]["date"].IsInt64()) d = items[i]["date"].GetInt64();
-			else if (items[i]["date"].IsInt()) d = items[i]["date"].GetInt();
-			if (d > latestUpdate) latestUpdate = d;
+	LOG_INFO("Config", "Steam.inf: patch={}, date={}, client={}, sourceRev={}",
+		info.patchVersion, info.versionDate, info.clientVersion, info.sourceRevision);
+
+	// Primary check: compare patch version strings (most accurate)
+	if (!LocalPatchVersion.empty()) {
+		if (LocalPatchVersion != info.patchVersion) {
+			LOG_WARNING("Config", "CS2 game updated! Steam patch: {}, Local offset patch: {}",
+				info.patchVersion, LocalPatchVersion);
+			VersionMismatch = true;
+			return false;
+		}
+		LOG_INFO("Config", "CS2 game version matches. Patch: {}", info.patchVersion);
+		VersionMismatch = false;
+		return true;
+	}
+
+	// Fallback: no local patch version, compare by date
+	// Convert steam.inf VersionDate (e.g. "2026/06/19") to timestamp
+	if (!info.versionDate.empty() && GameUpdateTimestamp > 0) {
+		int year = 0, month = 0, day = 0;
+		if (sscanf_s(info.versionDate.c_str(), "%d/%d/%d", &year, &month, &day) == 3) {
+			struct tm tm_val = {};
+			tm_val.tm_year = year - 1900;
+			tm_val.tm_mon = month - 1;
+			tm_val.tm_mday = day;
+			tm_val.tm_isdst = 0;
+			time_t steamT = _mkgmtime(&tm_val);
+			if (steamT > GameUpdateTimestamp) {
+				LOG_WARNING("Config", "CS2 game updated! Steam date: {}, Local offset date: {}",
+					info.versionDate, GameUpdateDate);
+				VersionMismatch = true;
+				return false;
+			}
 		}
 	}
 
-	LatestSteamUpdateTimestamp = latestUpdate;
-
-	// Convert timestamps to human-readable dates for logging
-	char localDate[32] = {}, steamDate[32] = {};
-	time_t localT = static_cast<time_t>(GameUpdateTimestamp);
-	tm localTm = {}, steamTm = {};
-	gmtime_s(&localTm, &localT);
-	strftime(localDate, sizeof(localDate), "%Y-%m-%d", &localTm);
-	time_t steamT = static_cast<time_t>(latestUpdate);
-	gmtime_s(&steamTm, &steamT);
-	strftime(steamDate, sizeof(steamDate), "%Y-%m-%d", &steamTm);
-
-	if (latestUpdate > GameUpdateTimestamp) {
-		LOG_WARNING("Config", "CS2 game updated! Steam latest: {} ({}), Local offset date: {} ({})",
-			steamDate, latestUpdate, localDate, GameUpdateTimestamp);
-		return false; // version mismatch
-	}
-
-	LOG_INFO("Config", "CS2 game version matches. Steam latest: {} ({}), Local: {} ({})",
-		steamDate, latestUpdate, localDate, GameUpdateTimestamp);
-	return true; // version matches
+	LOG_INFO("Config", "CS2 game version matches (by date). Steam date: {}", info.versionDate);
+	VersionMismatch = false;
+	return true;
 }
 
 bool Offset::GenerateVersionFromInfo(const std::string& infoPath, const std::string& versionPath)
@@ -390,14 +500,39 @@ bool Offset::GenerateVersionFromInfo(const std::string& infoPath, const std::str
 
 	time_t unixTime = _mkgmtime(&tm_val);
 
+	// Fetch steam.inf for real game version info (PatchVersion, VersionDate, etc.)
+	SteamInfInfo steamInfo = {};
+	std::string steamInf = FetchSteamInf();
+	bool hasSteamInf = !steamInf.empty() && ParseSteamInf(steamInf, steamInfo);
+	if (hasSteamInf) {
+		LOG_INFO("Config", "Fetched steam.inf: patch={}, date={}",
+			steamInfo.patchVersion, steamInfo.versionDate);
+	} else {
+		LOG_WARNING("Config", "Failed to fetch steam.inf, version.json will use dumper timestamp only");
+	}
+
+	// Use steam.inf date if available (real game update date), else dumper date
+	std::string gameDate = hasSteamInf ? steamInfo.versionDate : date;
+	std::string patchVer = hasSteamInf ? steamInfo.patchVersion : "";
+	int clientVer = hasSteamInf ? steamInfo.clientVersion : 0;
+	int sourceRev = hasSteamInf ? steamInfo.sourceRevision : 0;
+
 	std::ofstream ofs(versionPath);
 	if (!ofs) {
 		LOG_ERROR("Config", "Cannot write to {}", versionPath);
 		return false;
 	}
 
-	ofs << "{\n    \"software_version\": \"" << PROJECT_VERSION << "\",\n    \"game_update_date\": \"" << date << "\",\n    \"game_update_timestamp\": " << unixTime << "\n}";
+	ofs << "{\n"
+		<< "    \"software_version\": \"" << PROJECT_VERSION << "\",\n"
+		<< "    \"game_update_date\": \"" << gameDate << "\",\n"
+		<< "    \"game_update_timestamp\": " << unixTime << ",\n"
+		<< "    \"patch_version\": \"" << patchVer << "\",\n"
+		<< "    \"client_version\": " << clientVer << ",\n"
+		<< "    \"source_revision\": " << sourceRev << "\n"
+		<< "}";
 
-	LOG_INFO("Config", "Generated version.json: date={}, timestamp={}", date, unixTime);
+	LOG_INFO("Config", "Generated version.json: date={}, patch={}, timestamp={}",
+		gameDate, patchVer, unixTime);
 	return true;
 }

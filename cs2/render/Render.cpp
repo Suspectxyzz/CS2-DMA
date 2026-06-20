@@ -11,62 +11,6 @@ namespace Render
 
 
 
-
-	void LineToEnemy(ImVec4 Rect, ImColor Color, float Thickness)
-
-	{
-
-		ImVec2 ds = ImGui::GetIO().DisplaySize;
-		Gui.Line({ Rect.x + Rect.z / 2,Rect.y }, { ds.x / 2,0 }, Color, Thickness);
-
-	}
-
-
-
-	void DrawFov(const CEntity& LocalEntity, float Size, ImColor Color, float Thickness)
-
-	{
-
-		if (!IsValidFloat(Size) || Size <= 0.f) return;
-		float Length;
-
-		float radian;
-
-		Vec2 LineEndPoint[2];
-
-		ImVec2 ds2 = ImGui::GetIO().DisplaySize;
-		Vec2 Pos = Vec2(ds2.x / 2, ds2.y / 2);
-
-
-
-		radian = (LocalEntity.Pawn.Fov / 2) * M_PI / 180;
-
-
-
-		LineEndPoint[0].y = Pos.y - Size;
-
-		LineEndPoint[1].y = LineEndPoint[0].y;
-
-
-
-		Length = Size * tan(radian);
-
-
-
-		LineEndPoint[0].x = Pos.x - Length;
-
-		LineEndPoint[1].x = Pos.x + Length;
-
-
-
-		Gui.Line(Pos, LineEndPoint[0], Color, 1.5);
-
-		Gui.Line(Pos, LineEndPoint[1], Color, 1.5);
-
-	}
-
-
-
 	void DrawDistance(const CEntity& LocalEntity, const CEntity& Entity, ImVec4 Rect)
 
 	{
@@ -77,7 +21,7 @@ namespace Render
 
 		std::string dis_str = std::to_string(distance) + "m";
 
-		Gui.StrokeText(dis_str, Vec2(Rect.x + Rect.z + 4, Rect.y), ImColor(255, 255, 255, 255), 14, false);
+		Gui.StrokeText(dis_str, Vec2(Rect.x + Rect.z + 4, Rect.y), MenuConfig::DistanceColor, MenuConfig::DistanceFontSize, false);
 
 	}
 
@@ -162,6 +106,20 @@ namespace Render
 		float dx = pelvis.Pos.x - ankleL.Pos.x;
 		float dy = pelvis.Pos.y - ankleL.Pos.y;
 		if (std::sqrt(dx * dx + dy * dy) > 96.f) return false;
+
+		// Valid bone segments (consecutive visible joints across all chains) must be >= 5.
+		int validSegments = 0;
+		for (const auto& chain : BoneJointList::List) {
+			const BoneJointPos* prev = nullptr;
+			for (const auto idx : chain) {
+				if ((int)idx >= bone.BonePosCount) { prev = nullptr; continue; }
+				const auto& j = bone.BonePosList[idx];
+				if (!j.IsVisible) { prev = nullptr; continue; }
+				if (prev) ++validSegments;
+				prev = &j;
+			}
+		}
+		if (validSegments < 5) return false;
 
 		return true;
 	}
@@ -349,7 +307,7 @@ namespace Render
 
 
 
-	void HealthBar::DrawHealthBar_Horizontal(float MaxHealth, float CurrentHealth, ImVec2 Pos, ImVec2 Size)
+	void HealthBar::DrawHealthBar(float MaxHealth, float CurrentHealth, ImVec2 Pos, ImVec2 Size, bool vertical)
 
 	{
 
@@ -382,198 +340,19 @@ namespace Render
 
 
 
-
-
 		float Proportion = CurrentHealth / MaxHealth;
 
-
-
-		float Width = RectSize.x * Proportion;
-
-
+		// Fill extent along the bar's primary axis: horizontal uses width,
+		// vertical uses height (drawn from the bottom upward).
+		float FillExtent = vertical ? (RectSize.y * Proportion) : (RectSize.x * Proportion);
 
 		ImColor Color;
-
-
-
-
 
 		DrawList->AddRectFilled(RectPos,
 
 			{ RectPos.x + RectSize.x,RectPos.y + RectSize.y },
 
 			BackGroundColor, 5, 15);
-
-
-
-
-
-		float Color_Lerp_t = pow(Proportion, 2.5);
-
-		if (InRange(Proportion, 0.5, 1))
-
-			Color = Mix(FirstStageColor, SecondStageColor, Color_Lerp_t * 3 - 1);
-
-		else
-
-			Color = Mix(SecondStageColor, ThirdStageColor, Color_Lerp_t * 4);
-
-
-
-
-
-		if (LastestBackupHealth == 0
-
-			|| LastestBackupHealth < CurrentHealth)
-
-			LastestBackupHealth = CurrentHealth;
-
-
-
-		if (LastestBackupHealth != CurrentHealth)
-
-		{
-
-			if (!InShowBackupHealth)
-
-			{
-
-				BackupHealthTimePoint = std::chrono::steady_clock::now();
-
-				InShowBackupHealth = true;
-
-			}
-
-
-
-			std::chrono::steady_clock::time_point CurrentTime = std::chrono::steady_clock::now();
-
-			if (CurrentTime - BackupHealthTimePoint > std::chrono::milliseconds(ShowBackUpHealthDuration))
-
-			{
-
-
-
-				LastestBackupHealth = CurrentHealth;
-
-				InShowBackupHealth = false;
-
-			}
-
-
-
-			if (InShowBackupHealth)
-
-			{
-
-				float BackupHealthWidth = LastestBackupHealth / MaxHealth * RectSize.x;
-
-
-
-				float BackupHealthColorAlpha = 1 - 0.95 * (std::chrono::duration_cast<std::chrono::milliseconds>(CurrentTime - BackupHealthTimePoint).count() / (float)ShowBackUpHealthDuration);
-
-				ImColor BackupHealthColorTemp = BackupHealthColor;
-
-				BackupHealthColorTemp.Value.w = BackupHealthColorAlpha;
-
-
-
-				float BackupHealthWidth_Lerp = 1 * (std::chrono::duration_cast<std::chrono::milliseconds>(CurrentTime - BackupHealthTimePoint).count() / (float)ShowBackUpHealthDuration);
-
-				BackupHealthWidth_Lerp *= (BackupHealthWidth - Width);
-
-				BackupHealthWidth -= BackupHealthWidth_Lerp;
-
-
-
-				DrawList->AddRectFilled(RectPos,
-
-					{ RectPos.x + BackupHealthWidth,RectPos.y + RectSize.y },
-
-					BackupHealthColorTemp, 5);
-
-			}
-
-		}
-
-
-
-
-
-		DrawList->AddRectFilled(RectPos,
-
-			{ RectPos.x + Width,RectPos.y + RectSize.y },
-
-			Color, 5);
-
-
-
-
-
-		DrawList->AddRect(RectPos,
-
-			{ RectPos.x + RectSize.x,RectPos.y + RectSize.y },
-
-			FrameColor, 5, 15, 1);
-
-	}
-
-
-
-	void HealthBar::DrawHealthBar_Vertical(float MaxHealth, float CurrentHealth, ImVec2 Pos, ImVec2 Size)
-
-	{
-
-		if (MaxHealth <= 0.f || !IsValidFloat(MaxHealth) || !IsValidFloat(CurrentHealth)) return;
-		if (!IsValidScreenPos(Pos) || !IsValidFloat(Size.x) || !IsValidFloat(Size.y)) return;
-		if (Size.x < 1.f || Size.y < 1.f) return;
-		CurrentHealth = std::clamp(CurrentHealth, 0.f, MaxHealth);
-
-		auto InRange = [&](float value, float min, float max) -> bool
-
-		{
-
-			return value > min && value <= max;
-
-		};
-
-
-
-		ImDrawList* DrawList = ImGui::GetBackgroundDrawList();
-
-
-
-		this->MaxHealth = MaxHealth;
-
-		this->CurrentHealth = CurrentHealth;
-
-		this->RectPos = Pos;
-
-		this->RectSize = Size;
-
-
-
-
-
-		float Proportion = CurrentHealth / MaxHealth;
-
-
-
-		float Height = RectSize.y * Proportion;
-
-
-
-		ImColor Color;
-
-
-
-		DrawList->AddRectFilled(RectPos,
-
-			{ RectPos.x + RectSize.x,RectPos.y + RectSize.y },
-
-			BackGroundColor, 5, 15);
-
-
 
 		float Color_Lerp_t = pow(Proportion, 2.5);
 
@@ -629,7 +408,7 @@ namespace Render
 
 			{
 
-				float BackupHealthHeight = LastestBackupHealth / MaxHealth * RectSize.y;
+				float BackupHealthExtent = LastestBackupHealth / MaxHealth * (vertical ? RectSize.y : RectSize.x);
 
 				float BackupHealthColorAlpha = 1 - 0.95 * (std::chrono::duration_cast<std::chrono::milliseconds>(CurrentTime - BackupHealthTimePoint).count() / (float)ShowBackUpHealthDuration);
 
@@ -637,17 +416,35 @@ namespace Render
 
 				BackupHealthColorTemp.Value.w = BackupHealthColorAlpha;
 
-				float BackupHealthHeight_Lerp = 1 * (std::chrono::duration_cast<std::chrono::milliseconds>(CurrentTime - BackupHealthTimePoint).count() / (float)ShowBackUpHealthDuration);
+				float BackupHealthExtent_Lerp = 1 * (std::chrono::duration_cast<std::chrono::milliseconds>(CurrentTime - BackupHealthTimePoint).count() / (float)ShowBackUpHealthDuration);
 
-				BackupHealthHeight_Lerp *= (BackupHealthHeight - Height);
+				BackupHealthExtent_Lerp *= (BackupHealthExtent - FillExtent);
 
-				BackupHealthHeight -= BackupHealthHeight_Lerp;
+				BackupHealthExtent -= BackupHealthExtent_Lerp;
 
-				DrawList->AddRectFilled({ RectPos.x,RectPos.y + RectSize.y - BackupHealthHeight },
+				if (vertical)
 
-					{ RectPos.x + RectSize.x,RectPos.y + RectSize.y },
+				{
 
-					BackupHealthColorTemp, 5);
+					DrawList->AddRectFilled({ RectPos.x,RectPos.y + RectSize.y - BackupHealthExtent },
+
+						{ RectPos.x + RectSize.x,RectPos.y + RectSize.y },
+
+						BackupHealthColorTemp, 5);
+
+				}
+
+				else
+
+				{
+
+					DrawList->AddRectFilled(RectPos,
+
+						{ RectPos.x + BackupHealthExtent,RectPos.y + RectSize.y },
+
+						BackupHealthColorTemp, 5);
+
+				}
 
 			}
 
@@ -655,11 +452,29 @@ namespace Render
 
 
 
-		DrawList->AddRectFilled({ RectPos.x,RectPos.y + RectSize.y - Height },
+		if (vertical)
 
-			{ RectPos.x + RectSize.x,RectPos.y + RectSize.y },
+		{
 
-			Color, 5);
+			DrawList->AddRectFilled({ RectPos.x,RectPos.y + RectSize.y - FillExtent },
+
+				{ RectPos.x + RectSize.x,RectPos.y + RectSize.y },
+
+				Color, 5);
+
+		}
+
+		else
+
+		{
+
+			DrawList->AddRectFilled(RectPos,
+
+				{ RectPos.x + FillExtent,RectPos.y + RectSize.y },
+
+				Color, 5);
+
+		}
 
 
 
@@ -704,10 +519,7 @@ namespace Render
 		}
 		if (HealthBarMap.count(Sign))
 		{
-			if (Horizontal)
-				HealthBarMap[Sign].DrawHealthBar_Horizontal(MaxHealth, CurrentHealth, Pos, Size);
-			else
-				HealthBarMap[Sign].DrawHealthBar_Vertical(MaxHealth, CurrentHealth, Pos, Size);
+			HealthBarMap[Sign].DrawHealthBar(MaxHealth, CurrentHealth, Pos, Size, !Horizontal);
 		}
 	}
 
@@ -830,12 +642,22 @@ namespace Render
 		ImDrawList* dl = ImGui::GetBackgroundDrawList();
 		float sx = screenPos.x, sy = screenPos.y;
 
+		// Base color for dot + "C4" label depends on bomb state:
+		// planted -> BombPlantedColor, carried -> BombCarrierColor, dropped -> BombDroppedColor.
+		ImColor baseCol;
+		if (bomb.isPlanted)
+			baseCol = MenuConfig::BombPlantedColor;
+		else if (bomb.carrierPawnHandle != 0)
+			baseCol = MenuConfig::BombCarrierColor;
+		else
+			baseCol = MenuConfig::BombDroppedColor;
+
 		// Small dot
-		dl->AddCircleFilled({ sx, sy }, 4.f, ImColor(255, 200, 0, 255), 12);
+		dl->AddCircleFilled({ sx, sy }, 4.f, baseCol, 12);
 		dl->AddCircle({ sx, sy }, 4.f, ImColor(0, 0, 0, 200), 12, 1.f);
 
-		// "C4" label in yellow
-		Gui.StrokeText("C4", Vec2(sx, sy - 18.f), ImColor(255, 200, 0, 255), 14.f, true);
+		// "C4" label
+		Gui.StrokeText("C4", Vec2(sx, sy - 18.f), baseCol, 14.f, true);
 
 		float textY = sy + 8.f;
 
@@ -844,14 +666,14 @@ namespace Render
 			char timerBuf[32];
 			snprintf(timerBuf, sizeof(timerBuf), "%.1fs", bomb.blowTime);
 
-			// Color: green > 10s, yellow 5~10s, red < 5s
+			// Color: BombPlantedColor > 10s, BombCarrierColor (warning) 5~10s, BombPlantedColor (red) < 5s
 			ImColor timerCol;
 			if (bomb.blowTime > 10.f)
-				timerCol = ImColor(0, 220, 100, 255);
+				timerCol = MenuConfig::BombPlantedColor;
 			else if (bomb.blowTime > 5.f)
-				timerCol = ImColor(255, 200, 0, 255);
+				timerCol = MenuConfig::BombCarrierColor;
 			else
-				timerCol = ImColor(255, 50, 50, 255);
+				timerCol = MenuConfig::BombPlantedColor;
 
 			Gui.StrokeText(timerBuf, Vec2(sx, textY), timerCol, 14.f, true);
 			textY += 16.f;
@@ -867,7 +689,7 @@ namespace Render
 				else
 					snprintf(defBuf, sizeof(defBuf), "DEFUSE %.1fs", bomb.defuseTime);
 
-				// Green if can make it, red if can't
+				// Semantic green/red: can make it vs can't (not bound to config).
 				bool canDefuse = bomb.blowTime > bomb.defuseTime;
 				ImColor defCol = canDefuse ? ImColor(0, 220, 100, 255) : ImColor(255, 50, 50, 255);
 				Gui.StrokeText(defBuf, Vec2(sx, textY), defCol, 14.f, true);
@@ -875,7 +697,7 @@ namespace Render
 		}
 
 		if (bomb.isDefused) {
-			Gui.StrokeText("DEFUSED", Vec2(sx, textY), ImColor(0, 220, 100, 255), 14.f, true);
+			Gui.StrokeText("DEFUSED", Vec2(sx, textY), MenuConfig::BombDefusingColor, 14.f, true);
 		}
 	}
 
@@ -892,24 +714,27 @@ namespace Render
 		ImColor outline(0, 0, 0, 180);
 
 		for (const auto& proj : projectiles) {
-			if (!IsValidFloat(proj.Position.x) || !IsValidFloat(proj.Position.y) || !IsValidFloat(proj.Position.z))
+			const char* label = "";
+			float maxDuration = 0.f;
+			float remaining = 0.f;
+			if (!ComputeProjectileTimer(proj, false, &label, &maxDuration, &remaining))
 				continue;
+
 			Vec2 screenPos;
 			if (!CView::WorldToScreen(matrix, proj.Position, screenPos))
 				continue;
 
-			// Per-type color and label
-			ImColor dotCol, rangeCol;
-			const char* label = "";
-			float maxDuration = 0.f;
-			switch (proj.Type) {
-				case PROJ_SMOKE:  dotCol = ImColor(100, 180, 255, 255); rangeCol = dotCol; label = "Smoke"; maxDuration = 18.0f; break;
-				case PROJ_FLASH:  dotCol = ImColor(255, 255, 80, 255);  rangeCol = dotCol; label = "Flash"; break;
-				case PROJ_HE:     dotCol = ImColor(255, 60, 60, 255);   rangeCol = ImColor(255, 60, 60, 200); label = "HE"; break;
-				case PROJ_MOLOTOV:dotCol = ImColor(255, 140, 0, 255);   rangeCol = ImColor(255, 140, 0, 200); label = "Fire"; maxDuration = 7.0f; break;
-				case PROJ_DECOY:  dotCol = ImColor(180, 180, 180, 255); rangeCol = dotCol; label = "Decoy"; break;
-				default: continue;
-			}
+			// Per-type color. rangeCol alpha is driven by config.
+		ImU32 rangeAlphaByte = (ImU32)std::clamp(MenuConfig::ProjectileRangeAlpha * 255.f, 0.f, 255.f);
+		ImColor dotCol, rangeCol;
+		switch (proj.Type) {
+			case PROJ_SMOKE:  dotCol = ImColor(100, 180, 255, 255); rangeCol = ImColor(100, 180, 255, rangeAlphaByte); break;
+			case PROJ_FLASH:  dotCol = ImColor(255, 255, 80, 255);  rangeCol = ImColor(255, 255, 80, rangeAlphaByte); break;
+			case PROJ_HE:     dotCol = ImColor(255, 60, 60, 255);   rangeCol = ImColor(255, 60, 60, rangeAlphaByte); break;
+			case PROJ_MOLOTOV:dotCol = ImColor(255, 140, 0, 255);   rangeCol = ImColor(255, 140, 0, rangeAlphaByte); break;
+			case PROJ_DECOY:  dotCol = ImColor(180, 180, 180, 255); rangeCol = ImColor(180, 180, 180, rangeAlphaByte); break;
+			default: continue;
+		}
 
 			// Colored dot
 			dl->AddCircleFilled({ screenPos.x, screenPos.y }, 5.f, dotCol, 12);
@@ -919,16 +744,14 @@ namespace Render
 			char text[32];
 			bool showTimer = maxDuration > 0.f && (proj.StationaryTimer > 0.5f || !proj.Alive);
 			if (showTimer) {
-				float remaining = maxDuration - proj.StationaryTimer - proj.DisappearTimer;
-				if (remaining < 0.f) remaining = 0.f;
 				snprintf(text, sizeof(text), "%s %.1fs", label, remaining);
 			} else {
 				snprintf(text, sizeof(text), "%s", label);
 			}
 			Gui.StrokeText(text, Vec2(screenPos.x, screenPos.y - 18.f), dotCol, 13.f, true);
 
-			// Range circle outline for HE, Molotov
-			bool showRange = (proj.Type == PROJ_HE || proj.Type == PROJ_MOLOTOV);
+			// Range circle outline (gated by config).
+			bool showRange = MenuConfig::ShowProjectileRange;
 			if (showRange && proj.EffectRadius > 0.f) {
 				constexpr int CIRCLE_SEGMENTS = 48;
 				Vec2 prevScreen;
@@ -1002,7 +825,9 @@ namespace Render
 		float relRight   = -dx * yawSin + dy * yawCos;
 
 		// Screen direction: right -> +X, forward -> -Y (screen Y points down).
-		float dirX = relRight;
+		// CS2's Y axis points north (+Y = north), so the standard right-vector
+		// formula yields a mirrored X. Negate relRight to correct left/right.
+		float dirX = -relRight;
 		float dirY = -relForward;
 		float len = std::hypot(dirX, dirY);
 		if (len < 0.001f) return;
@@ -1118,18 +943,45 @@ namespace Render
 		static float s_defuseDisplayedLeft = 0.f;
 		static bool  s_prevVisible = false;
 		static bool  s_prevDefusing = false;
+		// Explosion suppression window: pins the display at 0.0s for 1.75s
+		// after the countdown reaches zero to avoid the overlay flickering
+		// between 0.0s and the raw feed while the game state settles.
+		static float s_bombExplodedTimer = -1.f; // -1 = inactive, >=0 = suppression active
 
 		const float frameDt = std::clamp(ImGui::GetIO().DeltaTime, 0.f, 0.10f);
 		const float bombTotal = (bombTotalSec > 1.f && std::isfinite(bombTotalSec)) ? bombTotalSec : 40.f;
 
 		// Smooth C4 countdown: decrement by frameDt, re-sync on >0.5s drift.
 		float rawBomb = std::clamp(bombLeftSec, 0.f, bombTotal);
-		if (!s_prevVisible || s_bombDisplayedLeft <= 0.f) {
+		float prevDisplayed = s_bombDisplayedLeft;
+
+		if (s_bombExplodedTimer >= 0.f) {
+			// Suppression window active: pin display at 0.0s, unless a fresh
+			// bomb appears (raw feed jumps well above 0).
+			if (rawBomb > 1.f) {
+				s_bombExplodedTimer = -1.f;
+				s_bombDisplayedLeft = rawBomb;
+			} else {
+				s_bombDisplayedLeft = 0.f;
+				s_bombExplodedTimer += frameDt;
+				if (s_bombExplodedTimer > 1.75f) {
+					s_bombExplodedTimer = -1.f;
+					s_prevVisible = false; // force re-init when the next bomb appears
+				}
+			}
+		} else if (!s_prevVisible || s_bombDisplayedLeft <= 0.f) {
 			s_bombDisplayedLeft = rawBomb;
 		} else {
 			s_bombDisplayedLeft = std::max(0.f, s_bombDisplayedLeft - frameDt);
 			if (std::fabs(rawBomb - s_bombDisplayedLeft) > 0.5f)
 				s_bombDisplayedLeft = rawBomb;
+		}
+
+		// Detect explosion: displayed countdown transitioned from positive to zero.
+		if (s_bombExplodedTimer < 0.f && s_prevVisible &&
+		    prevDisplayed > 0.f && s_bombDisplayedLeft <= 0.f) {
+			s_bombExplodedTimer = 0.f;
+			s_bombDisplayedLeft = 0.f;
 		}
 		s_prevVisible = true;
 
@@ -1149,10 +1001,10 @@ namespace Render
 			s_defuseDisplayedLeft = 0.f;
 		}
 
-		// Default to screen center on first call.
+		// Default to top-right corner on first call.
 		if (MenuConfig::BombTimerX < 0.f || MenuConfig::BombTimerY < 0.f) {
-			MenuConfig::BombTimerX = std::max(0.f, screenW * 0.5f - 100.f);
-			MenuConfig::BombTimerY = std::max(0.f, screenH * 0.5f - 40.f);
+			MenuConfig::BombTimerX = std::max(0.f, screenW - 230.f);
+			MenuConfig::BombTimerY = 10.f;
 		}
 		// Clamp to visible screen area.
 		MenuConfig::BombTimerX = std::clamp(MenuConfig::BombTimerX, 0.f, std::max(0.f, screenW - 230.f));
@@ -1256,19 +1108,17 @@ namespace Render
 		(void)nowUs; // remaining time is derived from StationaryTimer/DisappearTimer
 
 		for (const auto& proj : projectiles) {
-			if (!IsValidFloat(proj.Position.x) || !IsValidFloat(proj.Position.y) || !IsValidFloat(proj.Position.z))
-				continue;
-
-			// Only Smoke/Inferno(Molotov)/Decoy get effect timers.
 			const char* label = nullptr;
 			float maxDuration = 0.f;
-			ImU32 textCol = 0;
-			switch (proj.Type) {
-				case PROJ_SMOKE:   label = "Smoke"; maxDuration = 18.0f; textCol = IM_COL32(180, 180, 220, 255); break;
-				case PROJ_MOLOTOV: label = "Fire";  maxDuration = 7.0f;  textCol = IM_COL32(255, 120, 40, 255); break;
-				case PROJ_DECOY:   label = "Decoy"; maxDuration = 15.0f; textCol = IM_COL32(200, 200, 80, 255); break;
-				default: continue;
-			}
+			float remaining = 0.f;
+			if (!ComputeProjectileTimer(proj, true, &label, &maxDuration, &remaining))
+				continue;
+
+			// Per-type sub-switches (Task 12): master toggle + per-type toggle
+			bool typeEnabled = (proj.Type == PROJ_SMOKE   && MenuConfig::ShowWorldSmokeTimer)
+			                || (proj.Type == PROJ_MOLOTOV && MenuConfig::ShowWorldInfernoTimer)
+			                || (proj.Type == PROJ_DECOY   && MenuConfig::ShowWorldDecoyTimer);
+			if (!MenuConfig::ShowWorldProjectileTimers || !typeEnabled) continue;
 
 			// Effect timer only applies once the projectile has settled
 			// (StationaryTimer > 0.5s) or after it disappeared (lingering
@@ -1280,8 +1130,14 @@ namespace Render
 			if (!CView::WorldToScreen(matrix, proj.Position, screenPos))
 				continue;
 
-			float remaining = maxDuration - proj.StationaryTimer - proj.DisappearTimer;
-			if (remaining < 0.f) remaining = 0.f;
+			// Per-type text color (label/maxDuration came from ComputeProjectileTimer).
+			ImU32 textCol = 0;
+			switch (proj.Type) {
+				case PROJ_SMOKE:   textCol = IM_COL32(180, 180, 220, 255); break;
+				case PROJ_MOLOTOV: textCol = IM_COL32(255, 120, 40, 255); break;
+				case PROJ_DECOY:   textCol = IM_COL32(200, 200, 80, 255); break;
+				default: continue;
+			}
 
 			char text[32];
 			snprintf(text, sizeof(text), "%s %.1fs", label, remaining);
@@ -1354,6 +1210,92 @@ namespace Render
 	}
 
 	// ================================================================
+	// ESP gap-closure stage 3b: weapon icon ESP (Task 13).
+	// Draws the active weapon's icon glyph (from weapons.ttf) at the given
+	// position. When the icon font is missing or the weapon id is unknown
+	// the function is a no-op so callers can fall back to text. Knives are
+	// skipped when skipKnife is set (they share one glyph and add clutter).
+	// ================================================================
+	void DrawWeaponIcon(ImDrawList* drawList, const ImVec2& pos, uint16_t weaponId,
+	                    float fontSize, ImU32 color, bool skipKnife)
+	{
+		if (!drawList) return;
+		if (weaponId == 0) return;
+		if (skipKnife && WeaponLookup::IsKnifeItemId(weaponId)) return;
+
+		const char* icon = WeaponLookup::WeaponIconFromItemId(weaponId);
+		if (!icon || icon[0] == '\0') return;
+
+		ImFont* font = Gui.weaponIconFont;
+		if (!font) return;
+
+		// Scale the font to the requested size; the atlas was baked at 16px.
+		font->Scale = fontSize / 16.0f;
+		ImGui::PushFont(font);
+		DrawTextShadow(drawList, font, fontSize, pos, color, icon);
+		ImGui::PopFont();
+		font->Scale = 1.0f;
+	}
+
+	// ================================================================
+	// ESP gap-closure stage 3b: dropped-weapon world ESP (Task 12/16).
+	// Renders icon + name for each dropped weapon on the ground. Weapons
+	// are filtered by EspItemEnabledMask (C4 and knives are always hidden
+	// to avoid duplicating the dedicated bomb ESP and cluttering the view).
+	// ================================================================
+	void DrawDroppedWeapons(ImDrawList* drawList, const std::vector<DroppedWeapon>& weapons,
+	                        const float matrix[4][4])
+	{
+		if (!drawList) return;
+		if (weapons.empty()) return;
+
+		ImFont* iconFont = Gui.weaponIconFont;
+		ImU32 nameCol = ImGui::ColorConvertFloat4ToU32(MenuConfig::WorldESPColor.Value);
+		ImU32 iconCol = IM_COL32(240, 240, 240, 240);
+		float iconSize = MenuConfig::WorldItemFontSize + 3.f;
+		float nameSize = MenuConfig::WorldItemFontSize;
+
+		for (const auto& w : weapons) {
+			if (w.ItemId == 0) continue;
+			// C4 has its own dedicated bomb ESP; knives add clutter.
+			if (w.ItemId == 49) continue;
+			if (WeaponLookup::IsKnifeItemId(w.ItemId)) continue;
+			if (w.ItemId < MenuConfig::EspItemEnabledMask.size() &&
+			    !MenuConfig::EspItemEnabledMask.test(w.ItemId))
+				continue;
+
+			if (!IsValidFloat(w.Position.x) || !IsValidFloat(w.Position.y) || !IsValidFloat(w.Position.z))
+				continue;
+			if (std::abs(w.Position.x) < 1.f && std::abs(w.Position.y) < 1.f && std::abs(w.Position.z) < 1.f)
+				continue;
+
+			Vec2 screenPos;
+			if (!CView::WorldToScreen(matrix, w.Position, screenPos))
+				continue;
+
+			// Icon glyph above the name.
+			const char* icon = WeaponLookup::WeaponIconFromItemId(w.ItemId);
+			if (icon && icon[0] != '\0' && iconFont) {
+				iconFont->Scale = iconSize / 16.0f;
+				ImGui::PushFont(iconFont);
+				ImVec2 iconBounds = iconFont->CalcTextSizeA(iconSize, FLT_MAX, 0.0f, icon, nullptr);
+				ImVec2 iconPos(screenPos.x - iconBounds.x * 0.5f, screenPos.y - iconBounds.y - nameSize - 4.f);
+				DrawTextShadow(drawList, iconFont, iconSize, iconPos, iconCol, icon);
+				ImGui::PopFont();
+				iconFont->Scale = 1.0f;
+			}
+
+			// Name text below the icon.
+			const char* name = w.Name.empty() ? WeaponLookup::WeaponNameFromItemId(w.ItemId) : w.Name.c_str();
+			if (name && name[0] != '\0') {
+				ImVec2 textBounds = ImGui::CalcTextSize(name);
+				ImVec2 textPos(screenPos.x - textBounds.x * 0.5f, screenPos.y - textBounds.y * 0.5f);
+				DrawTextShadow(drawList, nullptr, 0.f, textPos, nameCol, name);
+			}
+		}
+	}
+
+	// ================================================================
 	// ESP gap-closure stage 3b: bar value label (Task 14).
 	// Draws a numeric label with a semi-transparent background box above
 	// a health/armor bar. The box has a 1px accent line at the bottom in
@@ -1408,6 +1350,64 @@ namespace Render
 			drawList->AddText(font, fs, textPos, IM_COL32(255, 255, 255, 255), text);
 		else
 			drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), text);
+	}
+
+	// ================================================================
+	// ESP audit stage 2: unified health-color from ratio (Task 8).
+	// ================================================================
+	ImU32 HealthColorFromRatio(int health)
+	{
+		float hpRatio = std::clamp((float)health / 100.f, 0.f, 1.f);
+		return IM_COL32((int)(255 * (1.f - hpRatio)), (int)(255 * hpRatio), 0, 255);
+	}
+
+	// ================================================================
+	// ESP audit stage 2: box-type dispatch (Task 9).
+	// ================================================================
+	ImVec4 GetBoxByType(const CEntity& Entity)
+	{
+		switch (MenuConfig::BoxType) {
+		case 1:  return Get2DBoneRect(Entity);
+		default: return Get2DBox(Entity);
+		}
+	}
+
+	// ================================================================
+	// ESP audit stage 2: projectile timer computation (Task 10).
+	// Unifies the validate+switch+remaining logic shared by
+	// DrawProjectileESP and DrawWorldESP. worldMode selects between the
+	// two switch tables (Smoke/Fire/Decoy for WorldESP with Decoy=15s;
+	// all 5 types for ProjectileESP with Decoy=0s).
+	// ================================================================
+	bool ComputeProjectileTimer(const GrenadeProjectile& proj, bool worldMode,
+	                            const char** label, float* maxDuration, float* remaining)
+	{
+		if (!IsValidFloat(proj.Position.x) || !IsValidFloat(proj.Position.y) || !IsValidFloat(proj.Position.z))
+			return false;
+
+		*label = "";
+		*maxDuration = 0.f;
+		if (worldMode) {
+			switch (proj.Type) {
+				case PROJ_SMOKE:   *label = "Smoke"; *maxDuration = 20.0f; break;
+				case PROJ_MOLOTOV: *label = "Fire";  *maxDuration = 7.0f;  break;
+				case PROJ_DECOY:   *label = "Decoy"; *maxDuration = 15.0f; break;
+				default: return false;
+			}
+		} else {
+			switch (proj.Type) {
+				case PROJ_SMOKE:   *label = "Smoke"; *maxDuration = 20.0f; break;
+				case PROJ_FLASH:   *label = "Flash"; break;
+				case PROJ_HE:      *label = "HE"; break;
+				case PROJ_MOLOTOV: *label = "Fire"; *maxDuration = 7.0f; break;
+				case PROJ_DECOY:   *label = "Decoy"; break;
+				default: return false;
+			}
+		}
+
+		*remaining = *maxDuration - proj.StationaryTimer - proj.DisappearTimer;
+		if (*remaining < 0.f) *remaining = 0.f;
+		return true;
 	}
 
 }
