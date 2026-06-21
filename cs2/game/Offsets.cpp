@@ -120,7 +120,8 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::GameSceneNode = SafeGetUint64(fields, "m_pGameSceneNode");
 			Offset::fFlags = SafeGetUint64(fields, "m_fFlags");
 			Offset::vecVelocity = SafeGetUint64(fields, "m_vecVelocity");
-			LOG_INFO("Offsets", "C_BaseEntity: Health=0x{:X} TeamID=0x{:X} GameSceneNode=0x{:X} fFlags=0x{:X}",
+		Offset::OwnerEntity = SafeGetUint64(fields, "m_hOwnerEntity");
+		LOG_INFO("Offsets", "C_BaseEntity: Health=0x{:X} TeamID=0x{:X} GameSceneNode=0x{:X} fFlags=0x{:X}",
 				Offset::Health, Offset::TeamID, Offset::GameSceneNode, Offset::fFlags);
 		}
 

@@ -93,6 +93,7 @@ namespace Offset
 	// Entity identity (for projectile scanning)
 	inline DWORD EntityIdentity;         // CEntityInstance::m_pEntity
 	inline DWORD DesignerName;           // CEntityIdentity::m_designerName
+	inline DWORD OwnerEntity;            // C_BaseEntity::m_hOwnerEntity
 	// Observer (spectator detection)
 	inline DWORD ObserverServices;        // C_BasePlayerPawn::m_pObserverServices
 	inline DWORD ObserverMode;             // CPlayer_ObserverServices::m_iObserverMode

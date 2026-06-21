@@ -8,6 +8,8 @@
 *.pdb
 *.iobj
 *.ipdb
+.gitignore
+
 
 # MSVC 中间文件
 *.obj
@@ -18,8 +20,9 @@
 
 # 构建目录
 cs2/build/
+release/
 
-# ===== 运行时生成文件 =====
+## ===== 运行时生成文件 =====
 # ImGui 运行时配置
 imgui.ini
 # 用户保存的配置

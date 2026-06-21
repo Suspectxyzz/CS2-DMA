@@ -222,9 +222,9 @@ namespace MenuConfig
 	inline float   BombTimerY = -1.f;
 
 	// ======== ESP gap-closure stage 3b: World ESP (Task 12) ========
-	// Note: dropped-weapon scanning is deferred; this toggle currently
-	// drives the grenade effect timers (Smoke/Inferno/Decoy) overlay.
-	inline bool    ShowWorldESP = false;
+	// ShowWorldProjectileTimers drives the grenade effect timers
+	// (Smoke/Inferno/Decoy) overlay. ShowWorldItems drives dropped-weapon
+	// world ESP. Both are independent top-level toggles.
 	inline bool    ShowWorldProjectileTimers = true;
 	inline bool    ShowWorldSmokeTimer = true;
 	inline bool    ShowWorldInfernoTimer = true;
@@ -248,7 +248,7 @@ namespace MenuConfig
 	inline bool    WeaponIconNoKnife = true;
 
 	// ======== ESP gap-closure stage 3b: Dropped-Weapon World ESP (Task 12/16) ========
-	// When ShowWorldESP is on, dropped weapons on the ground are rendered
+	// When ShowWorldItems is on, dropped weapons on the ground are rendered
 	// with their icon + name. EspItemEnabledMask gates which weapon ids
 	// are drawn (default: all enabled).
 	inline bool    ShowWorldItems = false;

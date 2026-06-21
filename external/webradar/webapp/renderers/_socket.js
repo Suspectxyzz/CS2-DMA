@@ -397,6 +397,21 @@ function handleBackendMessage(raw) {
     dispatchEvent("flashbangs", flashbangs);
     dispatchEvent("projectiles", projs);
 
+    // 4b. 地上掉落武器
+    var droppedWeaponsIn = data.m_dropped_weapons || [];
+    var droppedWeaponsOut = [];
+    for (var dw = 0; dw < droppedWeaponsIn.length; dw++) {
+      var w = droppedWeaponsIn[dw];
+      var wpos = w.m_position || { x: 0, y: 0, z: 0 };
+      droppedWeaponsOut.push({
+        id: w.m_entity_id || ("dw_" + dw),
+        itemId: w.m_item_id || 0,
+        name: w.m_name || "",
+        position: { x: wpos.x, y: wpos.y, z: wpos.z }
+      });
+    }
+    dispatchEvent("droppedWeapons", droppedWeaponsOut);
+
     // 5. spectators 事件（观战列表）
     // 后端仅在 Spectators 非空时序列化 m_spectators，这里始终派发
     // （空数组时渲染器隐藏面板），与 projectiles 等事件行为一致。

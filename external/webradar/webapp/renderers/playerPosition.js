@@ -120,54 +120,70 @@ socket.element.addEventListener("players", event => {
 		global.playerPos[player.num].alive = player.health > 0
 
 		// 名字 + 武器 + 血量组合显示（非互斥）
-		let infoText = ""
-		if (global.config.radar.showName == "both" || global.config.radar.showName == "always") {
-			infoText = player.name.substring(0, global.config.radar.maxNameLength)
-		}
-		if (player.health > 0) {
-			if (global.config.radar.showWeapon) {
-				let weaponName = player.weapons.m_active || ""
-				let abbrev = weaponName.replace("weapon_", "")
-					.replace("_silencer", "")
-					.replace("ak47", "AK")
-					.replace("m4a1", "M4")
-					.replace("awp", "AWP")
-					.replace("usp", "USP")
-					.replace("glock", "Glock")
-					.replace("deagle", "Deagle")
-					.replace("mp5sd", "MP5")
-					.replace("mp7", "MP7")
-					.replace("mp9", "MP9")
-					.replace("mac10", "MAC")
-					.replace("ump45", "UMP")
-					.replace("p90", "P90")
-					.replace("bizon", "Bizon")
-					.replace("nova", "Nova")
-					.replace("xm1014", "XM")
-					.replace("sawedoff", "Saw")
-					.replace("mag7", "Mag")
-					.replace("m249", "M249")
-					.replace("negev", "Negev")
-					.replace("ssg08", "SSG")
-					.replace("sg556", "SG")
-					.replace("aug", "AUG")
-					.replace("famas", "Famas")
-					.replace("galilar", "Galil")
-					.replace("scar20", "Scar")
-					.replace("g3sg1", "G3")
-					.replace("knife", "Knife")
-					.replace("bayonet", "Knife")
-					.replace("c4", "C4")
-					.toUpperCase()
+	let infoText = ""
+	let useHtml = false
+	if (global.config.radar.showName == "both" || global.config.radar.showName == "always") {
+		infoText = player.name.substring(0, global.config.radar.maxNameLength)
+	}
+	if (player.health > 0) {
+		let weaponMode = global.config.radar.showWeapon
+		if (weaponMode === "name") {
+			let weaponName = player.weapons.m_active || ""
+			let abbrev = weaponName.replace("weapon_", "")
+				.replace("_silencer", "")
+				.replace("ak47", "AK")
+				.replace("m4a1", "M4")
+				.replace("awp", "AWP")
+				.replace("usp", "USP")
+				.replace("glock", "Glock")
+				.replace("deagle", "Deagle")
+				.replace("mp5sd", "MP5")
+				.replace("mp7", "MP7")
+				.replace("mp9", "MP9")
+				.replace("mac10", "MAC")
+				.replace("ump45", "UMP")
+				.replace("p90", "P90")
+				.replace("bizon", "Bizon")
+				.replace("nova", "Nova")
+				.replace("xm1014", "XM")
+				.replace("sawedoff", "Saw")
+				.replace("mag7", "Mag")
+				.replace("m249", "M249")
+				.replace("negev", "Negev")
+				.replace("ssg08", "SSG")
+				.replace("sg556", "SG")
+				.replace("aug", "AUG")
+				.replace("famas", "Famas")
+				.replace("galilar", "Galil")
+				.replace("scar20", "Scar")
+				.replace("g3sg1", "G3")
+				.replace("knife", "Knife")
+				.replace("bayonet", "Knife")
+				.replace("c4", "C4")
+				.toUpperCase()
+			if (infoText) infoText += " "
+			infoText += abbrev
+		} else if (weaponMode === "icon") {
+			let weaponName = player.weapons.m_active || ""
+			if (weaponName) {
+				let iconKey = weaponName.replace("weapon_", "")
+					.replace("bayonet", "knife")
+				let iconHtml = '<img class="weapon-icon" src="/img/icons/' + iconKey + '.svg" alt="' + iconKey + '" onerror="this.style.display=\'none\'">'
 				if (infoText) infoText += " "
-				infoText += abbrev
-			}
-			if (global.config.radar.showHealth) {
-				if (infoText) infoText += " "
-				infoText += player.health + "HP"
+				infoText += iconHtml
+				useHtml = true
 			}
 		}
+		if (global.config.radar.showHealth) {
+			if (infoText) infoText += " "
+			infoText += player.health + "HP"
+		}
+	}
+	if (useHtml) {
+		playerLabel.children[0].innerHTML = infoText
+	} else {
 		playerLabel.children[0].textContent = infoText
+	}
 
 		if (global.bomb.state === "planted" && global.bomb.countdown < 100 && global.config.radar.showBlastRadius === 'active' && global.mapData.survivableDistance && player.health > 0) {
 			// Calculate distance between player and bomb

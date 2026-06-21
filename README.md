@@ -29,6 +29,16 @@ During the development phase, your feedback and feature suggestions are needed. 
 - **Head Dot** — Head position marker
 - **Safe Zone** — Crosshair area ESP cutout to reduce visual clutter
 - **Spectator List** — Detect who is spectating you, show spectator name, team color, and spectate mode ([Eye]/[Chase]/[Roam])
+- **ESP Preview** — Preview window with single-color (1 fake player) and tri-color (Default/Visible/Hidden) modes to visualize all ESP elements without entering a match
+- **Sound ESP** — Ripple animation at enemy position when they fire weapons
+- **Player Flags** — Status indicators above enemies: Blind / Scoped / Defusing / Kit / Money
+- **Weapon Icon ESP** — Weapon icons rendered using the weapons.ttf glyph font (with option to hide knife icons)
+- **Weapon Ammo ESP** — Displays ammo count (XX/YY) with low-ammo warning color
+- **Bar Value Labels** — Numeric health/armor values displayed beside the bars
+- **World Projectile Timers** — World-space countdown timers for active smokes, infernos (molotovs), and decoys with independent toggles
+- **Dropped Weapon ESP** — Displays names and icons of weapons dropped on the ground, filterable by weapon category
+- **Bomb Timer Overlay** — Draggable on-screen C4 countdown window with defuse progress bar and kit detection
+- **Visibility Coloring** — Changes enemy color based on wall visibility (visible vs hidden behind walls)
 <img width="827" height="524" alt="image" src="https://github.com/user-attachments/assets/6589c93a-007a-467f-966b-6b6126f92d60" />
 <img width="1905" height="721" alt="image" src="https://github.com/user-attachments/assets/1481cf2b-075c-40dd-a895-a9cde3d9bf9d" />
 
@@ -60,6 +70,19 @@ During the development phase, your feedback and feature suggestions are needed. 
 - **LAN Access** — Toggle Web Radar in the menu, then any LAN device can view real-time radar via browser (menu shows local IP + one-click copy URL)
 - **Public Access (built-in Cloudflare Tunnel)** — One-click start/stop cloudflared quick tunnel from the menu, auto-captures public URL (requires cloudflared installed: `winget install Cloudflare.cloudflared`)
 - **Other Public Access** — See [Public Access Setup](#public-access-setup) below (ngrok / frp / port forwarding)
+- **DMA Health State Machine** — Three-state monitor (Healthy / Degraded / Failed) tracking DMA read success/failure streaks with automatic recovery
+- **VT/IOMMU Rejection Detection** — Detects suspected VT/IOMMU blocking after 3 consecutive Full refresh failures and alerts the user
+- **RTT Monitor** — /api/ping endpoint + frontend latency indicator with 3-state status (connecting/live/error)
+- **Page Update Auto-Reload** — Pushes pageUpdate event to clients for automatic browser refresh when resources change
+- **Origin Allowlist** — CORS control to restrict allowed source domains for /api/* endpoints
+- **Password Authentication** — Optional WebSocket URL query parameter (?password=xxx) for access protection
+- **Per-Map Radar Calibration** — Adjustable rotation, scale, and X/Y offset per map with auto-save
+- **Runtime Stats Panel** — Real-time statistics: send frequency, client count, frames sent/dropped, coalesced frames, payload bytes, bytes/sec
+- **Team Panel** — Frontend T/CT player cards with character model images, weapon icons, ammo, and utility slots
+- **Spectator Panel** — Frontend spectator list with team-colored borders
+- **Advisory Indicators** — Frontend status hints: planting / defusing / sole survivor
+- **Bomb Escape Arrow** — Frontend directional arrow showing escape route from bomb explosion radius when planted
+- **QR Code** — In-menu QR code for quick mobile access to the radar URL
 <img width="840" height="517" alt="image" src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" />
 <img width="773" height="457" alt="image" src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" />
 
@@ -80,6 +103,9 @@ During the development phase, your feedback and feature suggestions are needed. 
 - **On-Demand Reading** — Only reads fields required by currently enabled features; the entire data pipeline sleeps when no features are active — zero wasted transfers
 - **Tiered Entity Caching** — High-frequency data (position, health) is read every frame; low-frequency data (name, team) updates at 5/50 frame intervals, reducing 80%+ redundant reads
 - **Zero-Copy Snapshot** — `DataThread` holds a write lock only briefly during pointer swap; render thread reads without blocking — data latency < 1 frame, say goodbye to flickering boxes
+- **Bone Reliability Check** — Validates bone data sanity and caches last reliable skeleton for 150ms to suppress flickering
+- **Snapshot Interpolation** — Quintic ease smoothing + velocity extrapolation for player positions, eliminating stutter between DMA frames
+- **CameraWorker Thread** — Dedicated 500Hz background thread for view matrix reads, decoupled from render loop to eliminate mouse-look stutter
 
 ### Performance Monitor
 - On-screen overlay: FPS (color-coded), frame time, entity count, grenade count, spectator count
@@ -94,11 +120,15 @@ During the development phase, your feedback and feature suggestions are needed. 
 - **Multi-Monitor Support** — Enumerate all displays; select target monitor for overlay rendering with auto-positioned window
 - **Render Resolution** — Resolution presets (4:3, 16:9, 16:10) or auto-detect; DPI-aware rendering
 - **Debug Log Toggle** — Runtime switch for TRACE/DEBUG level logs; zero overhead when disabled
+- **Debug Stats Overlay** — Detailed 7-stage timing (matrix/local/entities/scatter/weapon/bomb/projectile) plus WebRadar statistics overlay
 - **Help Button** — Quick link to project GitHub page from the Settings menu
 - **Multi-language** — Auto-detects system language via `GetUserDefaultUILanguage()` (Chinese for Chinese systems, English for others); manual toggle available
 - **Logging System** — Leveled logging (TRACE → FATAL) with ring buffer for crash diagnostics
 - **Crash Handler** — SEH + <code>std::terminate</code> capture, auto-generates <code>.log</code> + <code>.dmp</code> with recent logs, feature state, and system info
 - **Extreme Stability** — Due to the nature of DMA transfers, dirty data is unavoidable. This project focuses on optimizing data validation and reliability — no flickering boxes, no missed players
+- **Tiered DMA Refresh** — Progressive recovery: Probe (100 failures) → Repair (300) → Full (500) with address re-init and cache reset
+- **Adaptive Shard Discovery** — Dynamically splits entity list scanning into 1/2/4/10 shards based on entity count for optimal throughput
+- **Data Reliability Tolerance** — Multiple grace periods (core stale hold, zero-pawn grace, hierarchy missing hold, controller missing hold, death confirm) to tolerate DMA jitter without flickering
 - **Encryption & Decryption** — Supports CR3 (DTB) repair and automatically enables when encryption is detected, but this is NOT true CR3 decryption! For encrypted environments, contact the author for technical support
 - **VTD** — Not recommended to enable. Although DMA read frequency has been optimized, it may still be detected
 - **Platform Availability** — Works on major competitive platforms, but please do not use in real player matches

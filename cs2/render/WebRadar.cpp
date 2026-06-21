@@ -1302,6 +1302,24 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 		doc.AddMember("m_projectiles", projectiles, a);
 	}
 
+	// Dropped weapons (world items)
+	if (!snap.DroppedWeapons.empty()) {
+		rapidjson::Value weapons(rapidjson::kArrayType);
+		for (const auto& dw : snap.DroppedWeapons) {
+			rapidjson::Value w(rapidjson::kObjectType);
+			rapidjson::Value pos(rapidjson::kObjectType);
+			pos.AddMember("x", dw.Position.x, a);
+			pos.AddMember("y", dw.Position.y, a);
+			pos.AddMember("z", dw.Position.z, a);
+			w.AddMember("m_position", pos, a);
+			w.AddMember("m_item_id", dw.ItemId, a);
+			w.AddMember("m_name", rapidjson::Value(dw.Name.c_str(), a), a);
+			w.AddMember("m_entity_id", static_cast<uint32_t>(dw.EntityAddr & 0xFFFFFFFF), a);
+			weapons.PushBack(w, a);
+		}
+		doc.AddMember("m_dropped_weapons", weapons, a);
+	}
+
 	// Spectators (observers)
 	if (!snap.Spectators.empty()) {
 		rapidjson::Value spectators(rapidjson::kArrayType);

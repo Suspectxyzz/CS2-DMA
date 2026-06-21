@@ -372,23 +372,21 @@ static void DrawTab_Visuals() {
 			}
 		}
 
-		// --- World ESP (moved from Advanced ESP) ---
-		Gui.MyCheckBox(lang.visuals_world_esp.c_str(), &MenuConfig::ShowWorldESP);
-		tip("Grenade effect timers in the world", "世界中的手雷效果计时器");
-		if (MenuConfig::ShowWorldESP) {
-			Gui.MyCheckBox(lang.visuals_world_timers.c_str(), &MenuConfig::ShowWorldProjectileTimers);
-			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4(lang.visuals_world_color.c_str(), reinterpret_cast<float*>(&MenuConfig::WorldESPColor), ImGuiColorEditFlags_NoInputs);
-
+		// --- World ESP: grenade timers + dropped weapons (simplified) ---
+		Gui.MyCheckBox(lang.visuals_world_timers.c_str(), &MenuConfig::ShowWorldProjectileTimers);
+		ImGui::SameLine(0, 16);
+		ImGui::ColorEdit4(lang.visuals_world_color.c_str(), reinterpret_cast<float*>(&MenuConfig::WorldESPColor), ImGuiColorEditFlags_NoInputs);
+		if (MenuConfig::ShowWorldProjectileTimers) {
 			// Task 12: per-type grenade timer sub-switches
 			Gui.MyCheckBox(lang.visuals_world_smoke_timer.c_str(), &MenuConfig::ShowWorldSmokeTimer);
 			Gui.MyCheckBox(lang.visuals_world_inferno_timer.c_str(), &MenuConfig::ShowWorldInfernoTimer);
 			Gui.MyCheckBox(lang.visuals_world_decoy_timer.c_str(), &MenuConfig::ShowWorldDecoyTimer);
+		}
 
-			// Task 12/16: dropped-weapon world ESP + per-weapon-id filter.
-			Gui.MyCheckBox(lang.visuals_world_items.c_str(), &MenuConfig::ShowWorldItems);
-			tip("Dropped weapons on the ground", "地面掉落武器显示");
-			if (MenuConfig::ShowWorldItems) {
+		// Task 12/16: dropped-weapon world ESP + per-weapon-id filter.
+		Gui.MyCheckBox(lang.visuals_world_items.c_str(), &MenuConfig::ShowWorldItems);
+		tip("Dropped weapons on the ground", "地面掉落武器显示");
+		if (MenuConfig::ShowWorldItems) {
 				ImGui::SetNextItemWidth(150);
 				ImGui::SliderFloat(lang.visuals_world_item_fontsize.c_str(), &MenuConfig::WorldItemFontSize, 8.f, 20.f, "%.0f px");
 
@@ -430,8 +428,7 @@ static void DrawTab_Visuals() {
 					drawGroup(lang.visuals_item_filter_snipers.c_str(),  kSnipers,  sizeof(kSnipers)/sizeof(kSnipers[0]));
 					drawGroup(lang.visuals_item_filter_heavy.c_str(),    kHeavy,    sizeof(kHeavy)/sizeof(kHeavy[0]));
 					drawGroup(lang.visuals_item_filter_gear.c_str(),     kGear,     sizeof(kGear)/sizeof(kGear[0]));
-					ImGui::TreePop();
-				}
+				ImGui::TreePop();
 			}
 		}
 	}
@@ -1217,6 +1214,66 @@ static void DrawTab_Config() {
 }
 
 // ============================================================================
+// Tab 6: Contact Author
+// ============================================================================
+static void DrawTab_Contact() {
+	SectionHeader(lang.tab_contact.c_str());
+
+	ImGui::Spacing();
+
+	// QQ Group
+	if (ImGui::CollapsingHeader("QQ Group", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::TextColored(UITheme::TextSecondary, "QQ Group:");
+		ImGui::SameLine();
+		ImGui::TextColored(UITheme::TextPrimary, "965428002");
+		ImGui::SameLine(0, 8);
+		if (ImGui::SmallButton("Copy##qq")) {
+			ImGui::SetClipboardText("965428002");
+		}
+	}
+
+	// Email
+	if (ImGui::CollapsingHeader("Email", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::TextColored(UITheme::TextSecondary, "Email:");
+		ImGui::SameLine();
+		ImGui::TextColored(UITheme::TextPrimary, "kuchao1012@outlook.com");
+		ImGui::SameLine(0, 8);
+		if (ImGui::SmallButton("Copy##email")) {
+			ImGui::SetClipboardText("kuchao1012@outlook.com");
+		}
+	}
+
+	// GitHub
+	if (ImGui::CollapsingHeader("GitHub", ImGuiTreeNodeFlags_DefaultOpen)) {
+		const char* githubUrl = "https://github.com/chao-shushu/CS2-DMA";
+		ImGui::TextColored(UITheme::TextSecondary, "GitHub:");
+		ImGui::SameLine();
+		ImGui::TextColored(UITheme::TextAccent, "%s", githubUrl);
+		ImGui::SameLine(0, 8);
+		if (ImGui::SmallButton("Copy##github")) {
+			ImGui::SetClipboardText(githubUrl);
+		}
+		ImGui::SameLine(0, 8);
+		if (ImGui::SmallButton("Open##github")) {
+			ShellExecuteA(nullptr, "open", githubUrl, nullptr, nullptr, SW_SHOWNORMAL);
+		}
+
+		ImGui::Spacing();
+		if (ImGui::TreeNode("QR Code##github")) {
+			const float qrSize = 180.0f;
+			float avail = ImGui::GetContentRegionAvail().x;
+			if (avail > qrSize) {
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - qrSize) * 0.5f);
+			}
+			DrawQRCode(githubUrl, qrSize);
+			ImGui::Spacing();
+			ImGui::TextDisabled("Scan with phone camera to open");
+			ImGui::TreePop();
+		}
+	}
+}
+
+// ============================================================================
 // Tab 4: Grenade Helper
 // ============================================================================
 static void DrawTab_Grenade() {
@@ -1596,6 +1653,7 @@ void Cheats::Menu()
 			ImGui::TextColored(UITheme::TextDisabled, "  SYSTEM");
 			if (NavButton(lang.tab_settings.c_str(), active_tab == 2, btnW)) active_tab = 2;
 			if (NavButton(lang.tab_config.c_str(), active_tab == 3, btnW)) active_tab = 3;
+			if (NavButton(lang.tab_contact.c_str(), active_tab == 6, btnW)) active_tab = 6;
 
 			float remainHeight = ImGui::GetContentRegionAvail().y;
 			if (remainHeight > 60) {
@@ -1642,6 +1700,7 @@ void Cheats::Menu()
 			case 3: DrawTab_Config(); break;
 			case 4: DrawTab_Grenade(); break;
 			case 5: DrawTab_Hotkeys(); break;
+			case 6: DrawTab_Contact(); break;
 			default: break;
 			}
 			ImGui::PopStyleVar();

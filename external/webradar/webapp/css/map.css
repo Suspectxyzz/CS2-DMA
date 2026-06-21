@@ -221,6 +221,15 @@ div.label span {
 	white-space: nowrap;
 }
 
+div.label span .weapon-icon {
+	display: inline-block;
+	width: 1.4em;
+	height: 1.4em;
+	vertical-align: middle;
+	margin: 0 1px;
+	filter: drop-shadow(0 0 .2em #000);
+}
+
 #bomb {
 	position: absolute;
 	background-image: url("../img/bomb-dropped.webp");
@@ -461,6 +470,20 @@ div.label span {
 
 #projectiles > div.U {
 	filter: grayscale(1) brightness(0.7);
+}
+
+#droppedWeapons > div {
+	position: absolute;
+	box-sizing: border-box;
+	transform: translate(-50%, 50%);
+	background-repeat: no-repeat;
+	background-size: contain;
+	background-position: center;
+	height: 3vmin;
+	width: 3vmin;
+	opacity: 0.85;
+	filter: drop-shadow(0 0 0.3vmin rgba(0, 0, 0, 0.8));
+	pointer-events: none;
 }
 
 #advisory {

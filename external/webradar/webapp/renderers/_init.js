@@ -33,7 +33,7 @@ const defaultConfig = {
 		tombstoneOpacity: 0.4,
 		playerDotScale: 0.7,
 		bombDotScale: 0.7,
-		showWeapon: false,
+		showWeapon: "off",
 		showHealth: false,
 		followRotation: false
 	},
@@ -93,6 +93,11 @@ function loadConfig() {
 	}
 	catch (err) {
 		// Ignore malformed localStorage entries and keep defaults
+	}
+
+	// 兼容性：showWeapon 旧版为布尔值，转换为三态字符串
+	if (typeof config.radar.showWeapon === "boolean") {
+		config.radar.showWeapon = config.radar.showWeapon ? "name" : "off"
 	}
 
 	return config

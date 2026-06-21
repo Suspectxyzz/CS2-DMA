@@ -411,13 +411,13 @@ void Cheats::Run()
 		// Task 12: World ESP — grenade effect timers (Smoke/Inferno/Decoy).
 		// Dropped-weapon scanning is deferred; this overlay only draws the
 		// lingering effect countdown above active smoke/fire/decoy spots.
-		if (MenuConfig::ShowWorldESP && !snap.Projectiles.empty())
+		if (MenuConfig::ShowWorldProjectileTimers && !snap.Projectiles.empty())
 			Render::DrawWorldESP(ImGui::GetBackgroundDrawList(), snap.Projectiles, freshMatrix, 0);
 
 		// Task 12/16: Dropped-weapon world ESP — icon + name for weapons on
 		// the ground, filtered by EspItemEnabledMask. Drawn under
-		// ShowWorldESP (master toggle) + ShowWorldItems (sub-toggle).
-		if (MenuConfig::ShowWorldESP && MenuConfig::ShowWorldItems && !snap.DroppedWeapons.empty())
+		// ShowWorldItems (independent toggle).
+		if (MenuConfig::ShowWorldItems && !snap.DroppedWeapons.empty())
 			Render::DrawDroppedWeapons(ImGui::GetBackgroundDrawList(), snap.DroppedWeapons, freshMatrix);
 
 		// Crosshair overlay: drawn on top of ESP, below safe zone mask

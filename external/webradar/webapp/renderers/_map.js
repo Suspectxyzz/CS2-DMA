@@ -45,7 +45,7 @@ socket.element.addEventListener("map", event => {
 
 		// Set the map as the current map and in the window title
 		global.currentMap = mapName
-		document.title = "Boltobserv - " + mapName
+		document.title = t("page_title") + " - " + mapName
 
 		// Hide advisories if you've been disabled in the config
 		if (global.config.radar.hideAdvisories) {

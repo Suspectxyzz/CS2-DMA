@@ -10,192 +10,205 @@
 		<link rel="stylesheet" href="/css/custom.css">
 	</head>
 	<body>
-		<button id="settings-toggle" class="settings-toggle" title="设置" aria-label="设置">
-		<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-			<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
-		</svg>
-	</button>
-	<div id="conn-status" class="conn-status conn-status--connecting">...</div>
+		<button id="settings-toggle" class="settings-toggle" title="设置" data-i18n-title="settings_toggle_title" aria-label="设置">
+	<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+		<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+	</svg>
+</button>
+<div id="conn-status" class="conn-status conn-status--connecting">...</div>
 
-		<div id="settings-panel" class="settings-panel" hidden>
-			<div class="settings-header">
-				<h2>雷达设置</h2>
-				<button id="settings-reset" class="settings-reset" title="重置为默认">重置</button>
-			</div>
-			<div class="settings-body">
-				<div class="settings-group" data-group="display">
-					<h3>显示</h3>
-					<div class="settings-row">
-					<label for="cfg-showTeamPanel">显示队伍面板</label>
-					<input type="checkbox" id="cfg-showTeamPanel" data-config="radar.showTeamPanel" checked>
-				</div>
+	<div id="settings-panel" class="settings-panel" hidden>
+		<div class="settings-header">
+			<h2 data-i18n="settings_title">雷达设置</h2>
+			<button id="settings-reset" class="settings-reset" title="重置为默认" data-i18n="settings_reset" data-i18n-title="settings_reset_title">重置</button>
+		</div>
+		<div class="settings-body">
+			<div class="settings-group" data-group="language">
 				<div class="settings-row">
-					<label for="cfg-followRotation">地图跟随旋转</label>
-					<input type="checkbox" id="cfg-followRotation" data-config="radar.followRotation">
-				</div>
-				<div class="settings-row">
-					<label for="cfg-playerDotScale">玩家点大小</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-playerDotScale" data-config="radar.playerDotScale" min="0.3" max="1.5" step="0.1" value="0.7">
-							<span class="settings-value" data-value-for="radar.playerDotScale">0.7</span>
-						</div>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-bombDotScale">炸弹点大小</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-bombDotScale" data-config="radar.bombDotScale" min="0.3" max="1.5" step="0.1" value="0.7">
-							<span class="settings-value" data-value-for="radar.bombDotScale">0.7</span>
-						</div>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-tombstoneOpacity">死亡墓碑透明度</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-tombstoneOpacity" data-config="radar.tombstoneOpacity" min="0" max="1" step="0.1" value="0.4">
-							<span class="settings-value" data-value-for="radar.tombstoneOpacity">0.4</span>
-						</div>
-					</div>
-				</div>
-				<div class="settings-group" data-group="name">
-					<h3>名字</h3>
-					<div class="settings-row">
-						<label for="cfg-showName">显示模式</label>
-						<select id="cfg-showName" data-config="radar.showName">
-							<option value="never">从不</option>
-							<option value="both">双方</option>
-							<option value="always">始终</option>
-						</select>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-maxNameLength">最大长度</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-maxNameLength" data-config="radar.maxNameLength" min="4" max="16" step="1" value="8">
-							<span class="settings-value" data-value-for="radar.maxNameLength">8</span>
-						</div>
-					</div>
-				</div>
-				<div class="settings-group" data-group="indicator">
-					<h3>指示器</h3>
-					<div class="settings-row">
-						<label for="cfg-shooting">开火指示</label>
-						<input type="checkbox" id="cfg-shooting" data-config="radar.shooting" checked>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-damage">受伤指示</label>
-						<input type="checkbox" id="cfg-damage" data-config="radar.damage" checked>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-flashes">被闪指示</label>
-						<input type="checkbox" id="cfg-flashes" data-config="radar.flashes" checked>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-projectiles">投掷物显示</label>
-						<input type="checkbox" id="cfg-projectiles" data-config="radar.projectiles" checked>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-smokeColors">烟雾队伍色</label>
-						<input type="checkbox" id="cfg-smokeColors" data-config="radar.smokeColors" checked>
-					</div>
-					<div class="settings-row">
-					<label for="cfg-plainProjectiles">简洁投掷物图标</label>
-					<input type="checkbox" id="cfg-plainProjectiles" data-config="radar.plainProjectiles">
-				</div>
-				<div class="settings-row">
-					<label for="cfg-showWeapon">显示武器</label>
-					<input type="checkbox" id="cfg-showWeapon" data-config="radar.showWeapon">
-				</div>
-				<div class="settings-row">
-					<label for="cfg-showHealth">显示血量</label>
-					<input type="checkbox" id="cfg-showHealth" data-config="radar.showHealth">
-				</div>
-			</div>
-				<div class="settings-group" data-group="advisory">
-					<h3>建议框</h3>
-					<div class="settings-row">
-						<label for="cfg-hideAdvisories">隐藏建议框</label>
-						<input type="checkbox" id="cfg-hideAdvisories" data-config="radar.hideAdvisories">
-					</div>
-					<div class="settings-row">
-					<label for="cfg-showBlastRadius">爆炸半径箭头</label>
-					<select id="cfg-showBlastRadius" data-config="radar.showBlastRadius">
-						<option value="never">从不</option>
-						<option value="active">激活时</option>
-					</select>
-				</div>
-				<div class="settings-row">
-					<label for="cfg-showBuyzones">购买区</label>
-					<select id="cfg-showBuyzones" data-config="radar.showBuyzones">
-						<option value="never">从不</option>
-						<option value="buytime">购买时间</option>
-						<option value="always">始终</option>
+					<label for="cfg-language" data-i18n="settings_language">语言</label>
+					<select id="cfg-language">
+						<option value="zh">中文</option>
+						<option value="en">English</option>
 					</select>
 				</div>
 			</div>
-				<div class="settings-group" data-group="vertIndicator">
-					<h3>垂直指示器</h3>
-					<div class="settings-row">
-						<label for="cfg-vertType">类型</label>
-						<select id="cfg-vertType" data-config="vertIndicator.type">
-							<option value="none">无</option>
-							<option value="color">颜色</option>
-							<option value="scale">缩放</option>
-						</select>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-scaleDelta">缩放强度</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-scaleDelta" data-config="vertIndicator.scaleDelta" min="0.5" max="2" step="0.1" value="1">
-							<span class="settings-value" data-value-for="vertIndicator.scaleDelta">1</span>
-						</div>
-					</div>
-				</div>
-				<div class="settings-group" data-group="autozoom">
-					<h3>自动缩放</h3>
-					<div class="settings-row">
-						<label for="cfg-autozoomEnable">启用</label>
-						<input type="checkbox" id="cfg-autozoomEnable" data-config="autozoom.enable" checked>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-autozoomPadding">边缘留白</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-autozoomPadding" data-config="autozoom.padding" min="0" max="0.5" step="0.05" value="0.3">
-							<span class="settings-value" data-value-for="autozoom.padding">0.3</span>
-						</div>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-autozoomMinZoom">最小缩放</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-autozoomMinZoom" data-config="autozoom.minZoom" min="1" max="2" step="0.1" value="1.3">
-							<span class="settings-value" data-value-for="autozoom.minZoom">1.3</span>
-						</div>
+			<div class="settings-group" data-group="display">
+				<h3 data-i18n="group_display">显示</h3>
+				<div class="settings-row">
+				<label for="cfg-showTeamPanel" data-i18n="showTeamPanel">显示队伍面板</label>
+				<input type="checkbox" id="cfg-showTeamPanel" data-config="radar.showTeamPanel" checked>
+			</div>
+			<div class="settings-row">
+				<label for="cfg-followRotation" data-i18n="followRotation">地图跟随旋转</label>
+				<input type="checkbox" id="cfg-followRotation" data-config="radar.followRotation">
+			</div>
+			<div class="settings-row">
+				<label for="cfg-playerDotScale" data-i18n="playerDotScale">玩家点大小</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-playerDotScale" data-config="radar.playerDotScale" min="0.3" max="1.5" step="0.1" value="0.7">
+						<span class="settings-value" data-value-for="radar.playerDotScale">0.7</span>
 					</div>
 				</div>
-				<div class="settings-group" data-group="smoothing">
-					<h3>平滑</h3>
-					<div class="settings-row">
-						<label for="cfg-playerSmoothing">玩家平滑</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-playerSmoothing" data-config="radar.playerSmoothing" min="1" max="30" step="1" value="13">
-							<span class="settings-value" data-value-for="radar.playerSmoothing">13</span>
-						</div>
+				<div class="settings-row">
+					<label for="cfg-bombDotScale" data-i18n="bombDotScale">炸弹点大小</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-bombDotScale" data-config="radar.bombDotScale" min="0.3" max="1.5" step="0.1" value="0.7">
+						<span class="settings-value" data-value-for="radar.bombDotScale">0.7</span>
 					</div>
-					<div class="settings-row">
-						<label for="cfg-projectileSmoothing">投掷物平滑</label>
-						<div class="settings-control">
-							<input type="range" id="cfg-projectileSmoothing" data-config="radar.projectileSmoothing" min="1" max="15" step="1" value="5">
-							<span class="settings-value" data-value-for="radar.projectileSmoothing">5</span>
-						</div>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-tombstoneOpacity" data-i18n="tombstoneOpacity">死亡墓碑透明度</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-tombstoneOpacity" data-config="radar.tombstoneOpacity" min="0" max="1" step="0.1" value="0.4">
+						<span class="settings-value" data-value-for="radar.tombstoneOpacity">0.4</span>
+					</div>
+				</div>
+			</div>
+			<div class="settings-group" data-group="name">
+				<h3 data-i18n="group_name">名字</h3>
+				<div class="settings-row">
+					<label for="cfg-showName" data-i18n="showName">显示模式</label>
+					<select id="cfg-showName" data-config="radar.showName">
+						<option value="never" data-i18n="opt_never">从不</option>
+						<option value="both" data-i18n="opt_both">双方</option>
+						<option value="always" data-i18n="opt_always">始终</option>
+					</select>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-maxNameLength" data-i18n="maxNameLength">最大长度</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-maxNameLength" data-config="radar.maxNameLength" min="4" max="16" step="1" value="8">
+						<span class="settings-value" data-value-for="radar.maxNameLength">8</span>
+					</div>
+				</div>
+			</div>
+			<div class="settings-group" data-group="indicator">
+				<h3 data-i18n="group_indicator">指示器</h3>
+				<div class="settings-row">
+					<label for="cfg-shooting" data-i18n="shooting">开火指示</label>
+					<input type="checkbox" id="cfg-shooting" data-config="radar.shooting" checked>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-damage" data-i18n="damage">受伤指示</label>
+					<input type="checkbox" id="cfg-damage" data-config="radar.damage" checked>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-flashes" data-i18n="flashes">被闪指示</label>
+					<input type="checkbox" id="cfg-flashes" data-config="radar.flashes" checked>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-projectiles" data-i18n="projectiles">投掷物显示</label>
+					<input type="checkbox" id="cfg-projectiles" data-config="radar.projectiles" checked>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-smokeColors" data-i18n="smokeColors">烟雾队伍色</label>
+					<input type="checkbox" id="cfg-smokeColors" data-config="radar.smokeColors" checked>
+				</div>
+				<div class="settings-row">
+				<label for="cfg-plainProjectiles" data-i18n="plainProjectiles">简洁投掷物图标</label>
+				<input type="checkbox" id="cfg-plainProjectiles" data-config="radar.plainProjectiles">
+			</div>
+			<div class="settings-row">
+			<label for="cfg-showWeapon" data-i18n="showWeapon">显示武器</label>
+			<select id="cfg-showWeapon" data-config="radar.showWeapon">
+				<option value="off" data-i18n="opt_off">关闭</option>
+				<option value="name" data-i18n="opt_name">名称</option>
+				<option value="icon" data-i18n="opt_icon">图标</option>
+			</select>
+		</div>
+			<div class="settings-row">
+				<label for="cfg-showHealth" data-i18n="showHealth">显示血量</label>
+				<input type="checkbox" id="cfg-showHealth" data-config="radar.showHealth">
+			</div>
+		</div>
+			<div class="settings-group" data-group="advisory">
+				<h3 data-i18n="group_advisory">建议框</h3>
+				<div class="settings-row">
+					<label for="cfg-hideAdvisories" data-i18n="hideAdvisories">隐藏建议框</label>
+					<input type="checkbox" id="cfg-hideAdvisories" data-config="radar.hideAdvisories">
+				</div>
+				<div class="settings-row">
+				<label for="cfg-showBlastRadius" data-i18n="showBlastRadius">爆炸半径箭头</label>
+				<select id="cfg-showBlastRadius" data-config="radar.showBlastRadius">
+					<option value="never" data-i18n="opt_never">从不</option>
+					<option value="active" data-i18n="opt_active">激活时</option>
+				</select>
+			</div>
+			<div class="settings-row">
+				<label for="cfg-showBuyzones" data-i18n="showBuyzones">购买区</label>
+				<select id="cfg-showBuyzones" data-config="radar.showBuyzones">
+					<option value="never" data-i18n="opt_never">从不</option>
+					<option value="buytime" data-i18n="opt_buytime">购买时间</option>
+					<option value="always" data-i18n="opt_always">始终</option>
+				</select>
+			</div>
+		</div>
+			<div class="settings-group" data-group="vertIndicator">
+				<h3 data-i18n="group_vertIndicator">垂直指示器</h3>
+				<div class="settings-row">
+					<label for="cfg-vertType" data-i18n="vertType">类型</label>
+					<select id="cfg-vertType" data-config="vertIndicator.type">
+						<option value="none" data-i18n="opt_none">无</option>
+						<option value="color" data-i18n="opt_color">颜色</option>
+						<option value="scale" data-i18n="opt_scale">缩放</option>
+					</select>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-scaleDelta" data-i18n="scaleDelta">缩放强度</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-scaleDelta" data-config="vertIndicator.scaleDelta" min="0.5" max="2" step="0.1" value="1">
+						<span class="settings-value" data-value-for="vertIndicator.scaleDelta">1</span>
+					</div>
+				</div>
+			</div>
+			<div class="settings-group" data-group="autozoom">
+				<h3 data-i18n="group_autozoom">自动缩放</h3>
+				<div class="settings-row">
+					<label for="cfg-autozoomEnable" data-i18n="autozoomEnable">启用</label>
+					<input type="checkbox" id="cfg-autozoomEnable" data-config="autozoom.enable" checked>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-autozoomPadding" data-i18n="autozoomPadding">边缘留白</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-autozoomPadding" data-config="autozoom.padding" min="0" max="0.5" step="0.05" value="0.3">
+						<span class="settings-value" data-value-for="autozoom.padding">0.3</span>
+					</div>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-autozoomMinZoom" data-i18n="autozoomMinZoom">最小缩放</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-autozoomMinZoom" data-config="autozoom.minZoom" min="1" max="2" step="0.1" value="1.3">
+						<span class="settings-value" data-value-for="autozoom.minZoom">1.3</span>
+					</div>
+				</div>
+			</div>
+			<div class="settings-group" data-group="smoothing">
+				<h3 data-i18n="group_smoothing">平滑</h3>
+				<div class="settings-row">
+					<label for="cfg-playerSmoothing" data-i18n="playerSmoothing">玩家平滑</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-playerSmoothing" data-config="radar.playerSmoothing" min="1" max="30" step="1" value="13">
+						<span class="settings-value" data-value-for="radar.playerSmoothing">13</span>
+					</div>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-projectileSmoothing" data-i18n="projectileSmoothing">投掷物平滑</label>
+					<div class="settings-control">
+						<input type="range" id="cfg-projectileSmoothing" data-config="radar.projectileSmoothing" min="1" max="15" step="1" value="5">
+						<span class="settings-value" data-value-for="radar.projectileSmoothing">5</span>
 					</div>
 				</div>
 			</div>
 		</div>
+	</div>
 
-		<aside id="team-panel-t" class="team-panel team-panel-left"></aside>
-		<aside id="team-panel-ct" class="team-panel team-panel-right"></aside>
+	<aside id="team-panel-t" class="team-panel team-panel-left"></aside>
+	<aside id="team-panel-ct" class="team-panel team-panel-right"></aside>
 
-		<aside id="spectator-panel" class="spectator-panel" style="display:none;">
-			<div class="spectator-header">观战列表</div>
-			<ul class="spectator-list"></ul>
-		</aside>
+	<aside id="spectator-panel" class="spectator-panel" style="display:none;">
+		<div class="spectator-header" data-i18n="spectator_header">观战列表</div>
+		<ul class="spectator-list"></ul>
+	</aside>
 
 		<div id="container">
 			<div id="bomb-timer" class="bomb-timer" hidden>
@@ -226,6 +239,7 @@
 			<!-- Middle layer: Flying entities -->
 			<svg id="trails" viewBox="0 0 100 100"></svg>
 			<div id="projectiles"></div>
+			<div id="droppedWeapons"></div>
 
 			<!-- Top layer: Players & bomb -->
 			<div id="entities">
@@ -260,14 +274,15 @@
 			</div>
 
 			<div id="unknownMap">
-				<span>
-					Unsupported map
-				</span>
-			</div>
+			<span data-i18n="unsupported_map">
+				不支持该地图
+			</span>
 		</div>
+	</div>
 
-		<script src="/renderers/_global.js"></script>
-		<script src="/renderers/_socket.js"></script>
+	<script src="/renderers/_global.js"></script>
+	<script src="/renderers/i18n.js"></script>
+	<script src="/renderers/_socket.js"></script>
 		<script src="/renderers/_init.js"></script>
 		<script src="/renderers/_settings.js"></script>
 		<script src="/renderers/_map.js"></script>
@@ -278,6 +293,7 @@
 		<script src="/renderers/bombTimer.js"></script>
 		<script src="/renderers/smokes.js"></script>
 		<script src="/renderers/projectiles.js"></script>
+		<script src="/renderers/droppedWeapons.js"></script>
 		<script src="/renderers/advisory.js"></script>
 		<script src="/renderers/loopFast.js"></script>
 		<script src="/renderers/loopSlow.js"></script>

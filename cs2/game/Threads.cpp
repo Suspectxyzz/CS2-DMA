@@ -398,7 +398,7 @@ VOID DataThread()
 			                  MenuConfig::ShowSoundESP ||
 			                  MenuConfig::ShowPlayerFlags ||
 			                  MenuConfig::ShowWeaponAmmo || MenuConfig::ShowWeaponIcon ||
-			                  MenuConfig::ShowBombTimer || MenuConfig::ShowWorldESP ||
+			                  MenuConfig::ShowBombTimer || MenuConfig::ShowWorldProjectileTimers ||
 			                  MenuConfig::ShowWorldItems || MenuConfig::ShowHealthText ||
 			                  MenuConfig::ShowArmorText;
 			bool needEntityPipeline = anyESPDraw || MenuConfig::ShowWebRadar || MenuConfig::ShowSpectatorList;
@@ -768,18 +768,20 @@ VOID DataThread()
 					int aliveCount = 0;
 
 					if (entityPawnListEntry != 0) {
-						VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
-						if (h) {
-							for (int r = 0; r < refreshCount; r++) {
-								int i = refreshSlots[r];
-								if (ctrlBuf[i].isAlive != 1 || ctrlBuf[i].pawn == 0) continue;
-								aliveSlots[aliveCount++] = i;
-								ProcessMgr.AddScatterReadRequest(h, entityPawnListEntry + 0x10 + 8 * ((ctrlBuf[i].pawn & 0x7FFF) >> 9), &subListEntries[i], sizeof(DWORD64));
-							}
-							ProcessMgr.ExecuteReadScatter(h);
-							VMMDLL_Scatter_CloseHandle(h);
+					VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+					if (h) {
+						for (int r = 0; r < refreshCount; r++) {
+							int i = refreshSlots[r];
+							// Resolve pawn for both alive AND dead players.
+							// Dead players still need pawn address for WebRadar position updates.
+							if (ctrlBuf[i].pawn == 0) continue;
+							aliveSlots[aliveCount++] = i;
+							ProcessMgr.AddScatterReadRequest(h, entityPawnListEntry + 0x10 + 8 * ((ctrlBuf[i].pawn & 0x7FFF) >> 9), &subListEntries[i], sizeof(DWORD64));
 						}
+						ProcessMgr.ExecuteReadScatter(h);
+						VMMDLL_Scatter_CloseHandle(h);
 					}
+				}
 
 					// Phase 3: Final pawn addresses
 					DWORD64 pawnAddresses[MAX_ENTITIES]{};
@@ -804,10 +806,11 @@ VOID DataThread()
 						VMMDLL_SCATTER_HANDLE h = nullptr;
 						int bc = 0;
 						for (int a = 0; a < aliveCount; a++) {
-							int i = aliveSlots[a];
-							if (pawnAddresses[i] == 0) continue;
-							if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
-							ProcessMgr.AddScatterReadRequest(h, pawnAddresses[i] + Offset::GameSceneNode, &sceneNodes[i], sizeof(DWORD64));
+						int i = aliveSlots[a];
+						if (pawnAddresses[i] == 0) continue;
+						if (ctrlBuf[i].isAlive != 1) continue;  // dead players don't need sceneNode
+						if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
+						ProcessMgr.AddScatterReadRequest(h, pawnAddresses[i] + Offset::GameSceneNode, &sceneNodes[i], sizeof(DWORD64));
 							if (++bc >= DISC_BATCH) {
 								ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
 							}
@@ -818,10 +821,11 @@ VOID DataThread()
 						VMMDLL_SCATTER_HANDLE h = nullptr;
 						int bc = 0;
 						for (int a = 0; a < aliveCount; a++) {
-							int i = aliveSlots[a];
-							if (sceneNodes[i] == 0) continue;
-							if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
-							ProcessMgr.AddScatterReadRequest(h, sceneNodes[i] + Offset::BoneArray, &boneArrays[i], sizeof(DWORD64));
+						int i = aliveSlots[a];
+						if (sceneNodes[i] == 0) continue;
+						if (ctrlBuf[i].isAlive != 1) continue;  // dead players don't need boneArray
+						if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
+						ProcessMgr.AddScatterReadRequest(h, sceneNodes[i] + Offset::BoneArray, &boneArrays[i], sizeof(DWORD64));
 							if (++bc >= DISC_BATCH) {
 								ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
 							}
@@ -912,28 +916,30 @@ VOID DataThread()
 					s_zeroPawnSinceUs.erase(addr);  // pawn resolved: clear zero pawn grace (Task 5)
 
 					DWORD64 effectiveBoneArray = boneArrays[i];
-						if (effectiveBoneArray == 0) {
-							// boneArray 閻犲洩顕цぐ鍥ㄥ緞鏉堫偉袝闁挎稑鑻惃鍓ф嫚閺囩喖鍎撮柣顫妽濡偆绱撻幘宕囨憼
-							auto oldBoneIt = oldCacheMap.find(addr);
-							if (oldBoneIt != oldCacheMap.end()) {
-								DWORD64 oldBoneArr = entityCache[oldBoneIt->second].boneArrayAddr;
-								if (oldBoneArr != 0) {
-									auto staleIt = s_boneArrayStaleSinceUs.find(addr);
-									if (staleIt == s_boneArrayStaleSinceUs.end()) {
-										s_boneArrayStaleSinceUs[addr] = now;
-										effectiveBoneArray = oldBoneArr;
-									} else if (now - staleIt->second < BONE_ARRAY_STALE_GRACE_US) {
-										effectiveBoneArray = oldBoneArr;
-									} else {
-										LOG_DEBUG("Data", "boneArray stale > 250ms for 0x{:X}, dropping bones", addr);
-									}
+					bool isDeadPlayer = (ctrlBuf[i].isAlive != 1);
+					if (effectiveBoneArray == 0 && !isDeadPlayer) {
+						// boneArray cache fallback (alive players only)
+						auto oldBoneIt = oldCacheMap.find(addr);
+						if (oldBoneIt != oldCacheMap.end()) {
+							DWORD64 oldBoneArr = entityCache[oldBoneIt->second].boneArrayAddr;
+							if (oldBoneArr != 0) {
+								auto staleIt = s_boneArrayStaleSinceUs.find(addr);
+								if (staleIt == s_boneArrayStaleSinceUs.end()) {
+									s_boneArrayStaleSinceUs[addr] = now;
+									effectiveBoneArray = oldBoneArr;
+								} else if (now - staleIt->second < BONE_ARRAY_STALE_GRACE_US) {
+									effectiveBoneArray = oldBoneArr;
+								} else {
+									LOG_DEBUG("Data", "boneArray stale > 250ms for 0x{:X}, dropping bones", addr);
 								}
 							}
-							if (effectiveBoneArray == 0)
-								continue;
-						} else {
-							s_boneArrayStaleSinceUs.erase(addr);
 						}
+						if (effectiveBoneArray == 0)
+							continue;
+					} else if (effectiveBoneArray != 0) {
+						s_boneArrayStaleSinceUs.erase(addr);
+					}
+					// Dead players: effectiveBoneArray stays 0 (no bones needed)
 
 						CEntity ent;
 						ent.Controller.Address = entityAddresses[i];
@@ -968,6 +974,14 @@ VOID DataThread()
 							ce.entity.Pawn.ModelName = old.entity.Pawn.ModelName;
 							ce.entity.Pawn.WeaponName = old.entity.Pawn.WeaponName;
 							ce.entity.Pawn.WeaponList = old.entity.Pawn.WeaponList;
+							// Dead players: carry over last valid position for WebRadar.
+							// Without this, dead players get default Pos=(0,0,0) and are
+							// skipped by WebRadar serialization (position==0 filter).
+							if (isDeadPlayer) {
+								ce.entity.Pawn.Pos = old.entity.Pawn.Pos;
+								ce.entity.Pawn.PrevPos = old.entity.Pawn.PrevPos;
+								ce.entity.Pawn.Health = 0;
+							}
 						}
 
 						newCache.push_back(ce);
@@ -1226,11 +1240,20 @@ VOID DataThread()
 						s_deathConfirmCount.erase(ctrlAddr);
 					}
 				} else {
-					// Core data valid: clear stale state
-					s_coreStaleSinceUs.erase(ctrlAddr);
+				// Core data valid: clear stale state
+				s_coreStaleSinceUs.erase(ctrlAddr);
 
-					// Death confirm: require 80ms of health<=0 before confirming death
-					if (buf.health <= 0 && ce.entity.Pawn.Health > 0) {
+				// Dead player protection: if player is already dead and stays dead,
+				// retain death position for WebRadar. Don't update pos/health/bones.
+				// This prevents dead player position from drifting due to DMA read jitter
+				// or stale pawn data after death.
+				if (ce.entity.Pawn.Health <= 0 && buf.health <= 0) {
+					// Player is dead and stays dead: skip position/health update
+					continue;
+				}
+
+				// Death confirm: require 80ms of health<=0 before confirming death
+				if (buf.health <= 0 && ce.entity.Pawn.Health > 0) {
 						// Health dropped to 0: start/increment death confirm count
 						int& confirmCount = s_deathConfirmCount[ctrlAddr];
 						confirmCount++;
@@ -2224,9 +2247,18 @@ VOID DataThread()
 	// C_Inferno entity flag (distinguishes inferno from molotov_projectile,
 	// both share PROJ_MOLOTOV type but only inferno carries fire data).
 	static bool s_cachedProjIsInferno[960] = {};
+	// Task 12/16: cached weapon item-id for dropped-weapon cache-hit reuse.
+	// Without this, weapons are only identified on cache-miss (first frame)
+	// and vanish on subsequent cache-hit frames because droppedWeaponCache
+	// is rebuilt from scratch each scan.
+	static uint16_t s_cachedWeaponItemIds[960] = {};
+	// Cached owner handle for dropped-weapon filtering.
+	// m_hOwnerEntity == 0xFFFFFFFF means the weapon is dropped (no owner).
+	// When the handle points to a player, the weapon is still held and must be skipped.
+	static DWORD s_cachedWeaponOwnerHandles[960] = {};
 	static uint64_t s_projCacheResetSerial = 0;
 
-	if (MenuConfig::ShowProjectileESP || MenuConfig::ShowWorldESP || MenuConfig::ShowWorldItems || MenuConfig::ShowWebRadar) {
+	if (MenuConfig::ShowProjectileESP || MenuConfig::ShowWorldProjectileTimers || MenuConfig::ShowWorldItems || MenuConfig::ShowWebRadar) {
 		StageTimer timer(g_stageProjectileUs);
 		LOG_TRACE("Data", "Projectile ESP scan (cache={})", projectileCache.size());
 
@@ -2240,6 +2272,8 @@ VOID DataThread()
 			memset(s_cachedProjThrowers, 0, sizeof(s_cachedProjThrowers));
 		memset(s_cachedProjTeams, 0, sizeof(s_cachedProjTeams));
 		memset(s_cachedProjIsInferno, 0, sizeof(s_cachedProjIsInferno));
+		memset(s_cachedWeaponItemIds, 0, sizeof(s_cachedWeaponItemIds));
+		memset(s_cachedWeaponOwnerHandles, 0xFF, sizeof(s_cachedWeaponOwnerHandles));
 		s_projCacheResetSerial = currentSerial;
 		}
 
@@ -2332,7 +2366,9 @@ VOID DataThread()
 							s_cachedProjPositions[i] = Vec3{};
 							s_cachedProjTypes[i] = 0;
 							s_cachedProjIsInferno[i] = false;
-						}
+						s_cachedWeaponItemIds[i] = 0;
+						s_cachedWeaponOwnerHandles[i] = 0xFFFFFFFF;
+					}
 					}
 
 						// Phases 2-4: random address reads, batch by actual non-zero count.
@@ -2414,16 +2450,70 @@ VOID DataThread()
 							if (std::strncmp(n, "weapon_", 7) == 0) {
 								const char* visualKey = n + 7;
 								const WeaponLookup::WeaponLookupEntry* entry =
-									WeaponLookup::FindWeaponLookupEntryByVisualKey(visualKey);
-								if (entry) {
-									weaponCandidates.push_back({ i, entry->id, entry->name });
-								}
+								WeaponLookup::FindWeaponLookupEntryByVisualKey(visualKey);
+							if (entry) {
+								weaponCandidates.push_back({ i, entry->id, entry->name });
+								s_cachedWeaponItemIds[i] = entry->id;
+							}
 							}
 							continue;
 						}
 						candidates.push_back({ i, type, radius, false, (type == PROJ_MOLOTOV) && (strstr(n, "inferno") != nullptr) });
 					s_cachedProjTypes[i] = static_cast<uint8_t>(type) + 1;
 					s_cachedProjIsInferno[i] = (type == PROJ_MOLOTOV) && (strstr(n, "inferno") != nullptr);
+					}
+
+					// Phase 5c: Read item definition index for cache-miss entities.
+					// Designer name string reads are unreliable across 3 DMA hops;
+					// item definition index is a single numeric read and is the
+					// primary weapon identifier (matches player weapon scanning).
+					if (Offset::AttributeManager && Offset::Item && Offset::ItemDefinitionIndex) {
+						DWORD itemDefOffset = Offset::AttributeManager + Offset::Item + Offset::ItemDefinitionIndex;
+						uint16_t itemDefIds[SCAN_COUNT]{};
+						{
+							VMMDLL_SCATTER_HANDLE h = nullptr;
+							int bc = 0;
+							for (int i : cacheMissIdx) {
+								if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
+								ProcessMgr.AddScatterReadRequest(h, entAddrs[i] + itemDefOffset, &itemDefIds[i], sizeof(uint16_t));
+								if (++bc >= PROJ_RAND_BATCH) {
+									ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
+								}
+							}
+							if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
+						}
+						// Identify weapons by item definition index. Skips entities
+						// already identified via designer name (avoids duplicates).
+						std::set<int> alreadyWeapon;
+						for (auto& w : weaponCandidates) alreadyWeapon.insert(w.idx);
+						for (int i : cacheMissIdx) {
+							if (alreadyWeapon.count(i)) continue;
+							uint16_t itemId = itemDefIds[i];
+							if (itemId == 0 || itemId >= 20000u) continue;
+							const WeaponLookup::WeaponLookupEntry* entry =
+								WeaponLookup::FindWeaponLookupEntry(itemId);
+							if (entry) {
+								weaponCandidates.push_back({ i, entry->id, entry->name });
+								s_cachedWeaponItemIds[i] = itemId;
+							}
+						}
+					}
+
+					// Phase 5e: Read m_hOwnerEntity for all weapon candidates (cache-miss + cache-hit).
+					// m_hOwnerEntity == 0xFFFFFFFF means the weapon is dropped (no owner);
+					// a valid handle means a player is holding it and it must be skipped.
+					// Mirrors reference project's world_process_entities.inl owner logic.
+					if (Offset::OwnerEntity && !weaponCandidates.empty()) {
+						VMMDLL_SCATTER_HANDLE h = nullptr;
+						int bc = 0;
+						for (auto& w : weaponCandidates) {
+							if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
+							ProcessMgr.AddScatterReadRequest(h, entAddrs[w.idx] + Offset::OwnerEntity, &s_cachedWeaponOwnerHandles[w.idx], sizeof(DWORD));
+							if (++bc >= PROJ_RAND_BATCH) {
+								ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); h = nullptr; bc = 0;
+							}
+						}
+						if (h) { ProcessMgr.ExecuteReadScatter(h); VMMDLL_Scatter_CloseHandle(h); }
 					}
 
 						// Phase 5b: Add cache-hit slots that were projectiles last scan
@@ -2434,6 +2524,22 @@ VOID DataThread()
 								if (type == PROJ_HE) radius = 350.f;
 								else if (type == PROJ_MOLOTOV) radius = 150.f;
 								candidates.push_back({ i, type, radius, true, s_cachedProjIsInferno[i] });
+							}
+						}
+
+						// Phase 5d: Add cache-hit slots that were weapons last scan.
+						// Mirrors Phase 5b for projectiles: when the entity address
+						// is unchanged (cache-hit), reuse the cached weapon item-id
+						// instead of re-reading designer name / item definition index.
+						// Without this, weapons vanish after the first frame because
+						// droppedWeaponCache is rebuilt from scratch each scan.
+						for (int i = shardStart; i < shardEnd; i++) {
+							if (entAddrs[i] != 0 && entAddrs[i] == s_cachedProjEntityAddrs[i] && s_cachedWeaponItemIds[i] != 0) {
+								uint16_t itemId = s_cachedWeaponItemIds[i];
+								const WeaponLookup::WeaponLookupEntry* entry = WeaponLookup::FindWeaponLookupEntry(itemId);
+								if (entry) {
+									weaponCandidates.push_back({ i, entry->id, entry->name });
+								}
 							}
 						}
 
@@ -2665,18 +2771,97 @@ VOID DataThread()
 						}
 
 						// Task 12/16: Build dropped-weapon list from weapon candidates.
-							for (auto& w : weaponCandidates) {
-								DWORD64 addr = entAddrs[w.idx];
-								Vec3& pos = s_cachedProjPositions[w.idx];
-								if (!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z)) continue;
-								if (std::abs(pos.x) < 1.f && std::abs(pos.y) < 1.f && std::abs(pos.z) < 1.f) continue;
-								DroppedWeapon dw;
-								dw.Position = pos;
-								dw.ItemId = w.itemId;
-								dw.Name = w.name ? w.name : "";
-								dw.EntityAddr = addr;
-								newDroppedWeapons.push_back(dw);
+					// Mirrors reference project (world_process_entities.inl +
+					// world_process_dropped_c4.inl) droppedOwnerReleased logic:
+					//   - posNonOrigin: skip weapons at origin (0,0)
+					//   - noOwner: owner handle is 0 / 0xFFFFFFFF -> dropped
+					//   - owner not a known player -> dropped
+					//   - owner not nearby (dist > 120) -> dropped
+					// Only weapons held by a nearby player are skipped.
+					{
+						// Build pawnAddr -> player index map for owner resolution
+						std::unordered_map<DWORD64, int> pawnAddrToIdx;
+						for (int i = 0; i < (int)entityCache.size(); i++) {
+							if (entityCache[i].pawnAddr != 0)
+								pawnAddrToIdx[entityCache[i].pawnAddr] = i;
+						}
+						// Resolve owner handles that are non-zero / non-0xFFFFFFFF.
+						// Weapon candidate count is small (<10), so we resolve via
+						// the entity list the same way Phase 7c resolves thrower
+						// handles: two-step scatter read.
+						std::vector<int> resolveWi;
+						for (int wi = 0; wi < (int)weaponCandidates.size(); wi++) {
+							DWORD owner = s_cachedWeaponOwnerHandles[weaponCandidates[wi].idx];
+							if (owner == 0 || owner == 0xFFFFFFFF) continue;
+							resolveWi.push_back(wi);
+						}
+						std::vector<DWORD64> ownerEntityAddrs(weaponCandidates.size(), 0);
+						if (!resolveWi.empty() && Offset::OwnerEntity) {
+							DWORD64 entityListDeref = 0;
+							ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListAddress(), entityListDeref);
+							if (entityListDeref) {
+								// Pass 1: read sub-list pointers
+								std::vector<DWORD64> subLists(resolveWi.size(), 0);
+								{
+									VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+									if (h) {
+										for (size_t k = 0; k < resolveWi.size(); k++) {
+											DWORD idx = s_cachedWeaponOwnerHandles[weaponCandidates[resolveWi[k]].idx] & 0x7FFF;
+											ProcessMgr.AddScatterReadRequest(h, entityListDeref + 0x10 + 8 * (idx >> 9), &subLists[k], sizeof(DWORD64));
+										}
+										ProcessMgr.ExecuteReadScatter(h);
+										VMMDLL_Scatter_CloseHandle(h);
+									}
+								}
+								// Pass 2: read entity addresses
+								{
+									VMMDLL_SCATTER_HANDLE h = ProcessMgr.CreateScatterHandle();
+									if (h) {
+										for (size_t k = 0; k < resolveWi.size(); k++) {
+											if (!subLists[k]) continue;
+											DWORD idx = s_cachedWeaponOwnerHandles[weaponCandidates[resolveWi[k]].idx] & 0x7FFF;
+											ProcessMgr.AddScatterReadRequest(h, subLists[k] + 0x70 * (idx & 0x1FF), &ownerEntityAddrs[resolveWi[k]], sizeof(DWORD64));
+										}
+										ProcessMgr.ExecuteReadScatter(h);
+										VMMDLL_Scatter_CloseHandle(h);
+									}
+								}
 							}
+						}
+						for (size_t wi = 0; wi < weaponCandidates.size(); wi++) {
+							auto& w = weaponCandidates[wi];
+							DWORD64 addr = entAddrs[w.idx];
+							Vec3& pos = s_cachedProjPositions[w.idx];
+							if (!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z)) continue;
+							// posNonOrigin: x or y must be > 1.0
+							if (std::fabs(pos.x) <= 1.0f && std::fabs(pos.y) <= 1.0f) continue;
+							// droppedOwnerReleased check
+							DWORD ownerHandle = s_cachedWeaponOwnerHandles[w.idx];
+							bool noOwner = (ownerHandle == 0 || ownerHandle == 0xFFFFFFFF);
+							bool ownerHoldingNearby = false;
+							if (!noOwner) {
+								DWORD64 ownerAddr = ownerEntityAddrs[wi];
+								auto it = pawnAddrToIdx.find(ownerAddr);
+								if (it != pawnAddrToIdx.end()) {
+									int pIdx = it->second;
+									Vec3& ppos = entityCache[pIdx].entity.Pawn.Pos;
+									if (std::isfinite(ppos.x) && std::isfinite(ppos.y)) {
+										float dx = pos.x - ppos.x;
+										float dy = pos.y - ppos.y;
+										float dz = std::fabs(pos.z - ppos.z);
+										ownerHoldingNearby = ((dx * dx + dy * dy) <= (120.0f * 120.0f)) && (dz <= 96.0f);
+									}
+								}
+							}
+							if (ownerHoldingNearby) continue; // player is holding it
+							DroppedWeapon dw;
+							dw.Position = pos;
+							dw.ItemId = w.itemId;
+							dw.Name = w.name ? w.name : "";
+							dw.EntityAddr = addr;
+							newDroppedWeapons.push_back(dw);
+						}
+					}
 
 							// Clean up expired set: remove entries whose entities left the list
 							std::set<DWORD64> stillInList;

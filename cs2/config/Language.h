@@ -9,6 +9,7 @@ public:
 	std::string tab_config;
 	std::string tab_grenade;
 	std::string tab_hotkeys;
+	std::string tab_contact;
 
 	std::string visuals_showbox;
 	std::string visuals_boxcolor;
@@ -370,6 +371,7 @@ public:
 		this->tab_config = "Config";
 		this->tab_grenade = "Grenade";
 		this->tab_hotkeys = "Hotkeys";
+		this->tab_contact = "Contact";
 
 		this->visuals_showbox = "Show Box";
 		this->visuals_boxcolor = "Box Color";
@@ -721,6 +723,7 @@ public:
 		this->tab_config = u8"\u914d\u7f6e";
 		this->tab_grenade = u8"\u6295\u63b7\u7269";
 		this->tab_hotkeys = u8"\u5feb\u6377\u952e";
+		this->tab_contact = u8"\u8054\u7cfb\u4f5c\u8005";
 
 		this->visuals_showbox = u8"\u663e\u793a\u900f\u89c6\u6846";
 		this->visuals_boxcolor = u8"\u6846\u989c\u8272";

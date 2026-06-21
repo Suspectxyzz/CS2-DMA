@@ -260,8 +260,8 @@ function renderTeam(panel, teamKey, players, emptyText) {
 		panel.appendChild(list)
 	}
 
-	// Update header
-	let teamName = (teamKey === "t") ? "Terrorists" : "Counter-Terrorists"
+	// Update header (i18n 翻译)
+	let teamName = (teamKey === "t") ? t("team_t") : t("team_ct")
 	let aliveCount = players.filter(function(p) { return p.health > 0 }).length
 	header.querySelector(".team-panel__name").textContent = teamName
 	header.querySelector(".team-panel__count").textContent = aliveCount + "/" + players.length
@@ -270,7 +270,7 @@ function renderTeam(panel, teamKey, players, emptyText) {
 	if (!players.length) {
 		let empty = document.createElement("div")
 		empty.className = "team-panel__empty"
-		empty.textContent = "No " + teamName.toLowerCase()
+		empty.textContent = (teamKey === "t") ? t("team_t_empty") : t("team_ct_empty")
 		list.replaceChildren(empty)
 		return
 	}
@@ -339,6 +339,11 @@ function updatePanelVisibility() {
 }
 
 document.addEventListener("configchange", updatePanelVisibility)
+
+// 语言切换时清空签名缓存，强制下一帧重新渲染队伍名
+document.addEventListener("langchange", function() {
+	rosterSignatures = {}
+})
 
 // Initial visibility once config is ready
 if (document.readyState === "loading") {

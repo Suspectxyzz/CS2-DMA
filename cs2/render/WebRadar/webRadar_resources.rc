@@ -152,6 +152,8 @@
 "/renderers/advisory.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\advisory.js"
 "/renderers/bomb.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\bomb.js"
 "/renderers/bombTimer.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\bombTimer.js"
+"/renderers/droppedWeapons.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\droppedWeapons.js"
+"/renderers/i18n.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\i18n.js"
 "/renderers/loopFast.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\loopFast.js"
 "/renderers/loopSlow.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\loopSlow.js"
 "/renderers/playerPosition.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\playerPosition.js"

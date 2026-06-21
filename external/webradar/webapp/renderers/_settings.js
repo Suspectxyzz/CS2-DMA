@@ -10,6 +10,7 @@ function initSettings() {
 	const toggle = document.getElementById("settings-toggle")
 	const panel = document.getElementById("settings-panel")
 	const resetBtn = document.getElementById("settings-reset")
+	const langSelect = document.getElementById("cfg-language")
 
 	const controls = panel.querySelectorAll("[data-config]")
 
@@ -35,6 +36,14 @@ function initSettings() {
 		})
 	}
 
+	// 回填语言下拉框（i18n.js 在本脚本之前加载，currentLang 已就绪）
+	if (langSelect) {
+		langSelect.value = currentLang
+		langSelect.addEventListener("change", function() {
+			setLang(langSelect.value)
+		})
+	}
+
 	// 齿轮按钮切换 popover 显隐
 	toggle.addEventListener("click", function() {
 		if (panel.hasAttribute("hidden")) {
@@ -48,7 +57,7 @@ function initSettings() {
 
 	// 重置按钮
 	resetBtn.addEventListener("click", function() {
-		if (confirm("确定重置所有设置为默认值？")) {
+		if (confirm(t("settings_confirm_reset"))) {
 			resetConfig()
 			refreshControls()
 		}

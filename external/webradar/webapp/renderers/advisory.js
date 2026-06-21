@@ -18,10 +18,14 @@ function updateAdvisory() {
 			if (advisoryEl.children[0].innerHTML == 10) {
 				advisoryEl.children[0].innerHTML = 0
 			}
-			// 设置中文状态标签
-			let labels = {planting: "安放", defuse: "拆弹", solesurvivor: "独苗"}
+			// 状态标签（i18n 翻译）
+			let labelKey = {
+				planting: "advisory_planting",
+				defuse: "advisory_defuse",
+				solesurvivor: "advisory_solesurvivor"
+			}[name]
 			if (advisoryEl.children[1]) {
-				advisoryEl.children[1].textContent = labels[name] || ""
+				advisoryEl.children[1].textContent = labelKey ? t(labelKey) : ""
 			}
 			return
 		}
@@ -32,6 +36,9 @@ function updateAdvisory() {
 	if (advisory.children[0]) advisory.children[0].innerHTML = ""
 	if (advisory.children[1]) advisory.children[1].textContent = ""
 }
+
+// 语言切换时刷新当前建议标签
+document.addEventListener("langchange", updateAdvisory)
 
 socket.element.addEventListener("players", event => {
 	let data = event.data

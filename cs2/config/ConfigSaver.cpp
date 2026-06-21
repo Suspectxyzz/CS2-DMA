@@ -135,7 +135,6 @@ namespace MyConfigSaver {
         configFile << "BombTimerX " << MenuConfig::BombTimerX << std::endl;
         configFile << "BombTimerY " << MenuConfig::BombTimerY << std::endl;
         // Task 12: World ESP
-        configFile << "ShowWorldESP " << MenuConfig::ShowWorldESP << std::endl;
         configFile << "ShowWorldProjectileTimers " << MenuConfig::ShowWorldProjectileTimers << std::endl;
         configFile << "ShowWorldSmokeTimer " << MenuConfig::ShowWorldSmokeTimer << std::endl;
         configFile << "ShowWorldInfernoTimer " << MenuConfig::ShowWorldInfernoTimer << std::endl;
@@ -314,7 +313,6 @@ namespace MyConfigSaver {
                 if (key == "BombTimerX") iss >> MenuConfig::BombTimerX;
                 if (key == "BombTimerY") iss >> MenuConfig::BombTimerY;
                 // Task 12: World ESP
-                if (key == "ShowWorldESP") iss >> MenuConfig::ShowWorldESP;
                 if (key == "ShowWorldProjectileTimers") iss >> MenuConfig::ShowWorldProjectileTimers;
                 if (key == "ShowWorldSmokeTimer") iss >> MenuConfig::ShowWorldSmokeTimer;
                 if (key == "ShowWorldInfernoTimer") iss >> MenuConfig::ShowWorldInfernoTimer;

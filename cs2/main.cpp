@@ -369,7 +369,7 @@ void main(HMODULE module) {
 	LOG_INFO("Config", "Offsets updated");
 
 	if (!fs::directory_entry(MenuConfig::path).exists()) {
-		fs::create_directory(MenuConfig::path);
+		fs::create_directories(MenuConfig::path);
 		LOG_INFO("Config", "Created config folder: {}", MenuConfig::path);
 	}
 
