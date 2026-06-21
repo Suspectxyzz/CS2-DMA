@@ -957,6 +957,10 @@ void WebRadarServer::Broadcast(const std::string& message) {
 	m_stats.broadcastUsCount++;
 }
 
+void WebRadarServer::BroadcastPageUpdate() {
+	Broadcast("{\"type\":\"pageUpdate\"}");
+}
+
 void WebRadarServer::RemoveClient(SOCKET sock) {
 	std::lock_guard<std::mutex> lock(m_clientsMutex);
 	m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), sock), m_clients.end());
@@ -1105,6 +1109,15 @@ static void SerializePlayer(rapidjson::Value& players, const CEntity& e,
 	pos.AddMember("z", e.Pawn.Pos.z, a);
 	p.AddMember("m_position", pos, a);
 
+	// m_velocity: for frontend velocity extrapolation. [0,0,0] when dead/unreadable (Task 7)
+	rapidjson::Value vel(rapidjson::kArrayType);
+	if (isDead) {
+		vel.PushBack(0.0f, a).PushBack(0.0f, a).PushBack(0.0f, a);
+	} else {
+		vel.PushBack(e.Pawn.Velocity.x, a).PushBack(e.Pawn.Velocity.y, a).PushBack(e.Pawn.Velocity.z, a);
+	}
+	p.AddMember("m_velocity", vel, a);
+
 	// Convert CS2 ViewAngle.y (-180..180) to BoltObserv compass angle (0..360).
 	// BoltObserv's wrap-around logic in loopFast.js assumes 0..360 range;
 	// without this conversion, crossing the 180/-180 boundary causes the
@@ -1164,7 +1177,9 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 
 	// Local player
 	const auto& lp = snap.LocalPlayer;
-	if (lp.Controller.TeamID >= 2) {
+	if (lp.Controller.TeamID >= 2
+		&& std::isfinite(lp.Pawn.Pos.x) && std::isfinite(lp.Pawn.Pos.y) && std::isfinite(lp.Pawn.Pos.z)
+		&& !(lp.Pawn.Pos.x == 0.0f && lp.Pawn.Pos.y == 0.0f && lp.Pawn.Pos.z == 0.0f)) {
 		bool isDead = lp.Pawn.Health <= 0;
 		bool hasBomb = (!isDead && !snap.Bomb.isPlanted && bombCarrierIdx != 0 && (lp.Controller.Pawn & 0xFFFF) == bombCarrierIdx);
 		SerializePlayer(players, lp, snap.LocalPlayerIndex >= 0 ? snap.LocalPlayerIndex : 999, isDead, hasBomb, true, a);
@@ -1173,6 +1188,11 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 	// Other entities — use Controller.Pawn as stable ID (React key)
 	for (size_t i = 0; i < snap.Entities.size(); i++) {
 		const auto& e = snap.Entities[i];
+		// Skip entities with invalid position (DMA jitter: NaN/Infinity or all-zero)
+		if (!std::isfinite(e.Pawn.Pos.x) || !std::isfinite(e.Pawn.Pos.y) || !std::isfinite(e.Pawn.Pos.z))
+			continue;
+		if (e.Pawn.Pos.x == 0.0f && e.Pawn.Pos.y == 0.0f && e.Pawn.Pos.z == 0.0f)
+			continue;
 		bool isDead = e.Pawn.Health <= 0;
 		bool hasBomb = (!isDead && !snap.Bomb.isPlanted && bombCarrierIdx != 0 && (e.Controller.Pawn & 0xFFFF) == bombCarrierIdx);
 		SerializePlayer(players, e, (int)(e.Controller.Pawn & 0xFFFF), isDead, hasBomb, false, a);
@@ -1534,19 +1554,25 @@ VOID WebRadarThread() {
 			}
 
 			// ---- Broadcast the latest payload if the worker produced one ----
-			// Game-state / no-client gating now lives in WorkerLoop; this loop
-			// only ships whatever payload is ready.
-			std::string payload;
-			if (server.ConsumePayload(payload)) {
-				server.Broadcast(payload);
-				if (firstBroadcast) {
-					LOG_INFO("WebRadar", "First broadcast sent ({} bytes)", payload.size());
-					firstBroadcast = false;
-				}
+		// Game-state / no-client gating now lives in WorkerLoop; this loop
+		// only ships whatever payload is ready.
+		std::string payload;
+		if (server.ConsumePayload(payload)) {
+			server.Broadcast(payload);
+			if (firstBroadcast) {
+				LOG_INFO("WebRadar", "First broadcast sent ({} bytes)", payload.size());
+				firstBroadcast = false;
 			}
+		}
 
-			// Poll the worker at a short cadence so ready payloads ship promptly.
-			Sleep(10);
+		// ---- Handle page reload request from GUI ----
+		if (g_webRadarReloadRequested.exchange(false)) {
+			server.BroadcastPageUpdate();
+			LOG_INFO("WebRadar", "pageUpdate broadcast (manual reload)");
+		}
+
+		// Poll the worker at a short cadence so ready payloads ship promptly.
+		Sleep(10);
 		}
 		catch (...) {
 			Sleep(1000);

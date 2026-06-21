@@ -387,7 +387,40 @@ void main(HMODULE module) {
 
 	if (!ProcessMgr.InitDMA()) {
 		globalVars::gameState.store(AppState::DMA_FAILED);
-		LOG_ERROR("DMA", "DMA connection failed!");
+		LOG_ERROR("DMA", "DMA connection failed! errorText='{}'", ProcessMgr.lastDmaError);
+
+		// 根据错误文本分类失败类型，弹出 MessageBox 醒目提示
+		const std::string& errText = ProcessMgr.lastDmaError;
+		std::string lowerErr;
+		lowerErr.reserve(errText.size());
+		for (char c : errText) {
+			lowerErr.push_back((char)(unsigned char)tolower((unsigned char)c));
+		}
+
+		auto containsAny = [&](std::initializer_list<const char*> keywords) {
+			for (const char* kw : keywords) {
+				if (lowerErr.find(kw) != std::string::npos) return true;
+			}
+			return false;
+		};
+
+		std::string userMsg;
+		if (containsAny({ "iommu", "vt-d", "protection", "guard", "credential", "device guard", "hvci", "memory integrity", "virtualization-based" })) {
+			// VT/IOMMU 拒绝：提示关闭 Credential Guard / Device Guard / HVCI
+			userMsg = lang.dma_error_vtiommu;
+		} else if (containsAny({ "device", "fpga", "not found", "no such", "hardware", "driver", "leechcore", "unable to connect" })) {
+			// FPGA 未找到 / 驱动未加载
+			userMsg = lang.dma_error_fpga;
+		} else {
+			// 其他失败：显示通用提示 + 原始错误
+			userMsg = lang.dma_error_unknown;
+			if (!errText.empty()) {
+				userMsg += "\n\n";
+				userMsg += errText;
+			}
+		}
+		globalVars::g_dmaFailReason = userMsg;
+		MessageBoxA(NULL, userMsg.c_str(), "CS2-DMA DMA Error", MB_OK | MB_ICONERROR);
 	} else {
 		LOG_INFO("DMA", "DMA connected successfully");
 		ProcessMgr.init_keystates();

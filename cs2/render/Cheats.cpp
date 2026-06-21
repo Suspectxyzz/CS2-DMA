@@ -15,6 +15,12 @@
 #include "../config/ConfigMenu.h"
 #include "../config/ConfigSaver.h"
 #include "../utils/Logger.h"
+#include "../utils/DmaHealth.h"
+#include "../utils/StageTimer.h"
+#include "WebRadar.h"
+
+// g_dmaHealth is defined in Threads.cpp; DmaHealth.h does not export it.
+extern DmaHealth::DmaHealthTracker g_dmaHealth;
 
 
 
@@ -68,17 +74,31 @@ void Cheats::Run()
 			}
 
 			ImVec2 textSize = ImGui::CalcTextSize(statusText);
-			ImVec2 textPos = { (screenSize.x - textSize.x) / 2, (screenSize.y - textSize.y) / 2 };
+			// DMA_FAILED 状态下额外显示失败原因（红色）
+			const std::string& failReason = (currentState == AppState::DMA_FAILED)
+				? globalVars::g_dmaFailReason : std::string{};
+			ImVec2 reasonSize = failReason.empty() ? ImVec2(0, 0) : ImGui::CalcTextSize(failReason.c_str());
+
+			float maxTextWidth = (textSize.x > reasonSize.x) ? textSize.x : reasonSize.x;
+			float totalHeight = textSize.y + (failReason.empty() ? 0.0f : (reasonSize.y + 6.0f));
+			ImVec2 textPos = { (screenSize.x - maxTextWidth) / 2, (screenSize.y - totalHeight) / 2 };
 
 			drawList->AddRectFilled(
 				{ textPos.x - 20, textPos.y - 10 },
-				{ textPos.x + textSize.x + 20, textPos.y + textSize.y + 10 },
+				{ textPos.x + maxTextWidth + 20, textPos.y + totalHeight + 10 },
 				IM_COL32(10, 10, 18, 210), 8.0f);
 			drawList->AddRect(
 				{ textPos.x - 20, textPos.y - 10 },
-				{ textPos.x + textSize.x + 20, textPos.y + textSize.y + 10 },
+				{ textPos.x + maxTextWidth + 20, textPos.y + totalHeight + 10 },
 				IM_COL32(124, 92, 252, 80), 8.0f, 15, 1.0f);
-			drawList->AddText(textPos, IM_COL32(232, 232, 240, 255), statusText);
+			// 状态文本居中显示
+			ImVec2 statusPos = { textPos.x + (maxTextWidth - textSize.x) / 2, textPos.y };
+			drawList->AddText(statusPos, IM_COL32(232, 232, 240, 255), statusText);
+			// 失败原因（红色，在状态文本下方）
+			if (!failReason.empty()) {
+				ImVec2 reasonPos = { textPos.x + (maxTextWidth - reasonSize.x) / 2, textPos.y + textSize.y + 6.0f };
+				drawList->AddText(reasonPos, IM_COL32(255, 80, 80, 255), failReason.c_str());
+			}
 
 			return;
 		}
@@ -182,25 +202,6 @@ void Cheats::Run()
 
 			if (MenuConfig::TeamCheck && Entity.Controller.TeamID == LocalPlayerSnapshot.Controller.TeamID)
 				continue;
-
-			// Task 7: Offscreen arrow ESP — drawn before the ScreenPosValid skip so
-			// enemies outside the view frustum still get a directional indicator.
-			// 屏外判定：不仅包括镜头后方(ScreenPosValid=false)，还包括镜头前方但超出屏幕边界的情况
-			ImVec2 _ds = ImGui::GetIO().DisplaySize;
-			bool _onScreen = Entity.Pawn.ScreenPosValid &&
-			                 Entity.Pawn.ScreenPos.x >= 0.f && Entity.Pawn.ScreenPos.x <= _ds.x &&
-			                 Entity.Pawn.ScreenPos.y >= 0.f && Entity.Pawn.ScreenPos.y <= _ds.y;
-			if (MenuConfig::ShowOffscreenArrows && !_onScreen)
-			{
-				if (std::isfinite(Entity.Pawn.Pos.x) && std::isfinite(Entity.Pawn.Pos.y) && std::isfinite(Entity.Pawn.Pos.z))
-				{
-					ImDrawList* dl = ImGui::GetBackgroundDrawList();
-					Render::DrawOffscreenArrow(dl, Entity.Pawn.Pos, LocalPlayerSnapshot.Pawn.Pos,
-						LocalPlayerSnapshot.Pawn.ViewAngle.y, _ds.x, _ds.y,
-						ImGui::ColorConvertFloat4ToU32(MenuConfig::OffscreenArrowColor.Value),
-						MenuConfig::OffscreenArrowSize);
-				}
-			}
 
 			if (!Entity.Pawn.ScreenPosValid) continue;
 			if (!std::isfinite(Entity.Pawn.ScreenPos.x) || !std::isfinite(Entity.Pawn.ScreenPos.y)) continue;
@@ -532,6 +533,11 @@ void Cheats::Run()
 			}
 		}
 
+		// ESP Preview window (toggled from Visuals Tab or via ShowEspPreview)
+		if (MenuConfig::ShowEspPreview || Render::EspPreviewOpen) {
+			Render::RenderEspPreview();
+		}
+
 		// Performance Monitor overlay
 		if (MenuConfig::ShowPerfMonitor) {
 			ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -545,7 +551,10 @@ void Cheats::Run()
 			float fps = ImGui::GetIO().Framerate;
 			float frameTimeMs = 1000.f / (fps > 0.f ? fps : 1.f);
 
-			int lines = 5;
+			// Lines: FPS, Frame, Entities, Projectiles, Spectators, DMA Health
+		// When ShowDebugStats: + Stage header + 2 stage lines + WebRadar header + 1 wr line
+		int lines = 6;
+		if (MenuConfig::ShowDebugStats) lines += 5;
 			float bgHeight = padY * 2 + lineH * lines;
 
 			dl->AddRectFilled({ posX - padX, posY - padY }, { posX + 180.f + padX, posY - padY + bgHeight },
@@ -561,7 +570,7 @@ void Cheats::Run()
 			else if (fps >= 30.f) fpsCol = ImColor(251, 191, 36, 255);
 			else fpsCol = ImColor(248, 113, 113, 255);
 
-			char buf[64];
+			char buf[128];
 			snprintf(buf, sizeof(buf), "%.0f", fps);
 			dl->AddText({ posX, posY }, labelCol, "FPS:");
 			dl->AddText({ posX + 80.f, posY }, fpsCol, buf);
@@ -585,6 +594,50 @@ void Cheats::Run()
 			snprintf(buf, sizeof(buf), "%d", (int)snap.Spectators.size());
 			dl->AddText({ posX, posY }, labelCol, "Spectators:");
 			dl->AddText({ posX + 80.f, posY }, valueCol, buf);
+			posY += lineH;
+
+			// DMA Health (always shown in PerfMonitor)
+			auto healthState = g_dmaHealth.GetState();
+			auto healthStats = g_dmaHealth.GetStats();
+			ImColor healthCol;
+			const char* healthLabel;
+			if (healthState == DmaHealth::DmaHealthState::Healthy) { healthCol = ImColor(74, 222, 128, 255); healthLabel = "Healthy"; }
+			else if (healthState == DmaHealth::DmaHealthState::Degraded) { healthCol = ImColor(251, 191, 36, 255); healthLabel = "Degraded"; }
+			else { healthCol = ImColor(248, 113, 113, 255); healthLabel = "Failed"; }
+			dl->AddText({ posX, posY }, labelCol, "DMA:");
+			snprintf(buf, sizeof(buf), "%s (%lldF/%lldS)", healthLabel,
+				(long long)healthStats.totalFailures, (long long)healthStats.totalSuccesses);
+			dl->AddText({ posX + 80.f, posY }, healthCol, buf);
+			posY += lineH;
+
+			// Detailed debug stats (stage timings)
+		if (MenuConfig::ShowDebugStats) {
+			dl->AddText({ posX, posY }, labelCol, "Stage (us):");
+			posY += lineH;
+			snprintf(buf, sizeof(buf), "mtx:%lld loc:%lld ent:%lld",
+				(long long)g_stageMatrixUs.load(), (long long)g_stageLocalUs.load(),
+				(long long)g_stageEntitiesUs.load());
+			dl->AddText({ posX + 20.f, posY }, valueCol, buf);
+			posY += lineH;
+			snprintf(buf, sizeof(buf), "sct:%lld wpn:%lld bomb:%lld proj:%lld",
+				(long long)g_stageScatterUs.load(), (long long)g_stageWeaponUs.load(),
+				(long long)g_stageBombUs.load(), (long long)g_stageProjectileUs.load());
+			dl->AddText({ posX + 20.f, posY }, valueCol, buf);
+			posY += lineH;
+
+			// WebRadar stats
+			RuntimeStatsSnapshot wrSnap;
+			{
+				std::lock_guard<std::mutex> lock(g_webRadarStatsMutex);
+				wrSnap = g_webRadarStats;
+			}
+			dl->AddText({ posX, posY }, labelCol, "WebRadar:");
+			posY += lineH;
+			snprintf(buf, sizeof(buf), "cli:%d hz:%.1f bytes:%zu",
+				wrSnap.clientCount, wrSnap.sendHz, wrSnap.payloadBytesLast);
+			dl->AddText({ posX + 20.f, posY }, valueCol, buf);
+			posY += lineH;
+		}
 		}
 
 		// Auto-save config: save immediately when dirty (200ms debounce), skip when clean

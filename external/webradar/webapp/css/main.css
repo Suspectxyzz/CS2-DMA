@@ -329,6 +329,46 @@ body > div {
 	color: #ff4444;
 }
 
+/* 炸弹计时器四态视觉 */
+.bomb-timer.is-critical {
+	border-color: #ff6860;
+	box-shadow: 0 0 12px rgba(255, 104, 96, 0.6);
+}
+.bomb-timer.is-critical .bomb-timer-fill {
+	background: #ff6860;
+}
+.bomb-timer.is-critical .bomb-timer-text {
+	color: #ff6860;
+}
+
+.bomb-timer.is-defuse-safe {
+	border-color: #4fe08d;
+	box-shadow: 0 0 12px rgba(79, 224, 141, 0.6);
+}
+.bomb-timer.is-defuse-safe .bomb-timer-fill {
+	background: #4fe08d;
+}
+.bomb-timer.is-defuse-safe .bomb-timer-text {
+	color: #4fe08d;
+}
+
+.bomb-timer.is-defuse-late {
+	border-color: #ff6860;
+	box-shadow: 0 0 12px rgba(255, 104, 96, 0.6);
+	animation: bomb-timer-pulse 0.5s infinite;
+}
+.bomb-timer.is-defuse-late .bomb-timer-fill {
+	background: #ff6860;
+}
+.bomb-timer.is-defuse-late .bomb-timer-text {
+	color: #ff6860;
+}
+
+@keyframes bomb-timer-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.6; }
+}
+
 /* ===== 队伍面板 ===== */
 .team-panel {
 	position: fixed;
@@ -628,22 +668,6 @@ body > div {
 	.team-panel {
 		display: none;
 	}
-}
-
-/* ===== 投掷物剩余时间标签 ===== */
-.smoke-timer,
-.inferno-timer {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	color: #ffffff;
-	font-size: 1.5vmin;
-	font-weight: bold;
-	text-shadow: 0 0 0.3vmin #000, 0 0 0.3vmin #000, 0 0 0.3vmin #000;
-	pointer-events: none;
-	z-index: 10;
-	white-space: nowrap;
 }
 
 /* ===== 观战列表面板 ===== */

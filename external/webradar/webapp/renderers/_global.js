@@ -129,3 +129,8 @@ for (var i = 0; i < 10; i++) {
 	global.playerAmmos.push({})
 	global.playerHealths.push(0)
 }
+
+// 选中观察的玩家 num（null = 未选中）
+global.followedPlayer = null
+// 本地玩家 num（由 playerPosition.js 设置）
+global.localPlayerNum = null

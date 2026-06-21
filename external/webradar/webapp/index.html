@@ -26,11 +26,15 @@
 				<div class="settings-group" data-group="display">
 					<h3>显示</h3>
 					<div class="settings-row">
-						<label for="cfg-showTeamPanel">显示队伍面板</label>
-						<input type="checkbox" id="cfg-showTeamPanel" data-config="radar.showTeamPanel" checked>
-					</div>
-					<div class="settings-row">
-						<label for="cfg-playerDotScale">玩家点大小</label>
+					<label for="cfg-showTeamPanel">显示队伍面板</label>
+					<input type="checkbox" id="cfg-showTeamPanel" data-config="radar.showTeamPanel" checked>
+				</div>
+				<div class="settings-row">
+					<label for="cfg-followRotation">地图跟随旋转</label>
+					<input type="checkbox" id="cfg-followRotation" data-config="radar.followRotation">
+				</div>
+				<div class="settings-row">
+					<label for="cfg-playerDotScale">玩家点大小</label>
 						<div class="settings-control">
 							<input type="range" id="cfg-playerDotScale" data-config="radar.playerDotScale" min="0.3" max="1.5" step="0.1" value="0.7">
 							<span class="settings-value" data-value-for="radar.playerDotScale">0.7</span>
@@ -92,10 +96,18 @@
 						<input type="checkbox" id="cfg-smokeColors" data-config="radar.smokeColors" checked>
 					</div>
 					<div class="settings-row">
-						<label for="cfg-plainProjectiles">简洁投掷物图标</label>
-						<input type="checkbox" id="cfg-plainProjectiles" data-config="radar.plainProjectiles">
-					</div>
+					<label for="cfg-plainProjectiles">简洁投掷物图标</label>
+					<input type="checkbox" id="cfg-plainProjectiles" data-config="radar.plainProjectiles">
 				</div>
+				<div class="settings-row">
+					<label for="cfg-showWeapon">显示武器</label>
+					<input type="checkbox" id="cfg-showWeapon" data-config="radar.showWeapon">
+				</div>
+				<div class="settings-row">
+					<label for="cfg-showHealth">显示血量</label>
+					<input type="checkbox" id="cfg-showHealth" data-config="radar.showHealth">
+				</div>
+			</div>
 				<div class="settings-group" data-group="advisory">
 					<h3>建议框</h3>
 					<div class="settings-row">

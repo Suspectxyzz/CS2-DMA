@@ -70,12 +70,6 @@ private:
 	                     const ImVec2& pos, ImU32 color, const char* text,
 	                     const char* textEnd = nullptr);
 
-	// ESP gap-closure stage 3a: offscreen enemy arrow (Task 7).
-	// Draws a triangular arrow at the screen edge pointing toward an enemy
-	// that is currently outside the view frustum.
-	void DrawOffscreenArrow(ImDrawList* drawList, const Vec3& entityPos, const Vec3& localPos,
-	                        float localYawDeg, float screenW, float screenH, ImU32 color, float size);
-
 	// ESP gap-closure stage 3a: player status flags (Task 8).
 	// Draws Blind/Scoped/Defusing/Kit/Money labels stacked vertically to the
 	// right of the player's 2D box.
@@ -151,4 +145,11 @@ private:
 	// uses the ProjectileESP table (all 5 types, Decoy=0s/no timer).
 	bool ComputeProjectileTimer(const GrenadeProjectile& proj, bool worldMode,
 	                            const char** label, float* maxDuration, float* remaining);
+
+	// ESP Preview: renders a mock player silhouette showing the current ESP
+	// configuration in its own ImGui window. Toggle via Render::EspPreviewOpen.
+	// Single-color mode draws 1 player (BoxColor); tri-color mode draws 3
+	// (Default/Visible/Hidden) when VisibilityColoring is enabled.
+	inline bool EspPreviewOpen = false;
+	void RenderEspPreview();
 }

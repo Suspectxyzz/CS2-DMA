@@ -18,7 +18,15 @@ var state = {
   transportMode: "ws",      // "ws" | "sse" | "poll"
   numMap: {},               // m_idx(String) -> num (0-9)，跨帧稳定
   nextNum: 0,
-  lastRoundPhase: null      // roundend 派发用上一帧 round phase
+  lastRoundPhase: null,     // roundend 派发用上一帧 round phase
+  lastNonEmptyData: null,   // 缓存最近一帧的非空 raw 数据
+  lastDataTime: 0,          // 最近一帧非空数据的接收时间
+  // Task 3: 队伍坍塌检测状态
+  lastTeamPlayers: { T: [], CT: [] },        // 上一帧每队玩家列表
+  teamCollapseSinceMs: { T: 0, CT: 0 },      // 每队开始坍塌的时间戳
+  // Task 4: 粘性地图名状态
+  lastStableMapName: null,                    // 上一帧有效的地图名
+  mapNameStableSinceMs: 0                     // 有效地图名的稳定时间戳
 };
 
 var CONNECTION_TIMEOUT = 5000;
@@ -73,6 +81,32 @@ function handleBackendMessage(raw) {
   }
   if (!data) return;
 
+  // pageUpdate 控制消息：通知前端刷新页面（资源热更新）
+  if (data.type === "pageUpdate") {
+    dispatchEvent("pageUpdate", null);
+    return;
+  }
+
+  // 防闪烁检测：判断数据是否为空（无玩家且无炸弹）
+  var players = data.m_players || [];
+  var bombData = data.m_bomb;
+  var isEmpty = players.length === 0 && !bombData;
+
+  if (isEmpty) {
+    // 空数据：检查 3.5 秒内是否有非空缓存
+    if (state.lastNonEmptyData && (Date.now() - state.lastDataTime < 3500)) {
+      // TTL 内，使用缓存数据代替
+      data = state.lastNonEmptyData;
+    } else {
+      // TTL 超时，清空缓存，继续处理空数据
+      state.lastNonEmptyData = null;
+    }
+  } else {
+    // 非空数据：更新缓存
+    state.lastNonEmptyData = data;
+    state.lastDataTime = Date.now();
+  }
+
   // 存储 m_calibration 校准数据供 positionToPerc 使用
   if (data.m_calibration) {
     global.calibration = data.m_calibration;
@@ -80,8 +114,18 @@ function handleBackendMessage(raw) {
 
   try {
     // 1. map 事件
+    // Task 4: 粘性地图名 — 防止后端某帧地图名读取失败返回 "unknown"/"dynamic_unknown"，
+    // 前端立即切换地图造成全屏闪烁。5s 内用上一帧有效地图名替换派发。
     if (data.m_map) {
-      dispatchEvent("map", data.m_map);
+      var mapName = data.m_map;
+      var isInvalidMap = mapName === "unknown" || mapName === "dynamic_unknown";
+      if (!isInvalidMap) {
+        state.lastStableMapName = mapName;
+        state.mapNameStableSinceMs = Date.now();
+      } else if (state.lastStableMapName && (Date.now() - state.mapNameStableSinceMs < 5000)) {
+        mapName = state.lastStableMapName;
+      }
+      dispatchEvent("map", mapName);
     }
 
     // 1.5. round 事件
@@ -96,6 +140,38 @@ function handleBackendMessage(raw) {
 
     var players = data.m_players || [];
     var observedIdx = (typeof data.m_observed_idx === "number") ? data.m_observed_idx : -1;
+
+    // Task 3: 队伍坍塌检测 — 防止后端某帧读取失败导致某一队玩家全部消失，
+    // 前端立即清空该队 DOM 造成"漏人"假象。3.5s 内用上一帧该队玩家合并到当前 players。
+    var currentTeams = { T: [], CT: [] };
+    for (var ti = 0; ti < players.length; ti++) {
+      var teamKey = players[ti].m_team === 3 ? "CT" : players[ti].m_team === 2 ? "T" : "";
+      if (teamKey === "T" || teamKey === "CT") {
+        currentTeams[teamKey].push(players[ti]);
+      }
+    }
+    var teamKeys = ["T", "CT"];
+    for (var tki = 0; tki < teamKeys.length; tki++) {
+      var tk = teamKeys[tki];
+      if (state.lastTeamPlayers[tk].length > 0 && currentTeams[tk].length === 0) {
+        // 该队坍塌：上一帧有玩家，当前帧全消失
+        if (state.teamCollapseSinceMs[tk] === 0) {
+          state.teamCollapseSinceMs[tk] = Date.now();
+        }
+        if (Date.now() - state.teamCollapseSinceMs[tk] < 3500) {
+          // TTL 内：用上一帧该队玩家合并到当前 players
+          players = players.concat(state.lastTeamPlayers[tk]);
+        } else {
+          // TTL 超时：清空缓存，按当前数据派发
+          state.lastTeamPlayers[tk] = [];
+          state.teamCollapseSinceMs[tk] = 0;
+        }
+      } else if (currentTeams[tk].length > 0) {
+        // 该队正常：更新缓存，清空坍塌时间戳
+        state.lastTeamPlayers[tk] = currentTeams[tk];
+        state.teamCollapseSinceMs[tk] = 0;
+      }
+    }
 
     // 2. players 事件
     var playersOut = [];
@@ -124,6 +200,7 @@ function handleBackendMessage(raw) {
         }
       }
       var pos = p.m_position || { x: 0, y: 0, z: 0 };
+      var vel = p.m_velocity || [0, 0, 0];
 
       playersOut.push({
         num: state.numMap[idxKey],
@@ -144,6 +221,7 @@ function handleBackendMessage(raw) {
         flashed: p.m_flashed || 0,
         ammo: ammo,
         position: { x: pos.x, y: pos.y, z: pos.z },
+        m_velocity: [vel[0] || 0, vel[1] || 0, vel[2] || 0],
         angle: p.m_eye_angle || 0,
         name: p.m_name || ""
       });
@@ -252,7 +330,8 @@ function handleBackendMessage(raw) {
             id: stableId,
             flamesNum: flames.length > 0 ? flames.length : 1,
             flamesPosition: flames.length > 0 ? flames : [pposOut],
-            lifeRemaining: pr.m_life_remaining || 0
+            lifeRemaining: pr.m_life_remaining || 0,
+            team: mapTeam(pr.m_team)
           });
         } else {
           // 飞行中：推送给投掷物图标渲染器（type 用 firebomb 匹配图片资源名）
@@ -265,15 +344,11 @@ function handleBackendMessage(raw) {
         }
       } else if (type === "flash") {
         if (isEffect) {
-          // 已爆开：推送给闪光特效渲染器
-          var maxDuration = pr.maxDuration || 2.5;
-          var lifetime = maxDuration - (pr.m_life_remaining || 0);
-          if (lifetime >= 1.4) {
-            flashbangs.push({
-              id: stableId,
-              position: pposOut
-            });
-          }
+          // 已爆开：推送给闪光特效渲染器（爆开瞬间即显示）
+          flashbangs.push({
+            id: stableId,
+            position: pposOut
+          });
         } else {
           // 飞行中：推送给投掷物图标渲染器（type 用 flashbang 匹配图片资源名）
           projs.push({
@@ -299,6 +374,22 @@ function handleBackendMessage(raw) {
           team: mapTeam(pr.m_team),
           position: pposOut
         });
+      }
+    }
+    // [Debug] 投掷物拆分调试日志（每 2 秒打印一次）
+    if (projectiles.length > 0) {
+      if (!window._projDebugLastTime || Date.now() - window._projDebugLastTime > 2000) {
+        window._projDebugLastTime = Date.now()
+        console.log("[WebRadar Debug] split result:", {
+          total: projectiles.length,
+          smokes: smokes.length,
+          infernos: infernos.length,
+          flashbangs: flashbangs.length,
+          projs: projs.length
+        })
+        if (smokes.length > 0) console.log("[WebRadar Debug] smokes:", smokes)
+        if (infernos.length > 0) console.log("[WebRadar Debug] infernos:", infernos)
+        if (flashbangs.length > 0) console.log("[WebRadar Debug] flashbangs:", flashbangs)
       }
     }
     dispatchEvent("smokes", smokes);

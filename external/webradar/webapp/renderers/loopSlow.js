@@ -13,8 +13,8 @@ let radarQueues = {
 
 // Run the loop every 25ms
 setInterval(() => {
-	// Abort if autozoom isn't enabled
-	if (!global.config.autozoom.enable && typeof global.effects["radar.autozoom"] == "undefined") return
+	// Abort if autozoom isn't enabled and no player is followed
+	if (!global.config.autozoom.enable && !global.followedPlayer) return
 
 
 	// Bounding rect around all living players
@@ -42,23 +42,34 @@ setInterval(() => {
 		if (bounds.y.max < player.y) bounds.y.max = player.y
 	}
 
-	// Calculate the zoom-level where all players alive are visible
-	let radarScale = 1 + (1 - Math.max(bounds.x.max - bounds.x.min, bounds.y.max - bounds.y.min) / 100)
+	let radarScale, radarX, radarY
 
-	// Do not zoom if the scale seems to have been calculated with just the default data
-	if (radarScale === 3) return
+	// 选中玩家跟随：覆盖 autozoom
+	if (global.followedPlayer != null && global.playerPos[global.followedPlayer] && global.playerPos[global.followedPlayer].x != null) {
+		let followed = global.playerPos[global.followedPlayer]
+		radarScale = 2.5  // 固定缩放级别
+		radarX = ((followed.x - 50)) * -1
+		radarY = (followed.y - 50)
+	}
+	else {
+		// Calculate the zoom-level where all players alive are visible
+		radarScale = 1 + (1 - Math.max(bounds.x.max - bounds.x.min, bounds.y.max - bounds.y.min) / 100)
 
-	// Limit the radar scale to base size, and keep a customizable padding around the players
-	radarScale = Math.max(1, radarScale - global.config.autozoom.padding)
+		// Do not zoom if the scale seems to have been calculated with just the default data
+		if (radarScale === 3) return
 
-	// Calculate the center of the bound
-	let radarX = (((bounds.x.max + bounds.x.min) / 2) - 50) * -1
-	let radarY = ((bounds.y.max + bounds.y.min) / 2) - 50
+		// Limit the radar scale to base size, and keep a customizable padding around the players
+		radarScale = Math.max(1, radarScale - global.config.autozoom.padding)
 
-	// Reset all calculated values to default if min zoom level has not been reached
-	if (radarScale < global.config.autozoom.minZoom || global.effects["radar.autozoom"] === false) {
-		radarScale = 1
-		radarX = radarY = 0
+		// Calculate the center of the bound
+		radarX = (((bounds.x.max + bounds.x.min) / 2) - 50) * -1
+		radarY = ((bounds.y.max + bounds.y.min) / 2) - 50
+
+		// Reset all calculated values to default if min zoom level has not been reached
+		if (radarScale < global.config.autozoom.minZoom) {
+			radarScale = 1
+			radarX = radarY = 0
+		}
 	}
 
 	// Add all calculated values to their queues, and limit the queue length
@@ -74,6 +85,12 @@ setInterval(() => {
 	let avgX = radarQueues.x.reduce((sum, el) => sum + el, 0) / radarQueues.x.length
 	let avgY = radarQueues.y.reduce((sum, el) => sum + el, 0) / radarQueues.y.length
 
+	// 计算地图跟随旋转角度：本地玩家存活时根据其朝向旋转，使其始终朝上
+	let rotation = 0
+	if (global.config.radar.followRotation && global.localPlayerNum != null && global.playerPos[global.localPlayerNum] && global.playerPos[global.localPlayerNum].alive) {
+		rotation = -(global.playerPos[global.localPlayerNum].a || 0)
+	}
+
 	// Apply the style to the container
-	radarStyle.transform = `scale(${avgScale}) translate(${avgX}%, ${avgY}%)`
+	radarStyle.transform = `scale(${avgScale}) translate(${avgX}%, ${avgY}%) rotate(${rotation}deg)`
 }, 25)

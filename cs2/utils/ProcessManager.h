@@ -1,5 +1,26 @@
 #pragma once
 
+// ============================================================================
+// DMA 只读性约束声明
+// ----------------------------------------------------------------------------
+// 本项目硬性约束：保持 DMA 只读性，禁止对宿主机进行任何内存写入操作。
+// 本文件中所有 ProcessManager API 仅执行只读 DMA 操作，包括：
+//   - VMMDLL_MemReadEx（内存读取）
+//   - VMMDLL_Scatter_Initialize / PrepareEx / ExecuteRead / Clear（scatter 读取）
+//   - VMMDLL_VfsReadW / VfsListU（VFS 读取）
+//   - VMMDLL_PidList / ProcessGetInformation / Map_* / Pdb*（元数据查询）
+//   - VMMDLL_ConfigSet（VMM 缓存/DTB 配置，非内存写入）
+//
+// 禁止引入以下写入 API（静态审计守护，grep 检查）：
+//   - VMMDLL_MemWrite / VMMDLL_MemWriteScatter（宿主机内存写入）
+//   - VMMDLL_VmMemWrite / VMMDLL_VmMemWriteScatter（虚拟机内存写入）
+//   - VMMDLL_Scatter_PrepareWrite / PrepareWriteEx（scatter 写入准备）
+//   - LcWrite / LcWriteScatter（leechcore 写入）
+//
+// 例外：LcCommand(LC_CMD_FPGA_CFGREGCFG_MARKWR) 用于 FPGA 板卡自身配置
+// 寄存器清理，属于 DMA 板卡硬件初始化范畴，不触及宿主机内存，见下方注释。
+// ============================================================================
+
 #include "../game/AppState.h"
 
 #include "Logger.h"
@@ -189,14 +210,13 @@ private:
 
 
 public:
-
 	std::string AttachProcessName;
-
 	HANDLE hProcess = 0;
-
 	DWORD  ProcessID = 0;
-
 	VMM_HANDLE HANDLE;
+	// DMA 初始化失败时的错误描述（来自 PLC_CONFIG_ERRORINFO->wszUserText），
+	// 供上层（main.cpp / Cheats UI）展示给用户。
+	std::string lastDmaError;
 
 public:
 
@@ -223,10 +243,9 @@ public:
 
 
 	bool InitDMA()
-
 	{
-
 		if (this->HANDLE) return true;
+		lastDmaError.clear();
 
 		// Build args dynamically based on mmap file presence
 		std::string device = "fpga://algo=0";
@@ -239,12 +258,34 @@ public:
 		mmapPath += "mmap.txt";
 
 		bool hasMmap = (GetFileAttributesA(mmapPath.c_str()) != INVALID_FILE_ATTRIBUTES);
+		// 使用 VMMDLL_InitializeEx 获取失败时的详细错误信息（PLC_CONFIG_ERRORINFO），
+		// 用于区分 FPGA 未找到、VT/IOMMU 拒绝等不同失败场景。
+		PLC_CONFIG_ERRORINFO pErrInfo = nullptr;
 		if (hasMmap) {
 			LPSTR args[] = { (LPSTR)"", (LPSTR)"-device", (LPSTR)device.c_str(), (LPSTR)"-memmap", (LPSTR)"-norefresh" };
-			this->HANDLE = VMMDLL_Initialize(5, args);
+			this->HANDLE = VMMDLL_InitializeEx(5, args, &pErrInfo);
 		} else {
 			LPSTR args[] = { (LPSTR)"", (LPSTR)"-device", (LPSTR)device.c_str(), (LPSTR)"-norefresh" };
-			this->HANDLE = VMMDLL_Initialize(4, args);
+			this->HANDLE = VMMDLL_InitializeEx(4, args, &pErrInfo);
+		}
+
+		// 初始化失败时提取错误信息（可能包含 VT/IOMMU 拒绝、FPGA 未找到等提示）
+		if (!this->HANDLE && pErrInfo) {
+			if (pErrInfo->cwszUserText > 0 && pErrInfo->wszUserText) {
+				int len = WideCharToMultiByte(CP_UTF8, 0, pErrInfo->wszUserText,
+					(int)pErrInfo->cwszUserText, nullptr, 0, nullptr, nullptr);
+				if (len > 0) {
+					lastDmaError.resize(len);
+					WideCharToMultiByte(CP_UTF8, 0, pErrInfo->wszUserText,
+						(int)pErrInfo->cwszUserText, &lastDmaError[0], len, nullptr, nullptr);
+				}
+			}
+			LOG_ERROR("ProcessMgr", "VMMDLL_InitializeEx failed: fUserInputRequest={}, errorText='{}'",
+				pErrInfo->fUserInputRequest ? 1 : 0, lastDmaError);
+			LcMemFree(pErrInfo);
+		} else if (!this->HANDLE) {
+			lastDmaError = "VMMDLL_InitializeEx returned NULL with no error info";
+			LOG_ERROR("ProcessMgr", "{}", lastDmaError);
 		}
 
 		if (this->HANDLE) {
@@ -258,7 +299,17 @@ public:
 				VMMDLL_ConfigGet(this->HANDLE, VMMDLL_OPT_CORE_LEECHCORE_HANDLE, &lcHandleVal);
 				if (lcHandleVal) {
 					::HANDLE hLC = (::HANDLE)lcHandleVal;
-					// Clear FPGA config register 0x60 (CMD register) with mask 0xFFFF
+					// ----------------------------------------------------------------------
+					// FPGA 板卡配置寄存器清理（非宿主机内存写入）
+					// ----------------------------------------------------------------------
+					// 以下 LcCommand 调用使用 LC_CMD_FPGA_CFGREGCFG_MARKWR 命令，对 FPGA
+					// 板卡自身的配置寄存器（CFG register 0x60，CMD register）执行带掩码
+					// 的清理操作（data=0x0000, mask=0xFFFF）。
+					//
+					// 定性：这是 DMA 板卡硬件初始化范畴的操作，仅作用于 FPGA 板卡内部的
+					// 配置寄存器，不触及宿主机内存，与项目"禁止宿主机内存写入"约束不冲突。
+					// 仅在固件版本 >= 4.7 时执行一次，用于清理可能残留的 CMD 寄存器状态。
+					// ----------------------------------------------------------------------
 					BYTE data[4] = { 0x00, 0x00, 0xFF, 0xFF }; // data=0x0000, mask=0xFFFF
 					LcCommand(hLC, LC_CMD_FPGA_CFGREGCFG_MARKWR | 0x60, 4, data, NULL, NULL);
 					LOG_INFO("ProcessMgr", "FPGA register cleanup performed (fw >= 4.7)");

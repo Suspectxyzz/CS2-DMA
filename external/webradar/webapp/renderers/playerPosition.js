@@ -14,6 +14,7 @@ socket.element.addEventListener("players", event => {
 	for (let player of data.players) {
 		if (player.isLocal) {
 			localTeam = player.team
+			global.localPlayerNum = player.num
 			break
 		}
 	}
@@ -81,11 +82,30 @@ socket.element.addEventListener("players", event => {
 				global.playerHealths[player.num] = player.health
 			}
 
+			// Task 8: 基于 m_velocity 的简单线性外推，减少玩家快速移动时的拖影
+			let effectivePos = player.position
+			if (player.m_velocity && (player.m_velocity[0] || player.m_velocity[1] || player.m_velocity[2])) {
+				let now = performance.now()
+				global.playerLastUpdate = global.playerLastUpdate || {}
+				let last = global.playerLastUpdate[player.num]
+				if (last) {
+					let dt = (now - last) / 1000
+					if (dt < 0.05) dt = 0.05
+					if (dt > 0.2) dt = 0.2
+					effectivePos = {
+						x: player.position.x + player.m_velocity[0] * dt,
+						y: player.position.y + player.m_velocity[1] * dt,
+						z: player.position.z + player.m_velocity[2] * dt
+					}
+				}
+				global.playerLastUpdate[player.num] = now
+			}
+
 			// Save the position so the main loop can interpolate it
-			global.playerPos[player.num].x = global.positionToPerc(player.position, "x", player.num)
-			global.playerPos[player.num].y = global.positionToPerc(player.position, "y", player.num)
+			global.playerPos[player.num].x = global.positionToPerc(effectivePos, "x", player.num)
+			global.playerPos[player.num].y = global.positionToPerc(effectivePos, "y", player.num)
 			global.playerPos[player.num].a = player.angle
-			global.playerPos[player.num].z = player.position.z
+			global.playerPos[player.num].z = effectivePos.z
 		}
 
 		// Add all classes as a class string
@@ -99,12 +119,55 @@ socket.element.addEventListener("players", event => {
 		// Set the player alive attribute (used in autozoom)
 		global.playerPos[player.num].alive = player.health > 0
 
-		if (global.config.radar.showName == "both") {
-			playerLabel.children[0].textContent = player.name.substring(0, global.config.radar.maxNameLength)
+		// 名字 + 武器 + 血量组合显示（非互斥）
+		let infoText = ""
+		if (global.config.radar.showName == "both" || global.config.radar.showName == "always") {
+			infoText = player.name.substring(0, global.config.radar.maxNameLength)
 		}
-		if (global.config.radar.showName == "always") {
-			playerLabel.children[0].textContent = player.name.substring(0, global.config.radar.maxNameLength)
+		if (player.health > 0) {
+			if (global.config.radar.showWeapon) {
+				let weaponName = player.weapons.m_active || ""
+				let abbrev = weaponName.replace("weapon_", "")
+					.replace("_silencer", "")
+					.replace("ak47", "AK")
+					.replace("m4a1", "M4")
+					.replace("awp", "AWP")
+					.replace("usp", "USP")
+					.replace("glock", "Glock")
+					.replace("deagle", "Deagle")
+					.replace("mp5sd", "MP5")
+					.replace("mp7", "MP7")
+					.replace("mp9", "MP9")
+					.replace("mac10", "MAC")
+					.replace("ump45", "UMP")
+					.replace("p90", "P90")
+					.replace("bizon", "Bizon")
+					.replace("nova", "Nova")
+					.replace("xm1014", "XM")
+					.replace("sawedoff", "Saw")
+					.replace("mag7", "Mag")
+					.replace("m249", "M249")
+					.replace("negev", "Negev")
+					.replace("ssg08", "SSG")
+					.replace("sg556", "SG")
+					.replace("aug", "AUG")
+					.replace("famas", "Famas")
+					.replace("galilar", "Galil")
+					.replace("scar20", "Scar")
+					.replace("g3sg1", "G3")
+					.replace("knife", "Knife")
+					.replace("bayonet", "Knife")
+					.replace("c4", "C4")
+					.toUpperCase()
+				if (infoText) infoText += " "
+				infoText += abbrev
+			}
+			if (global.config.radar.showHealth) {
+				if (infoText) infoText += " "
+				infoText += player.health + "HP"
+			}
 		}
+		playerLabel.children[0].textContent = infoText
 
 		if (global.bomb.state === "planted" && global.bomb.countdown < 100 && global.config.radar.showBlastRadius === 'active' && global.mapData.survivableDistance && player.health > 0) {
 			// Calculate distance between player and bomb
@@ -150,6 +213,14 @@ socket.element.addEventListener("players", event => {
 
 // On round reset
 socket.element.addEventListener("roundend", event => {
+	// 清除选中玩家
+	global.followedPlayer = null
+	for (let j = 0; j < 10; j++) {
+		if (global.playerDots[j]) {
+			global.playerDots[j].classList.remove("followed")
+		}
+	}
+
 	// Go through each player
 	for (let num in global.playerBuffers) {
 		// Empty the location buffer
@@ -168,5 +239,42 @@ socket.element.addEventListener("roundend", event => {
 		global.playerDots[num].style.display = "block"
 		global.playerLabels[num].style.display = "none"
 		global.playerLabels[num].style.display = ""
+	}
+})
+
+// 为每个玩家 dot 绑定点击事件（选中观察玩家）
+for (let i = 0; i < 10; i++) {
+	let dot = global.playerDots[i]
+	if (!dot) continue
+	dot.style.cursor = "pointer"
+	dot.addEventListener("click", function(e) {
+		e.stopPropagation()
+		if (global.followedPlayer === i) {
+			// 再次点击同一玩家，取消选中
+			global.followedPlayer = null
+		} else {
+			global.followedPlayer = i
+		}
+		// 更新 followed 类
+		for (let j = 0; j < 10; j++) {
+			if (global.playerDots[j]) {
+				global.playerDots[j].classList.remove("followed")
+			}
+		}
+		if (global.followedPlayer !== null && global.playerDots[global.followedPlayer]) {
+			global.playerDots[global.followedPlayer].classList.add("followed")
+		}
+	})
+}
+
+// 点击雷达空白处取消选中
+document.getElementById("container").addEventListener("click", function() {
+	if (global.followedPlayer !== null) {
+		global.followedPlayer = null
+		for (let j = 0; j < 10; j++) {
+			if (global.playerDots[j]) {
+				global.playerDots[j].classList.remove("followed")
+			}
+		}
 	}
 })

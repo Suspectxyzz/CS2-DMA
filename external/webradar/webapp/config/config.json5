@@ -56,7 +56,15 @@
 		// Values above 1 might be blurry
 		"playerDotScale": 0.7,
 		// Same as the above, but for the bomb
-		"bombDotScale": 0.7
+		"bombDotScale": 0.7,
+		// 在玩家指示器旁显示当前武器名称缩写
+		"showWeapon": false,
+		// 在玩家指示器旁显示血量数值
+		"showHealth": false,
+		// 雷达图根据本地玩家朝向旋转，使本地玩家始终朝上
+		"followRotation": false,
+		// 显示队伍面板（左右两侧的玩家卡片）
+		"showTeamPanel": true
 	},
 
 	// Show a vertical indicator on every player dot, indicating how high the player is on the map

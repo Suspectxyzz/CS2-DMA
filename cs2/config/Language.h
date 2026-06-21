@@ -244,6 +244,10 @@ public:
 	std::string status_init_game;
 	std::string status_waiting_decrypt;
 	std::string status_unknown;
+	// DMA 初始化失败类型文案（用于 MessageBox 弹窗和 UI 状态显示）
+	std::string dma_error_vtiommu;
+	std::string dma_error_fpga;
+	std::string dma_error_unknown;
 
 	// Projectile ESP
 	std::string proj_enable;
@@ -287,8 +291,6 @@ public:
 	const char* crosshair_styleselect[4];
 
 	// ESP Gap-Closure Stage 3 (Task 7-14)
-	std::string visuals_offscreen_arrows;
-	std::string visuals_arrow_color;
 	std::string visuals_player_flags;
 	std::string visuals_flag_blind;
 	std::string visuals_flag_scoped;
@@ -353,7 +355,6 @@ public:
 	std::string visuals_name_size;
 	std::string visuals_weapon_size;
 	std::string visuals_distance_size;
-	std::string visuals_arrow_size;
 	std::string visuals_healthbar_width;
 	std::string visuals_armorbar_width;
 
@@ -600,8 +601,6 @@ public:
 		this->crosshair_styleselect[0] = "Cross"; this->crosshair_styleselect[1] = "Dot"; this->crosshair_styleselect[2] = "Circle"; this->crosshair_styleselect[3] = "Cross+Dot";
 
 		// ESP Gap-Closure Stage 3 (Task 7-14)
-		this->visuals_offscreen_arrows = "Offscreen Arrows";
-		this->visuals_arrow_color = "Arrow Color";
 		this->visuals_player_flags = "Player Flags";
 		this->visuals_flag_blind = "Blind";
 		this->visuals_flag_scoped = "Scoped";
@@ -666,7 +665,6 @@ public:
 		this->visuals_name_size = "Name Size";
 		this->visuals_weapon_size = "Weapon Size";
 		this->visuals_distance_size = "Distance Size";
-		this->visuals_arrow_size = "Arrow Size";
 		this->visuals_healthbar_width = "Health Bar Width";
 		this->visuals_armorbar_width = "Armor Bar Width";
 
@@ -709,6 +707,11 @@ public:
 		this->status_init_game = "Initializing game data...";
 		this->status_waiting_decrypt = "Waiting for module decryption...";
 		this->status_unknown = "Unknown state";
+
+		// DMA initialization failure messages (differentiated by failure type)
+		this->dma_error_vtiommu = "DMA access denied by VT-d/IOMMU. Please disable Credential Guard / Device Guard / HVCI and retry.";
+		this->dma_error_fpga = "FPGA device not found. Please check hardware connection and driver installation.";
+		this->dma_error_unknown = "DMA initialization failed.";
 	}
 
 	void chineese() {
@@ -949,8 +952,6 @@ public:
 		this->crosshair_styleselect[0] = u8"\u5341\u5b57"; this->crosshair_styleselect[1] = u8"\u5706\u70b9"; this->crosshair_styleselect[2] = u8"\u5706\u5708"; this->crosshair_styleselect[3] = u8"\u5341\u5b57+\u5706\u70b9";
 
 		// ESP Gap-Closure Stage 3 (Task 7-14)
-		this->visuals_offscreen_arrows = u8"\u5c4f\u5916\u7bad\u5934";
-		this->visuals_arrow_color = u8"\u7bad\u5934\u989c\u8272";
 		this->visuals_player_flags = u8"\u73a9\u5bb6\u72b6\u6001\u6807\u7b7e";
 		this->visuals_flag_blind = u8"\u95ea\u5149";
 		this->visuals_flag_scoped = u8"\u5f00\u955c";
@@ -1015,7 +1016,6 @@ public:
 		this->visuals_name_size = u8"\u540d\u79f0\u5927\u5c0f";
 		this->visuals_weapon_size = u8"\u6b66\u5668\u5927\u5c0f";
 		this->visuals_distance_size = u8"\u8ddd\u79bb\u5927\u5c0f";
-		this->visuals_arrow_size = u8"\u7bad\u5934\u5927\u5c0f";
 		this->visuals_healthbar_width = u8"\u8840\u6761\u5bbd\u5ea6";
 		this->visuals_armorbar_width = u8"\u62a4\u7532\u6761\u5bbd\u5ea6";
 
@@ -1058,6 +1058,11 @@ public:
 		this->status_init_game = u8"\u521d\u59cb\u5316\u6e38\u620f\u6570\u636e\u4e2d...";
 		this->status_waiting_decrypt = u8"\u7b49\u5f85\u6a21\u5757\u89e3\u5bc6\u4e2d...";
 		this->status_unknown = u8"\u672a\u77e5\u72b6\u6001";
+
+		// DMA \u521d\u59cb\u5316\u5931\u8d25\u63d0\u793a\u6587\u6848\uff08\u6309\u5931\u8d25\u7c7b\u578b\u533a\u5206\uff09
+		this->dma_error_vtiommu = u8"DMA \u8bbf\u95ee\u88ab VT-d/IOMMU \u62d2\u7edd\u3002\u8bf7\u5173\u95ed Credential Guard / Device Guard / HVCI \u540e\u91cd\u8bd5\u3002";
+		this->dma_error_fpga = u8"\u672a\u627e\u5230 FPGA \u8bbe\u5907\u3002\u8bf7\u68c0\u67e5\u786c\u4ef6\u8fde\u63a5\u548c\u9a71\u52a8\u5b89\u88c5\u3002";
+		this->dma_error_unknown = u8"DMA \u521d\u59cb\u5316\u5931\u8d25\u3002";
 	}
 };
 

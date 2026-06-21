@@ -109,12 +109,24 @@ div.dot.color5 { background: #ffffff; }
 
 /* 敌方玩家外部红圈，不覆盖内部填充色 */
 div.dot.enemy {
-	box-shadow: 0 0 0 .4vmin rgba(255, 50, 50, 0.95), 0 0 1.6vmin .8vmin rgba(0, 0, 0, .2);
+	box-shadow: 0 0 0 .8vmin rgba(255, 50, 50, 0.95), 0 0 1.6vmin .8vmin rgba(0, 0, 0, .2);
 }
 
 div.dot.bomb {
 	border-radius: 2vmin .4vmin 2vmin 2.4vmin;
 	background: #FF8200;
+	/* 携带炸弹脉冲环（伪元素已被 hurting/shooting 占用，用 box-shadow 模拟） */
+	box-shadow: 0 0 0 2px rgba(255, 176, 72, 0.98), 0 0 0 4px transparent, 0 0 0 6px rgba(255, 176, 72, 0.5);
+	animation: bombRingPulse 4.6s linear infinite;
+}
+
+@keyframes bombRingPulse {
+	0%, 100% {
+		box-shadow: 0 0 0 2px rgba(255, 176, 72, 0.98), 0 0 0 4px transparent, 0 0 0 6px rgba(255, 176, 72, 0.5);
+	}
+	50% {
+		box-shadow: 0 0 0 3px rgba(255, 176, 72, 0.98), 0 0 0 5px transparent, 0 0 0 8px rgba(255, 176, 72, 0.3);
+	}
 }
 
 div.dot.active {
@@ -140,7 +152,13 @@ div.dot.flashed.active {
 
 /* 被观察的敌方玩家同时显示红色边缘和白色观察框 */
 div.dot.enemy.active {
-	box-shadow: 0 0 0 .4vmin rgba(255, 50, 50, 0.95), 0 0 0 .2vmin rgba(0, 0, 0, .9), 0 0 0 1vmin rgba(255, 255, 255, .9), 0 0 2.4vmin 1.2vmin rgba(255, 255, 255, .2);
+	box-shadow: 0 0 0 .8vmin rgba(255, 50, 50, 0.95), 0 0 0 .2vmin rgba(0, 0, 0, .9), 0 0 0 1vmin rgba(255, 255, 255, .9), 0 0 2.4vmin 1.2vmin rgba(255, 255, 255, .2);
+}
+
+/* 选中观察的玩家高亮 */
+div.dot.followed {
+	z-index: 7000 !important;
+	box-shadow: 0 0 0 .3vmin rgba(0, 255, 0, .9), 0 0 2vmin 1vmin rgba(0, 255, 0, .3);
 }
 
 div.dot.dead {
@@ -369,6 +387,38 @@ div.label span {
 	border: #ce3f00 solid .2vmin;
 	transform: translate(-50%, 50%);
 	transition: opacity .3s;
+}
+
+#infernos .inferno.CT > div.flame {
+	border-color: #84c8ed;
+	background: rgba(132, 200, 237, 0.5);
+}
+
+#infernos .inferno.T > div.flame {
+	border-color: #f0c040;
+	background: rgba(240, 192, 64, 0.5);
+}
+
+#infernos .inferno.U > div.flame {
+	border-color: #ff2f2f;
+	background: rgba(255, 47, 47, 0.5);
+}
+
+.projectile-timer {
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	transform: translate(-50%, 4px);
+	color: #ffffff;
+	background: rgba(0, 0, 0, 0.7);
+	padding: 1px 4px;
+	border-radius: 3px;
+	font-size: 1.2vmin;
+	font-weight: bold;
+	font-family: monospace;
+	pointer-events: none;
+	z-index: 10;
+	white-space: nowrap;
 }
 
 #flashbangs > div {

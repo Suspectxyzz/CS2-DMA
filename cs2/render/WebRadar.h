@@ -81,6 +81,10 @@ public:
 	// Thread-safe — can be called from any thread.
 	void Broadcast(const std::string& message);
 
+	// Broadcast a pageUpdate control message to all clients (WebSocket + SSE).
+	// Frontend reloads the page on receipt — used for resource hot-reload.
+	void BroadcastPageUpdate();
+
 	bool IsRunning() const { return m_running.load(); }
 	int  GetClientCount() const;
 
@@ -146,6 +150,9 @@ private:
 // Global state exposed for GUI (updated by WebRadarThread)
 inline std::atomic<int> g_webRadarClientCount{ 0 };
 inline std::atomic<bool> g_webRadarRunning{ false };
+
+// Page reload request flag (set by GUI, consumed by WebRadarThread)
+inline std::atomic<bool> g_webRadarReloadRequested{ false };
 
 // Runtime stats snapshot for GUI (Task 9). Written by WebRadarThread,
 // read by GUI thread. Guarded by g_webRadarStatsMutex.

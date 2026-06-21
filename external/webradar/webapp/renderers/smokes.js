@@ -17,6 +17,8 @@ socket.element.addEventListener("smokes", event => {
 	function remove(smokeElement) {
 		setTimeout(() => {
 			smokeElement.remove()
+			let timer = document.getElementById("timer_" + smokeElement.id)
+			if (timer) timer.remove()
 		}, 2000)
 	}
 
@@ -47,6 +49,12 @@ socket.element.addEventListener("smokes", event => {
 			// Add it to the DOM
 			document.getElementById("smokes").appendChild(smokeElement)
 
+			// 创建倒计时显示元素（放在 #smokes 容器中，避免被烟雾元素 overflow:hidden 裁剪）
+			let timerElement = document.createElement("div")
+			timerElement.className = "projectile-timer"
+			timerElement.id = "timer_" + smokeID
+			document.getElementById("smokes").appendChild(timerElement)
+
 			// Play the fade in animation
 			fadeIn(smokeElement, team)
 
@@ -60,18 +68,13 @@ socket.element.addEventListener("smokes", event => {
 		smokeElement.style.left = global.positionToPerc(smoke.position, "x") + "%"
 		smokeElement.style.bottom = global.positionToPerc(smoke.position, "y") + "%"
 
-		// Update smoke remaining time label
-		let smokeRemaining = 20 - smoke.time
-		let smokeTimer = smokeElement.querySelector(".smoke-timer")
-		if (smokeRemaining > 0) {
-			if (!smokeTimer) {
-				smokeTimer = document.createElement("div")
-				smokeTimer.className = "smoke-timer"
-				smokeElement.appendChild(smokeTimer)
-			}
-			smokeTimer.textContent = "Smoke " + smokeRemaining.toFixed(1) + "s"
-		} else if (smokeTimer) {
-			smokeTimer.remove()
+		// 更新倒计时数字和位置（倒计时放在烟雾下方）
+		let timerElement = document.getElementById("timer_" + smokeID)
+		if (timerElement) {
+			let remaining = Math.max(0, 20 - smoke.time)
+			timerElement.textContent = remaining.toFixed(1)
+			timerElement.style.left = smokeElement.style.left
+			timerElement.style.bottom = smokeElement.style.bottom
 		}
 
 		// If the smoke has been here for over 15 seconds, ready the smoke element for the fade away
@@ -150,11 +153,17 @@ socket.element.addEventListener("infernos", event => {
 			infernoElement = document.createElement("div")
 
 			infernoElement.id = "inferno" + inferno.id
-			infernoElement.className = "inferno"
+			let infernoTeam = inferno.team || "U"
+			infernoElement.className = "inferno " + infernoTeam
 			infernoElement.style.opacity = 1
 
 			// Add it to the inferno container
 			document.getElementById("infernos").appendChild(infernoElement)
+
+			// 创建倒计时显示元素
+			let infernoTimer = document.createElement("div")
+			infernoTimer.className = "projectile-timer"
+			infernoElement.appendChild(infernoTimer)
 		}
 
 		// Build a signature of flame positions so we only rebuild the flame DOM
@@ -172,38 +181,21 @@ socket.element.addEventListener("infernos", event => {
 			for (var i = 0; i < inferno.flamesNum; i++) {
 				let fx = global.positionToPerc(inferno.flamesPosition[i], "x")
 				let fy = global.positionToPerc(inferno.flamesPosition[i], "y")
-				flameElementsStr += '<div style="height:' + flameSize + ';width:' + flameSize +
+				flameElementsStr += '<div class="flame" style="height:' + flameSize + ';width:' + flameSize +
 					';left:' + fx + '%;bottom:' + fy + '%"></div>'
 			}
 			infernoElement.innerHTML = flameElementsStr
+			// innerHTML 覆盖后重新添加倒计时元素
+			let infernoTimer = document.createElement("div")
+			infernoTimer.className = "projectile-timer"
+			infernoElement.appendChild(infernoTimer)
 		}
 
-		// Update inferno remaining time label (reuse element like smoke timer)
-		let infernoRemaining = inferno.lifeRemaining || 0
-		let infernoTimer = infernoElement.querySelector(".inferno-timer")
-		if (infernoRemaining > 0) {
-			if (!infernoTimer) {
-				infernoTimer = document.createElement("div")
-				infernoTimer.className = "inferno-timer"
-				infernoElement.appendChild(infernoTimer)
-			}
-			// Position timer at the centroid of the flames instead of the map center.
-			// The .inferno element is full-size (100%/100%), so the CSS top:50%/left:50%
-			// places the timer at the map center. Override with the flame centroid.
-			if (inferno.flamesNum > 0) {
-				let centerX = 0, centerY = 0
-				for (var i = 0; i < inferno.flamesNum; i++) {
-					centerX += global.positionToPerc(inferno.flamesPosition[i], "x")
-					centerY += global.positionToPerc(inferno.flamesPosition[i], "y")
-				}
-				centerX /= inferno.flamesNum
-				centerY /= inferno.flamesNum
-				infernoTimer.style.left = centerX + "%"
-				infernoTimer.style.top = (100 - centerY) + "%"
-			}
-			infernoTimer.textContent = "Fire " + infernoRemaining.toFixed(1) + "s"
-		} else if (infernoTimer) {
-			infernoTimer.remove()
+		// 更新倒计时数字
+		let infernoTimer = infernoElement.querySelector(".projectile-timer")
+		if (infernoTimer) {
+			let remaining = Math.max(0, inferno.lifeRemaining || 0)
+			infernoTimer.textContent = remaining.toFixed(1)
 		}
 	}
 

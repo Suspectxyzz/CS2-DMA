@@ -86,6 +86,8 @@ namespace MenuConfig
 	inline std::string WebRadarOriginAllowlist;
 	// Cloudflare quick tunnel toggle (public access). Off by default.
 	inline bool WebRadarCloudflareTunnel = false;
+	// WebRadar 自动刷新开关（资源更新时自动推送 pageUpdate）
+	inline bool WebRadarAutoReload = false;
 
 	inline bool TeamCheck = true;
 
@@ -187,10 +189,9 @@ namespace MenuConfig
 	// ======== Performance Monitor ========
 	inline bool  ShowPerfMonitor = false;
 
-	// ======== ESP gap-closure stage 3a: Offscreen Arrows (Task 7) ========
-	inline bool    ShowOffscreenArrows = false;
-	inline ImColor OffscreenArrowColor = ImColor(255, 255, 255, 200);
-	inline float   OffscreenArrowSize = 12.f;
+	// ======== ESP Preview / Debug Stats ========
+	inline bool  ShowEspPreview = false;       // ESP Preview 预览窗口开关
+	inline bool  ShowDebugStats = false;       // 详细调试统计 overlay 开关
 
 	// ======== ESP gap-closure stage 3a: Player Flags (Task 8) ========
 	inline bool    ShowPlayerFlags = false;

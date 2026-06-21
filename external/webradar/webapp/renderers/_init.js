@@ -32,7 +32,10 @@ const defaultConfig = {
 		projectileSmoothing: 5,
 		tombstoneOpacity: 0.4,
 		playerDotScale: 0.7,
-		bombDotScale: 0.7
+		bombDotScale: 0.7,
+		showWeapon: false,
+		showHealth: false,
+		followRotation: false
 	},
 	vertIndicator: {
 		type: "scale",
@@ -48,6 +51,31 @@ const defaultConfig = {
 }
 
 /**
+ * Recursively merge source into target. For each key: if both target and
+ * source hold plain objects, recurse; otherwise assign source value
+ * directly. Mutates target in place and returns it.
+ * @param {Object} target The destination object
+ * @param {Object} source The override object
+ * @return {Object} The merged target
+ */
+function deepMerge(target, source) {
+	for (let key in source) {
+		if (!source.hasOwnProperty(key)) continue
+		let targetVal = target[key]
+		let sourceVal = source[key]
+		// Only recurse when both sides are plain objects (not arrays)
+		if (targetVal && sourceVal && typeof targetVal === "object" && typeof sourceVal === "object"
+			&& !Array.isArray(targetVal) && !Array.isArray(sourceVal)) {
+			deepMerge(targetVal, sourceVal)
+		}
+		else {
+			target[key] = sourceVal
+		}
+	}
+	return target
+}
+
+/**
  * Load config from localStorage if available, otherwise fall back to
  * the default config. Allows the user to override values without a
  * welcome packet.
@@ -59,13 +87,8 @@ function loadConfig() {
 		let stored = localStorage.getItem("boltobserv_config")
 		if (stored) {
 			let parsed = JSON.parse(stored)
-			// Shallow-merge top-level keys so the user can override
-			// entire sections (radar, autozoom, ...) at once.
-			for (let key in parsed) {
-				if (parsed.hasOwnProperty(key)) {
-					config[key] = parsed[key]
-				}
-			}
+			// Deep-merge so per-section overrides don't wipe sibling keys
+			deepMerge(config, parsed)
 		}
 	}
 	catch (err) {
@@ -131,6 +154,11 @@ document.addEventListener("configchange", function(event) {
 	else if (event.detail.key === "radar.tombstoneOpacity") {
 		document.documentElement.style.setProperty("--config-tombstone-opacity", event.detail.value)
 	}
+})
+
+// pageUpdate 事件：后端通知前端刷新页面（用于资源热更新）
+socket.element.addEventListener("pageUpdate", function() {
+	location.reload()
 })
 
 /**

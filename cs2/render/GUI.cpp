@@ -492,18 +492,6 @@ static void DrawTab_Visuals() {
 		Gui.MyCheckBox(lang.utilities_teamcheck.c_str(), &MenuConfig::TeamCheck);
 	}
 
-	// ======== Offscreen Arrows (Task 17: independent section from Advanced ESP) ========
-	if (ImGui::CollapsingHeader(lang.visuals_offscreen_arrows.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-		Gui.MyCheckBox(lang.visuals_offscreen_arrows.c_str(), &MenuConfig::ShowOffscreenArrows);
-		tip("Offscreen enemy direction arrows", "屏外敌人方向指示箭头");
-		if (MenuConfig::ShowOffscreenArrows) {
-			ImGui::SameLine(0, 16);
-			ImGui::ColorEdit4(lang.visuals_arrow_color.c_str(), reinterpret_cast<float*>(&MenuConfig::OffscreenArrowColor), ImGuiColorEditFlags_NoInputs);
-			ImGui::SetNextItemWidth(150);
-			ImGui::SliderFloat((lang.visuals_arrow_size + "##arrow").c_str(), &MenuConfig::OffscreenArrowSize, 5.f, 30.f, "%.0f px");
-		}
-	}
-
 	// ======== Player Flags (Task 17: independent section from Advanced ESP) ========
 	if (ImGui::CollapsingHeader(lang.visuals_player_flags.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		Gui.MyCheckBox(lang.visuals_player_flags.c_str(), &MenuConfig::ShowPlayerFlags);
@@ -558,6 +546,14 @@ static void DrawTab_Visuals() {
 			ImGui::ColorEdit4(lang.visuals_sound_color.c_str(), reinterpret_cast<float*>(&MenuConfig::SoundESPColor), ImGuiColorEditFlags_NoInputs);
 		}
 	}
+
+	// ======== ESP Preview (Task: preview window toggle) ========
+	ImGui::Spacing();
+	if (ImGui::Button("ESP Preview")) {
+		Render::EspPreviewOpen = !Render::EspPreviewOpen;
+	}
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Open a preview window showing current ESP settings");
 }
 
 // ============================================================================
@@ -655,6 +651,18 @@ static void DrawTab_Radar() {
 		ImGui::Text("Active map:     %s", snap.activeMap.empty() ? "-" : snap.activeMap.c_str());
 		ImGui::Text("Status:         %s", snap.statusText.empty() ? "-" : snap.statusText.c_str());
 	}
+
+		// ---- Reload & Auto Reload ----
+	ImGui::Spacing();
+	if (ImGui::Button("Reload WebRadar Clients")) {
+		g_webRadarReloadRequested.store(true);
+	}
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Push a pageUpdate control message to all connected clients");
+	ImGui::SameLine(0, 16);
+	ImGui::Checkbox("Auto Reload", &MenuConfig::WebRadarAutoReload);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Automatically push pageUpdate to clients when resources update");
 
 		// ---- Local / LAN Access ----
 		SectionHeader(lang.webradar_local_access.c_str());
@@ -973,6 +981,12 @@ static void DrawTab_Settings() {
 
 		ImGui::Spacing();
 		Gui.MyCheckBox(lang.settings_perfmonitor.c_str(), &MenuConfig::ShowPerfMonitor);
+		if (MenuConfig::ShowPerfMonitor) {
+			ImGui::SameLine(0, 16);
+			ImGui::Checkbox("Debug Stats", &MenuConfig::ShowDebugStats);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Show detailed stage timings and DMA health stats in the PerfMonitor overlay");
+		}
 
 		ImGui::Spacing();
 		{

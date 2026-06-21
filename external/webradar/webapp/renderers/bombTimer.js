@@ -45,11 +45,22 @@ function updateBombTimer() {
   if (progress < 0) progress = 0
   bombFillEl.style.width = (progress * 100) + "%"
 
-  // Urgent highlight when <= 10s
-  if (remaining <= 10 && remaining > 0) {
-    bombTimerEl.classList.add("urgent")
-  } else {
-    bombTimerEl.classList.remove("urgent")
+  // 四态视觉：正常(黄) / 危急(红) / 拆弹安全(绿) / 拆弹来不及(红)
+  bombTimerEl.classList.remove("urgent", "is-critical", "is-defuse-safe", "is-defuse-late")
+  if (remaining > 0) {
+    if (bombTimerState.defuseTime > 0) {
+      // 正在拆弹
+      let defuseElapsed = (now - bombTimerState.defuseEventTime) / 1000
+      let defuseRemaining = bombTimerState.defuseTime - defuseElapsed
+      if (defuseRemaining <= remaining) {
+        bombTimerEl.classList.add("is-defuse-safe")  // 绿色，能拆完
+      } else {
+        bombTimerEl.classList.add("is-defuse-late")  // 红色，拆不完
+      }
+    } else if (remaining <= 10) {
+      bombTimerEl.classList.add("is-critical")  // 红色，危急
+    }
+    // else: 正常黄色，无类
   }
 
   // Update defuse progress bar if defusing
@@ -81,7 +92,7 @@ function stopBombTimer() {
     cancelAnimationFrame(bombTimerState.rafId)
     bombTimerState.rafId = null
   }
-  bombTimerEl.classList.remove("urgent")
+  bombTimerEl.classList.remove("urgent", "is-critical", "is-defuse-safe", "is-defuse-late")
   bombTimerState.defuseTime = 0
 }
 

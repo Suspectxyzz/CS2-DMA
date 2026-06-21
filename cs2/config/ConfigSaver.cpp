@@ -101,16 +101,15 @@ namespace MyConfigSaver {
         configFile << "BombDefusingColor " << MenuConfig::BombDefusingColor.Value.x << " " << MenuConfig::BombDefusingColor.Value.y << " " << MenuConfig::BombDefusingColor.Value.z << " " << MenuConfig::BombDefusingColor.Value.w << std::endl;
         configFile << "ShowSpectatorList " << MenuConfig::ShowSpectatorList << std::endl;
         configFile << "ShowPerfMonitor " << MenuConfig::ShowPerfMonitor << std::endl;
+        configFile << "ShowEspPreview " << MenuConfig::ShowEspPreview << std::endl;
+        configFile << "ShowDebugStats " << MenuConfig::ShowDebugStats << std::endl;
+        configFile << "WebRadarAutoReload " << MenuConfig::WebRadarAutoReload << std::endl;
         configFile << "ShowProjectileESP " << MenuConfig::ShowProjectileESP << std::endl;
         configFile << "ShowProjectileRange " << MenuConfig::ShowProjectileRange << std::endl;
         configFile << "ProjectileRangeAlpha " << MenuConfig::ProjectileRangeAlpha << std::endl;
         configFile << "MenuHotKey " << MenuConfig::MenuHotKey << std::endl;
 
         // ======== ESP Gap-Closure Stage 3 (Task 7-14) ========
-        // Task 7: Offscreen Arrows
-        configFile << "ShowOffscreenArrows " << MenuConfig::ShowOffscreenArrows << std::endl;
-        configFile << "OffscreenArrowColor " << MenuConfig::OffscreenArrowColor.Value.x << " " << MenuConfig::OffscreenArrowColor.Value.y << " " << MenuConfig::OffscreenArrowColor.Value.z << " " << MenuConfig::OffscreenArrowColor.Value.w << std::endl;
-        configFile << "OffscreenArrowSize " << MenuConfig::OffscreenArrowSize << std::endl;
         // Task 8: Player Flags
         configFile << "ShowPlayerFlags " << MenuConfig::ShowPlayerFlags << std::endl;
         configFile << "FlagBlindEnabled " << MenuConfig::FlagBlindEnabled << std::endl;
@@ -194,92 +193,95 @@ namespace MyConfigSaver {
             std::string key;
             if (iss >> key) {
                 if (key == "ShowBoneESP") iss >> MenuConfig::ShowBoneESP;
-                else if (key == "ShowBoxESP") iss >> MenuConfig::ShowBoxESP;
-                else if (key == "ShowHealthBar") iss >> MenuConfig::ShowHealthBar;
-                else if (key == "ShowLineToEnemy") iss >> MenuConfig::ShowLineToEnemy;
-                else if (key == "ShowWeaponESP") iss >> MenuConfig::ShowWeaponESP;
-                else if (key == "ShowDistance") iss >> MenuConfig::ShowDistance;
-                else if (key == "ShowEyeRay") iss >> MenuConfig::ShowEyeRay;
-                else if (key == "ShowPlayerName") iss >> MenuConfig::ShowPlayerName;
-                else if (key == "HealthBarType") iss >> MenuConfig::HealthBarType;
-                else if (key == "BoneColor") iss >> MenuConfig::BoneColor.Value.x >> MenuConfig::BoneColor.Value.y >> MenuConfig::BoneColor.Value.z >> MenuConfig::BoneColor.Value.w;
-                else if (key == "LineToEnemyColor") iss >> MenuConfig::LineToEnemyColor.Value.x >> MenuConfig::LineToEnemyColor.Value.y >> MenuConfig::LineToEnemyColor.Value.z >> MenuConfig::LineToEnemyColor.Value.w;
-                else if (key == "BoxColor") iss >> MenuConfig::BoxColor.Value.x >> MenuConfig::BoxColor.Value.y >> MenuConfig::BoxColor.Value.z >> MenuConfig::BoxColor.Value.w;
-                else if (key == "EyeRayColor") iss >> MenuConfig::EyeRayColor.Value.x >> MenuConfig::EyeRayColor.Value.y >> MenuConfig::EyeRayColor.Value.z >> MenuConfig::EyeRayColor.Value.w;
-                else if (key == "ShowMenu") iss >> MenuConfig::ShowMenu;
-                else if (key == "BoxType") iss >> MenuConfig::BoxType;
-                else if (key == "TeamCheck") iss >> MenuConfig::TeamCheck;
-                else if (key == "Frames") iss >> MenuConfig::MaxFrameRate;
-                else if (key == "BoxThickness") iss >> MenuConfig::BoxThickness;
-                else if (key == "BoxRounding") iss >> MenuConfig::BoxRounding;
-                else if (key == "BoxFilled") iss >> MenuConfig::BoxFilled;
-                else if (key == "BoxFillAlpha") iss >> MenuConfig::BoxFillAlpha;
-                else if (key == "CornerLength") iss >> MenuConfig::CornerLength;
-                else if (key == "BoneThickness") iss >> MenuConfig::BoneThickness;
-                else if (key == "ShowHeadDot") iss >> MenuConfig::ShowHeadDot;
-                else if (key == "HeadDotColor") iss >> MenuConfig::HeadDotColor.Value.x >> MenuConfig::HeadDotColor.Value.y >> MenuConfig::HeadDotColor.Value.z >> MenuConfig::HeadDotColor.Value.w;
-                else if (key == "HeadDotSize") iss >> MenuConfig::HeadDotSize;
-                else if (key == "ShowArmorBar") iss >> MenuConfig::ShowArmorBar;
-                else if (key == "ArmorBarType") iss >> MenuConfig::ArmorBarType;
-                else if (key == "ArmorBarColor") iss >> MenuConfig::ArmorBarColor.Value.x >> MenuConfig::ArmorBarColor.Value.y >> MenuConfig::ArmorBarColor.Value.z >> MenuConfig::ArmorBarColor.Value.w;
-                else if (key == "ArmorBarWidth") iss >> MenuConfig::ArmorBarWidth;
-                else if (key == "HealthBarWidth") iss >> MenuConfig::HealthBarWidth;
-                else if (key == "EyeRayLength") iss >> MenuConfig::EyeRayLength;
-                else if (key == "EyeRayThickness") iss >> MenuConfig::EyeRayThickness;
-                else if (key == "LineToEnemyThickness") iss >> MenuConfig::LineToEnemyThickness;
-                else if (key == "LineToEnemyOrigin") iss >> MenuConfig::LineToEnemyOrigin;
-                else if (key == "NameColor") iss >> MenuConfig::NameColor.Value.x >> MenuConfig::NameColor.Value.y >> MenuConfig::NameColor.Value.z >> MenuConfig::NameColor.Value.w;
-                else if (key == "NameFontSize") iss >> MenuConfig::NameFontSize;
-                else if (key == "WeaponColor") iss >> MenuConfig::WeaponColor.Value.x >> MenuConfig::WeaponColor.Value.y >> MenuConfig::WeaponColor.Value.z >> MenuConfig::WeaponColor.Value.w;
-                else if (key == "WeaponFontSize") iss >> MenuConfig::WeaponFontSize;
-                else if (key == "DistanceColor") iss >> MenuConfig::DistanceColor.Value.x >> MenuConfig::DistanceColor.Value.y >> MenuConfig::DistanceColor.Value.z >> MenuConfig::DistanceColor.Value.w;
-                else if (key == "DistanceFontSize") iss >> MenuConfig::DistanceFontSize;
-                else if (key == "SafeZoneEnabled") iss >> MenuConfig::SafeZoneEnabled;
-                else if (key == "SafeZoneRadius") iss >> MenuConfig::SafeZoneRadius;
-                else if (key == "SafeZoneShape") iss >> MenuConfig::SafeZoneShape;
-                else if (key == "SafeZoneMode") iss >> MenuConfig::SafeZoneMode;
-                else if (key == "SafeZoneSkipBox") iss >> MenuConfig::SafeZoneSkipBox;
-                else if (key == "SafeZoneSkipBone") iss >> MenuConfig::SafeZoneSkipBone;
-                else if (key == "SafeZoneSkipHealthBar") iss >> MenuConfig::SafeZoneSkipHealthBar;
-                else if (key == "SafeZoneSkipArmorBar") iss >> MenuConfig::SafeZoneSkipArmorBar;
-                else if (key == "SafeZoneSkipWeapon") iss >> MenuConfig::SafeZoneSkipWeapon;
-                else if (key == "SafeZoneSkipName") iss >> MenuConfig::SafeZoneSkipName;
-                else if (key == "SafeZoneSkipSnapline") iss >> MenuConfig::SafeZoneSkipSnapline;
-                else if (key == "SafeZoneSkipEyeRay") iss >> MenuConfig::SafeZoneSkipEyeRay;
-                else if (key == "SafeZoneSkipHeadDot") iss >> MenuConfig::SafeZoneSkipHeadDot;
-                else if (key == "SafeZoneSkipDistance") iss >> MenuConfig::SafeZoneSkipDistance;
-                else if (key == "CrosshairEnabled") iss >> MenuConfig::CrosshairEnabled;
-                else if (key == "CrosshairSize") iss >> MenuConfig::CrosshairSize;
-                else if (key == "CrosshairThickness") iss >> MenuConfig::CrosshairThickness;
-                else if (key == "CrosshairGap") iss >> MenuConfig::CrosshairGap;
-                else if (key == "CrosshairStyle") iss >> MenuConfig::CrosshairStyle;
-                else if (key == "CrosshairColor") iss >> MenuConfig::CrosshairColor.Value.x >> MenuConfig::CrosshairColor.Value.y >> MenuConfig::CrosshairColor.Value.z >> MenuConfig::CrosshairColor.Value.w;
-                else if (key == "CrosshairOnEnemyColor") iss >> MenuConfig::CrosshairOnEnemyColor;
-                else if (key == "CrosshairEnemyColor") iss >> MenuConfig::CrosshairEnemyColor.Value.x >> MenuConfig::CrosshairEnemyColor.Value.y >> MenuConfig::CrosshairEnemyColor.Value.z >> MenuConfig::CrosshairEnemyColor.Value.w;
-                else if (key == "VSync") iss >> MenuConfig::VSync;
-                else if (key == "RenderWidth") iss >> MenuConfig::RenderWidth;
-                else if (key == "RenderHeight") iss >> MenuConfig::RenderHeight;
-                else if (key == "MonitorIndex") iss >> MenuConfig::MonitorIndex;
-                else if (key == "DebugLog") iss >> MenuConfig::DebugLog;
-                else if (key == "SelectedLanguage") iss >> MenuConfig::SelectedLanguage;
-                else if (key == "ShowWebRadar") iss >> MenuConfig::ShowWebRadar;
-                else if (key == "WebRadarPort") iss >> MenuConfig::WebRadarPort;
-                else if (key == "WebRadarInterval") iss >> MenuConfig::WebRadarInterval;
-                else if (key == "WebRadarPasswordEnabled") iss >> MenuConfig::WebRadarPasswordEnabled;
-                else if (key == "WebRadarPassword") iss >> MenuConfig::WebRadarPassword;
-                else if (key == "WebRadarOriginAllowlist") iss >> MenuConfig::WebRadarOriginAllowlist;
-                else if (key == "WebRadarCloudflareTunnel") iss >> MenuConfig::WebRadarCloudflareTunnel;
-                else if (key == "ShowBombESP") iss >> MenuConfig::ShowBombESP;
-                else if (key == "BombPlantedColor") iss >> MenuConfig::BombPlantedColor.Value.x >> MenuConfig::BombPlantedColor.Value.y >> MenuConfig::BombPlantedColor.Value.z >> MenuConfig::BombPlantedColor.Value.w;
-                else if (key == "BombCarrierColor") iss >> MenuConfig::BombCarrierColor.Value.x >> MenuConfig::BombCarrierColor.Value.y >> MenuConfig::BombCarrierColor.Value.z >> MenuConfig::BombCarrierColor.Value.w;
-                else if (key == "BombDroppedColor") iss >> MenuConfig::BombDroppedColor.Value.x >> MenuConfig::BombDroppedColor.Value.y >> MenuConfig::BombDroppedColor.Value.z >> MenuConfig::BombDroppedColor.Value.w;
-                else if (key == "BombDefusingColor") iss >> MenuConfig::BombDefusingColor.Value.x >> MenuConfig::BombDefusingColor.Value.y >> MenuConfig::BombDefusingColor.Value.z >> MenuConfig::BombDefusingColor.Value.w;
-                else if (key == "ShowSpectatorList") iss >> MenuConfig::ShowSpectatorList;
-                else if (key == "ShowPerfMonitor") iss >> MenuConfig::ShowPerfMonitor;
-                else if (key == "ShowProjectileESP") iss >> MenuConfig::ShowProjectileESP;
-                else if (key == "ShowProjectileRange") iss >> MenuConfig::ShowProjectileRange;
-                else if (key == "ProjectileRangeAlpha") iss >> MenuConfig::ProjectileRangeAlpha;
-                else if (key == "MenuHotKey") {
+                if (key == "ShowBoxESP") iss >> MenuConfig::ShowBoxESP;
+                if (key == "ShowHealthBar") iss >> MenuConfig::ShowHealthBar;
+                if (key == "ShowLineToEnemy") iss >> MenuConfig::ShowLineToEnemy;
+                if (key == "ShowWeaponESP") iss >> MenuConfig::ShowWeaponESP;
+                if (key == "ShowDistance") iss >> MenuConfig::ShowDistance;
+                if (key == "ShowEyeRay") iss >> MenuConfig::ShowEyeRay;
+                if (key == "ShowPlayerName") iss >> MenuConfig::ShowPlayerName;
+                if (key == "HealthBarType") iss >> MenuConfig::HealthBarType;
+                if (key == "BoneColor") iss >> MenuConfig::BoneColor.Value.x >> MenuConfig::BoneColor.Value.y >> MenuConfig::BoneColor.Value.z >> MenuConfig::BoneColor.Value.w;
+                if (key == "LineToEnemyColor") iss >> MenuConfig::LineToEnemyColor.Value.x >> MenuConfig::LineToEnemyColor.Value.y >> MenuConfig::LineToEnemyColor.Value.z >> MenuConfig::LineToEnemyColor.Value.w;
+                if (key == "BoxColor") iss >> MenuConfig::BoxColor.Value.x >> MenuConfig::BoxColor.Value.y >> MenuConfig::BoxColor.Value.z >> MenuConfig::BoxColor.Value.w;
+                if (key == "EyeRayColor") iss >> MenuConfig::EyeRayColor.Value.x >> MenuConfig::EyeRayColor.Value.y >> MenuConfig::EyeRayColor.Value.z >> MenuConfig::EyeRayColor.Value.w;
+                if (key == "ShowMenu") iss >> MenuConfig::ShowMenu;
+                if (key == "BoxType") iss >> MenuConfig::BoxType;
+                if (key == "TeamCheck") iss >> MenuConfig::TeamCheck;
+                if (key == "Frames") iss >> MenuConfig::MaxFrameRate;
+                if (key == "BoxThickness") iss >> MenuConfig::BoxThickness;
+                if (key == "BoxRounding") iss >> MenuConfig::BoxRounding;
+                if (key == "BoxFilled") iss >> MenuConfig::BoxFilled;
+                if (key == "BoxFillAlpha") iss >> MenuConfig::BoxFillAlpha;
+                if (key == "CornerLength") iss >> MenuConfig::CornerLength;
+                if (key == "BoneThickness") iss >> MenuConfig::BoneThickness;
+                if (key == "ShowHeadDot") iss >> MenuConfig::ShowHeadDot;
+                if (key == "HeadDotColor") iss >> MenuConfig::HeadDotColor.Value.x >> MenuConfig::HeadDotColor.Value.y >> MenuConfig::HeadDotColor.Value.z >> MenuConfig::HeadDotColor.Value.w;
+                if (key == "HeadDotSize") iss >> MenuConfig::HeadDotSize;
+                if (key == "ShowArmorBar") iss >> MenuConfig::ShowArmorBar;
+                if (key == "ArmorBarType") iss >> MenuConfig::ArmorBarType;
+                if (key == "ArmorBarColor") iss >> MenuConfig::ArmorBarColor.Value.x >> MenuConfig::ArmorBarColor.Value.y >> MenuConfig::ArmorBarColor.Value.z >> MenuConfig::ArmorBarColor.Value.w;
+                if (key == "ArmorBarWidth") iss >> MenuConfig::ArmorBarWidth;
+                if (key == "HealthBarWidth") iss >> MenuConfig::HealthBarWidth;
+                if (key == "EyeRayLength") iss >> MenuConfig::EyeRayLength;
+                if (key == "EyeRayThickness") iss >> MenuConfig::EyeRayThickness;
+                if (key == "LineToEnemyThickness") iss >> MenuConfig::LineToEnemyThickness;
+                if (key == "LineToEnemyOrigin") iss >> MenuConfig::LineToEnemyOrigin;
+                if (key == "NameColor") iss >> MenuConfig::NameColor.Value.x >> MenuConfig::NameColor.Value.y >> MenuConfig::NameColor.Value.z >> MenuConfig::NameColor.Value.w;
+                if (key == "NameFontSize") iss >> MenuConfig::NameFontSize;
+                if (key == "WeaponColor") iss >> MenuConfig::WeaponColor.Value.x >> MenuConfig::WeaponColor.Value.y >> MenuConfig::WeaponColor.Value.z >> MenuConfig::WeaponColor.Value.w;
+                if (key == "WeaponFontSize") iss >> MenuConfig::WeaponFontSize;
+                if (key == "DistanceColor") iss >> MenuConfig::DistanceColor.Value.x >> MenuConfig::DistanceColor.Value.y >> MenuConfig::DistanceColor.Value.z >> MenuConfig::DistanceColor.Value.w;
+                if (key == "DistanceFontSize") iss >> MenuConfig::DistanceFontSize;
+                if (key == "SafeZoneEnabled") iss >> MenuConfig::SafeZoneEnabled;
+                if (key == "SafeZoneRadius") iss >> MenuConfig::SafeZoneRadius;
+                if (key == "SafeZoneShape") iss >> MenuConfig::SafeZoneShape;
+                if (key == "SafeZoneMode") iss >> MenuConfig::SafeZoneMode;
+                if (key == "SafeZoneSkipBox") iss >> MenuConfig::SafeZoneSkipBox;
+                if (key == "SafeZoneSkipBone") iss >> MenuConfig::SafeZoneSkipBone;
+                if (key == "SafeZoneSkipHealthBar") iss >> MenuConfig::SafeZoneSkipHealthBar;
+                if (key == "SafeZoneSkipArmorBar") iss >> MenuConfig::SafeZoneSkipArmorBar;
+                if (key == "SafeZoneSkipWeapon") iss >> MenuConfig::SafeZoneSkipWeapon;
+                if (key == "SafeZoneSkipName") iss >> MenuConfig::SafeZoneSkipName;
+                if (key == "SafeZoneSkipSnapline") iss >> MenuConfig::SafeZoneSkipSnapline;
+                if (key == "SafeZoneSkipEyeRay") iss >> MenuConfig::SafeZoneSkipEyeRay;
+                if (key == "SafeZoneSkipHeadDot") iss >> MenuConfig::SafeZoneSkipHeadDot;
+                if (key == "SafeZoneSkipDistance") iss >> MenuConfig::SafeZoneSkipDistance;
+                if (key == "CrosshairEnabled") iss >> MenuConfig::CrosshairEnabled;
+                if (key == "CrosshairSize") iss >> MenuConfig::CrosshairSize;
+                if (key == "CrosshairThickness") iss >> MenuConfig::CrosshairThickness;
+                if (key == "CrosshairGap") iss >> MenuConfig::CrosshairGap;
+                if (key == "CrosshairStyle") iss >> MenuConfig::CrosshairStyle;
+                if (key == "CrosshairColor") iss >> MenuConfig::CrosshairColor.Value.x >> MenuConfig::CrosshairColor.Value.y >> MenuConfig::CrosshairColor.Value.z >> MenuConfig::CrosshairColor.Value.w;
+                if (key == "CrosshairOnEnemyColor") iss >> MenuConfig::CrosshairOnEnemyColor;
+                if (key == "CrosshairEnemyColor") iss >> MenuConfig::CrosshairEnemyColor.Value.x >> MenuConfig::CrosshairEnemyColor.Value.y >> MenuConfig::CrosshairEnemyColor.Value.z >> MenuConfig::CrosshairEnemyColor.Value.w;
+                if (key == "VSync") iss >> MenuConfig::VSync;
+                if (key == "RenderWidth") iss >> MenuConfig::RenderWidth;
+                if (key == "RenderHeight") iss >> MenuConfig::RenderHeight;
+                if (key == "MonitorIndex") iss >> MenuConfig::MonitorIndex;
+                if (key == "DebugLog") iss >> MenuConfig::DebugLog;
+                if (key == "SelectedLanguage") iss >> MenuConfig::SelectedLanguage;
+                if (key == "ShowWebRadar") iss >> MenuConfig::ShowWebRadar;
+                if (key == "WebRadarPort") iss >> MenuConfig::WebRadarPort;
+                if (key == "WebRadarInterval") iss >> MenuConfig::WebRadarInterval;
+                if (key == "WebRadarPasswordEnabled") iss >> MenuConfig::WebRadarPasswordEnabled;
+                if (key == "WebRadarPassword") iss >> MenuConfig::WebRadarPassword;
+                if (key == "WebRadarOriginAllowlist") iss >> MenuConfig::WebRadarOriginAllowlist;
+                if (key == "WebRadarCloudflareTunnel") iss >> MenuConfig::WebRadarCloudflareTunnel;
+                if (key == "ShowBombESP") iss >> MenuConfig::ShowBombESP;
+                if (key == "BombPlantedColor") iss >> MenuConfig::BombPlantedColor.Value.x >> MenuConfig::BombPlantedColor.Value.y >> MenuConfig::BombPlantedColor.Value.z >> MenuConfig::BombPlantedColor.Value.w;
+                if (key == "BombCarrierColor") iss >> MenuConfig::BombCarrierColor.Value.x >> MenuConfig::BombCarrierColor.Value.y >> MenuConfig::BombCarrierColor.Value.z >> MenuConfig::BombCarrierColor.Value.w;
+                if (key == "BombDroppedColor") iss >> MenuConfig::BombDroppedColor.Value.x >> MenuConfig::BombDroppedColor.Value.y >> MenuConfig::BombDroppedColor.Value.z >> MenuConfig::BombDroppedColor.Value.w;
+                if (key == "BombDefusingColor") iss >> MenuConfig::BombDefusingColor.Value.x >> MenuConfig::BombDefusingColor.Value.y >> MenuConfig::BombDefusingColor.Value.z >> MenuConfig::BombDefusingColor.Value.w;
+                if (key == "ShowSpectatorList") iss >> MenuConfig::ShowSpectatorList;
+                if (key == "ShowPerfMonitor") iss >> MenuConfig::ShowPerfMonitor;
+                if (key == "ShowEspPreview") iss >> MenuConfig::ShowEspPreview;
+                if (key == "ShowDebugStats") iss >> MenuConfig::ShowDebugStats;
+                if (key == "WebRadarAutoReload") iss >> MenuConfig::WebRadarAutoReload;
+                if (key == "ShowProjectileESP") iss >> MenuConfig::ShowProjectileESP;
+                if (key == "ShowProjectileRange") iss >> MenuConfig::ShowProjectileRange;
+                if (key == "ProjectileRangeAlpha") iss >> MenuConfig::ProjectileRangeAlpha;
+                if (key == "MenuHotKey") {
                     iss >> MenuConfig::MenuHotKey;
                     strcpy_s(MenuConfig::MenuHotKeyName, GrenadeHelper::GetKeyName(MenuConfig::MenuHotKey));
                 }
@@ -287,68 +289,64 @@ namespace MyConfigSaver {
                 // Note: using independent if (not else-if) to avoid MSVC C1061
                 // (block nesting limit) from an overly long else-if chain.
                 // Safe because each key is unique.
-                // Task 7: Offscreen Arrows
-                if (key == "ShowOffscreenArrows") iss >> MenuConfig::ShowOffscreenArrows;
-                else if (key == "OffscreenArrowColor") iss >> MenuConfig::OffscreenArrowColor.Value.x >> MenuConfig::OffscreenArrowColor.Value.y >> MenuConfig::OffscreenArrowColor.Value.z >> MenuConfig::OffscreenArrowColor.Value.w;
-                else if (key == "OffscreenArrowSize") iss >> MenuConfig::OffscreenArrowSize;
                 // Task 8: Player Flags
-                else if (key == "ShowPlayerFlags") iss >> MenuConfig::ShowPlayerFlags;
-                else if (key == "FlagBlindEnabled") iss >> MenuConfig::FlagBlindEnabled;
-                else if (key == "FlagBlindColor") iss >> MenuConfig::FlagBlindColor.Value.x >> MenuConfig::FlagBlindColor.Value.y >> MenuConfig::FlagBlindColor.Value.z >> MenuConfig::FlagBlindColor.Value.w;
-                else if (key == "FlagScopedEnabled") iss >> MenuConfig::FlagScopedEnabled;
-                else if (key == "FlagScopedColor") iss >> MenuConfig::FlagScopedColor.Value.x >> MenuConfig::FlagScopedColor.Value.y >> MenuConfig::FlagScopedColor.Value.z >> MenuConfig::FlagScopedColor.Value.w;
-                else if (key == "FlagDefusingEnabled") iss >> MenuConfig::FlagDefusingEnabled;
-                else if (key == "FlagDefusingColor") iss >> MenuConfig::FlagDefusingColor.Value.x >> MenuConfig::FlagDefusingColor.Value.y >> MenuConfig::FlagDefusingColor.Value.z >> MenuConfig::FlagDefusingColor.Value.w;
-                else if (key == "FlagKitEnabled") iss >> MenuConfig::FlagKitEnabled;
-                else if (key == "FlagKitColor") iss >> MenuConfig::FlagKitColor.Value.x >> MenuConfig::FlagKitColor.Value.y >> MenuConfig::FlagKitColor.Value.z >> MenuConfig::FlagKitColor.Value.w;
-                else if (key == "FlagMoneyEnabled") iss >> MenuConfig::FlagMoneyEnabled;
-                else if (key == "FlagMoneyColor") iss >> MenuConfig::FlagMoneyColor.Value.x >> MenuConfig::FlagMoneyColor.Value.y >> MenuConfig::FlagMoneyColor.Value.z >> MenuConfig::FlagMoneyColor.Value.w;
-                else if (key == "FlagFontSize") iss >> MenuConfig::FlagFontSize;
+                if (key == "ShowPlayerFlags") iss >> MenuConfig::ShowPlayerFlags;
+                if (key == "FlagBlindEnabled") iss >> MenuConfig::FlagBlindEnabled;
+                if (key == "FlagBlindColor") iss >> MenuConfig::FlagBlindColor.Value.x >> MenuConfig::FlagBlindColor.Value.y >> MenuConfig::FlagBlindColor.Value.z >> MenuConfig::FlagBlindColor.Value.w;
+                if (key == "FlagScopedEnabled") iss >> MenuConfig::FlagScopedEnabled;
+                if (key == "FlagScopedColor") iss >> MenuConfig::FlagScopedColor.Value.x >> MenuConfig::FlagScopedColor.Value.y >> MenuConfig::FlagScopedColor.Value.z >> MenuConfig::FlagScopedColor.Value.w;
+                if (key == "FlagDefusingEnabled") iss >> MenuConfig::FlagDefusingEnabled;
+                if (key == "FlagDefusingColor") iss >> MenuConfig::FlagDefusingColor.Value.x >> MenuConfig::FlagDefusingColor.Value.y >> MenuConfig::FlagDefusingColor.Value.z >> MenuConfig::FlagDefusingColor.Value.w;
+                if (key == "FlagKitEnabled") iss >> MenuConfig::FlagKitEnabled;
+                if (key == "FlagKitColor") iss >> MenuConfig::FlagKitColor.Value.x >> MenuConfig::FlagKitColor.Value.y >> MenuConfig::FlagKitColor.Value.z >> MenuConfig::FlagKitColor.Value.w;
+                if (key == "FlagMoneyEnabled") iss >> MenuConfig::FlagMoneyEnabled;
+                if (key == "FlagMoneyColor") iss >> MenuConfig::FlagMoneyColor.Value.x >> MenuConfig::FlagMoneyColor.Value.y >> MenuConfig::FlagMoneyColor.Value.z >> MenuConfig::FlagMoneyColor.Value.w;
+                if (key == "FlagFontSize") iss >> MenuConfig::FlagFontSize;
                 // Task 9: Visibility Coloring
-                else if (key == "VisibilityColoring") iss >> MenuConfig::VisibilityColoring;
-                else if (key == "VisibleColor") iss >> MenuConfig::VisibleColor.Value.x >> MenuConfig::VisibleColor.Value.y >> MenuConfig::VisibleColor.Value.z >> MenuConfig::VisibleColor.Value.w;
-                else if (key == "HiddenColor") iss >> MenuConfig::HiddenColor.Value.x >> MenuConfig::HiddenColor.Value.y >> MenuConfig::HiddenColor.Value.z >> MenuConfig::HiddenColor.Value.w;
+                if (key == "VisibilityColoring") iss >> MenuConfig::VisibilityColoring;
+                if (key == "VisibleColor") iss >> MenuConfig::VisibleColor.Value.x >> MenuConfig::VisibleColor.Value.y >> MenuConfig::VisibleColor.Value.z >> MenuConfig::VisibleColor.Value.w;
+                if (key == "HiddenColor") iss >> MenuConfig::HiddenColor.Value.x >> MenuConfig::HiddenColor.Value.y >> MenuConfig::HiddenColor.Value.z >> MenuConfig::HiddenColor.Value.w;
                 // Task 10: Sound ESP
-                else if (key == "ShowSoundESP") iss >> MenuConfig::ShowSoundESP;
-                else if (key == "SoundESPColor") iss >> MenuConfig::SoundESPColor.Value.x >> MenuConfig::SoundESPColor.Value.y >> MenuConfig::SoundESPColor.Value.z >> MenuConfig::SoundESPColor.Value.w;
+                if (key == "ShowSoundESP") iss >> MenuConfig::ShowSoundESP;
+                if (key == "SoundESPColor") iss >> MenuConfig::SoundESPColor.Value.x >> MenuConfig::SoundESPColor.Value.y >> MenuConfig::SoundESPColor.Value.z >> MenuConfig::SoundESPColor.Value.w;
                 // Task 11: C4 Bomb Timer
-                else if (key == "ShowBombTimer") iss >> MenuConfig::ShowBombTimer;
-                else if (key == "BombTimerX") iss >> MenuConfig::BombTimerX;
-                else if (key == "BombTimerY") iss >> MenuConfig::BombTimerY;
+                if (key == "ShowBombTimer") iss >> MenuConfig::ShowBombTimer;
+                if (key == "BombTimerX") iss >> MenuConfig::BombTimerX;
+                if (key == "BombTimerY") iss >> MenuConfig::BombTimerY;
                 // Task 12: World ESP
-                else if (key == "ShowWorldESP") iss >> MenuConfig::ShowWorldESP;
-                else if (key == "ShowWorldProjectileTimers") iss >> MenuConfig::ShowWorldProjectileTimers;
-                else if (key == "ShowWorldSmokeTimer") iss >> MenuConfig::ShowWorldSmokeTimer;
-                else if (key == "ShowWorldInfernoTimer") iss >> MenuConfig::ShowWorldInfernoTimer;
-                else if (key == "ShowWorldDecoyTimer") iss >> MenuConfig::ShowWorldDecoyTimer;
-                else if (key == "WorldESPColor") iss >> MenuConfig::WorldESPColor.Value.x >> MenuConfig::WorldESPColor.Value.y >> MenuConfig::WorldESPColor.Value.z >> MenuConfig::WorldESPColor.Value.w;
+                if (key == "ShowWorldESP") iss >> MenuConfig::ShowWorldESP;
+                if (key == "ShowWorldProjectileTimers") iss >> MenuConfig::ShowWorldProjectileTimers;
+                if (key == "ShowWorldSmokeTimer") iss >> MenuConfig::ShowWorldSmokeTimer;
+                if (key == "ShowWorldInfernoTimer") iss >> MenuConfig::ShowWorldInfernoTimer;
+                if (key == "ShowWorldDecoyTimer") iss >> MenuConfig::ShowWorldDecoyTimer;
+                if (key == "WorldESPColor") iss >> MenuConfig::WorldESPColor.Value.x >> MenuConfig::WorldESPColor.Value.y >> MenuConfig::WorldESPColor.Value.z >> MenuConfig::WorldESPColor.Value.w;
                 // Task 13: Weapon Ammo
-                else if (key == "ShowWeaponAmmo") iss >> MenuConfig::ShowWeaponAmmo;
-                else if (key == "WeaponAmmoFontSize") iss >> MenuConfig::WeaponAmmoFontSize;
-                else if (key == "WeaponAmmoColor") iss >> MenuConfig::WeaponAmmoColor.Value.x >> MenuConfig::WeaponAmmoColor.Value.y >> MenuConfig::WeaponAmmoColor.Value.z >> MenuConfig::WeaponAmmoColor.Value.w;
-                else if (key == "WeaponLowAmmoColor") iss >> MenuConfig::WeaponLowAmmoColor.Value.x >> MenuConfig::WeaponLowAmmoColor.Value.y >> MenuConfig::WeaponLowAmmoColor.Value.z >> MenuConfig::WeaponLowAmmoColor.Value.w;
+                if (key == "ShowWeaponAmmo") iss >> MenuConfig::ShowWeaponAmmo;
+                if (key == "WeaponAmmoFontSize") iss >> MenuConfig::WeaponAmmoFontSize;
+                if (key == "WeaponAmmoColor") iss >> MenuConfig::WeaponAmmoColor.Value.x >> MenuConfig::WeaponAmmoColor.Value.y >> MenuConfig::WeaponAmmoColor.Value.z >> MenuConfig::WeaponAmmoColor.Value.w;
+                if (key == "WeaponLowAmmoColor") iss >> MenuConfig::WeaponLowAmmoColor.Value.x >> MenuConfig::WeaponLowAmmoColor.Value.y >> MenuConfig::WeaponLowAmmoColor.Value.z >> MenuConfig::WeaponLowAmmoColor.Value.w;
                 // Task 13: Weapon Icon
-                else if (key == "ShowWeaponIcon") iss >> MenuConfig::ShowWeaponIcon;
-                else if (key == "WeaponIconFontSize") iss >> MenuConfig::WeaponIconFontSize;
-                else if (key == "WeaponIconColor") iss >> MenuConfig::WeaponIconColor.Value.x >> MenuConfig::WeaponIconColor.Value.y >> MenuConfig::WeaponIconColor.Value.z >> MenuConfig::WeaponIconColor.Value.w;
-                else if (key == "WeaponIconNoKnife") iss >> MenuConfig::WeaponIconNoKnife;
+                if (key == "ShowWeaponIcon") iss >> MenuConfig::ShowWeaponIcon;
+                if (key == "WeaponIconFontSize") iss >> MenuConfig::WeaponIconFontSize;
+                if (key == "WeaponIconColor") iss >> MenuConfig::WeaponIconColor.Value.x >> MenuConfig::WeaponIconColor.Value.y >> MenuConfig::WeaponIconColor.Value.z >> MenuConfig::WeaponIconColor.Value.w;
+                if (key == "WeaponIconNoKnife") iss >> MenuConfig::WeaponIconNoKnife;
                 // Task 12/16: Dropped-weapon world ESP
-                else if (key == "ShowWorldItems") iss >> MenuConfig::ShowWorldItems;
-                else if (key == "WorldItemFontSize") iss >> MenuConfig::WorldItemFontSize;
+                if (key == "ShowWorldItems") iss >> MenuConfig::ShowWorldItems;
+                if (key == "WorldItemFontSize") iss >> MenuConfig::WorldItemFontSize;
                 // Task 16: EspItemEnabledMask — 0/1 string of 1200 chars.
-                else if (key == "EspItemMask") {
+                if (key == "EspItemMask") {
                     std::string maskStr;
                     iss >> maskStr;
                     for (size_t i = 0; i < MenuConfig::EspItemEnabledMask.size() && i < maskStr.size(); i++)
                         MenuConfig::EspItemEnabledMask.set(i, maskStr[i] == '1');
                 }
                 // Task 14: Bar Value Labels
-                else if (key == "ShowHealthText") iss >> MenuConfig::ShowHealthText;
-                else if (key == "ShowArmorText") iss >> MenuConfig::ShowArmorText;
-                else if (key == "BarLabelFontSize") iss >> MenuConfig::BarLabelFontSize;
+                if (key == "ShowHealthText") iss >> MenuConfig::ShowHealthText;
+                if (key == "ShowArmorText") iss >> MenuConfig::ShowArmorText;
+                if (key == "BarLabelFontSize") iss >> MenuConfig::BarLabelFontSize;
                 // Stage 2: Render Quality
-                else if (key == "InterpolationEnabled") iss >> MenuConfig::InterpolationEnabled;
-                else if (key == "BoneReliabilityEnabled") iss >> MenuConfig::BoneReliabilityEnabled;
+                if (key == "InterpolationEnabled") iss >> MenuConfig::InterpolationEnabled;
+                if (key == "BoneReliabilityEnabled") iss >> MenuConfig::BoneReliabilityEnabled;
                 else if (key.substr(0, 7) == "Hotkey_" && key.size() > 7) {
                     int idx = std::atoi(key.substr(7).c_str());
                     if (idx >= 0 && idx < MenuConfig::HOTKEY_COUNT) {
