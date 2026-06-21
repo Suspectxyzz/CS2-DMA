@@ -195,8 +195,13 @@ bool FindEmbeddedAsset(const std::string& urlPath, EmbeddedAsset* out) {
 	if (!out || urlPath.empty())
 		return false;
 
+	// rc.exe uppercases all string resource names at compile time, so the
+	// lookup key must be uppercased to match (FindResourceA is case-sensitive).
+	std::string upperPath = urlPath;
+	for (auto& c : upperPath) c = (char)toupper((unsigned char)c);
+
 	const HMODULE hModule = GetModuleHandleA(nullptr);
-	const HRSRC hRes = FindResourceA(hModule, urlPath.c_str(), MAKEINTRESOURCEA(10)); // RT_RCDATA
+	const HRSRC hRes = FindResourceA(hModule, upperPath.c_str(), MAKEINTRESOURCEA(10)); // RT_RCDATA
 	if (!hRes)
 		return false;
 
@@ -222,6 +227,9 @@ static bool ServeStaticFile(SOCKET clientSock, const std::string& httpPath) {
 
 	// Normalize: map "/" and "" to "/index.html" for both embedded + filesystem lookup.
 	std::string servePath = (httpPath == "/" || httpPath.empty()) ? "/index.html" : httpPath;
+
+	// Browsers auto-request /favicon.ico; the actual asset lives at /img/favicon.ico.
+	if (servePath == "/favicon.ico") servePath = "/img/favicon.ico";
 
 	// 1. Try embedded resource first (single-file deployment).
 	webradar::EmbeddedAsset asset{};
