@@ -11,7 +11,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-## 项目可制成卡密激活形式、可定制功能，诚招代理，批量提卡
+## 项目可制成卡密激活形式、功能更多、更稳定完善。大批量可定制功能，诚招代理，批量提卡
 
 > ⭐ 如果你喜欢本项目，请为仓库点亮Star，支持作者持续更新！
 > 如果你想要联系我,你可以通过qq:3594296990或者邮箱:<kuchao1012@outlook.com>(不常看)
