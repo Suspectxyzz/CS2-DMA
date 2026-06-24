@@ -62,6 +62,11 @@ body > div {
 	pointer-events: none;
 }
 
+/* +90 旋转按钮：放在 settings-toggle 正下方，避免与 conn-status 重叠 */
+.rotate90-toggle {
+	top: 52px;
+}
+
 /* popover 面板 */
 .settings-panel {
 	position: fixed;

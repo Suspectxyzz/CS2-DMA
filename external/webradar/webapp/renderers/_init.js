@@ -16,7 +16,6 @@ const defaultConfig = {
 	},
 	radar: {
 		hideAdvisories: false,
-		showTeamPanel: true,
 		highestPlayerOnTop: true,
 		showBuyzones: "buytime",
 		showBlastRadius: "active",
@@ -35,7 +34,11 @@ const defaultConfig = {
 		bombDotScale: 0.7,
 		showWeapon: "off",
 		showHealth: false,
-		followRotation: false
+		followRotation: false,
+		rotate90: false,
+		showTeammatePanel: true,
+		showEnemyPanel: true,
+		enemyPanelSide: "right"
 	},
 	vertIndicator: {
 		type: "scale",
@@ -98,6 +101,13 @@ function loadConfig() {
 	// 兼容性：showWeapon 旧版为布尔值，转换为三态字符串
 	if (typeof config.radar.showWeapon === "boolean") {
 		config.radar.showWeapon = config.radar.showWeapon ? "name" : "off"
+	}
+
+	// 向后兼容：旧 showTeamPanel 迁移
+	if (config.radar && config.radar.showTeamPanel !== undefined && config.radar.showTeammatePanel === undefined) {
+		config.radar.showTeammatePanel = config.radar.showTeamPanel
+		config.radar.showEnemyPanel = config.radar.showTeamPanel
+		delete config.radar.showTeamPanel
 	}
 
 	return config

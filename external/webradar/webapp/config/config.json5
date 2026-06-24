@@ -63,8 +63,14 @@
 		"showHealth": false,
 		// 雷达图根据本地玩家朝向旋转，使本地玩家始终朝上
 		"followRotation": false,
-		// 显示队伍面板（左右两侧的玩家卡片）
-		"showTeamPanel": true
+		// 雷达图顺时针旋转 90 度
+		"rotate90": false,
+		// 显示队友面板
+		"showTeammatePanel": true,
+		// 显示敌人面板
+		"showEnemyPanel": true,
+		// 敌人面板位置："left" 或 "right"
+		"enemyPanelSide": "right"
 	},
 
 	// Show a vertical indicator on every player dot, indicating how high the player is on the map

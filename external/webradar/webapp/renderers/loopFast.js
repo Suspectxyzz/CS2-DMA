@@ -34,6 +34,13 @@ function step() {
 		// Scale that can be changed by the vertical indicator
 		let scale = global.config.radar.playerDotScale
 
+		// 死亡玩家：跳过缓冲区更新，保持锁定位置，防止 X 标记漂移
+		if (global.playerPos[num] && global.playerPos[num].alive === false) {
+			// dead 玩家的 dot 朝向设为0，位置保持死亡时最后值
+			global.playerDots[num].style.transform = `rotate(0deg) scale(${scale}) translate(-50%, 50%)`
+			continue
+		}
+
 		// If a new player position is available
 		if (global.playerPos[num].x != null) {
 			// We want to check if the angle value has looped around, so we need a previous value

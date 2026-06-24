@@ -3,6 +3,8 @@
 // Sets player dot style and pushed to player location buffer, but does not set
 // the location.
 
+let healthDebounce = {}
+
 socket.element.addEventListener("players", event => {
 	let data = event.data
 
@@ -36,15 +38,22 @@ socket.element.addEventListener("players", event => {
 			classes.push("enemy")
 		}
 
-		// Mark dead players with a cross
+		// Mark dead players with a cross (防抖：连续2帧 health<=0 才标记死亡)
 		if (player.health <= 0) {
-			classes.push("dead")
-		}
-		else {
+			healthDebounce[player.num] = (healthDebounce[player.num] || 0) + 1
+			if (healthDebounce[player.num] >= 2) {
+				classes.push("dead")
+				// 死亡时清空位置缓冲区并锁定位置，防止 X 标记漂移
+				global.playerBuffers[player.num] = []
+				global.playerPos[player.num].alive = false
+			}
+		} else {
+			healthDebounce[player.num] = 0
+			global.playerPos[player.num].alive = true
 			// Make the bomb carrier orange and and a line around the spectated player
 			if (player.bomb) classes.push("bomb")
 			if (player.active) classes.push("active")
-			if (player.flashed > 0.5) classes.push("flashed")
+			if (global.config.radar.flashes && player.flashed > 0.5) classes.push("flashed")
 
 			// If drawing muzzle flashes is enabled
 			if (global.config.radar.shooting) {

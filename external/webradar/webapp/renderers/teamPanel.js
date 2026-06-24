@@ -326,16 +326,54 @@ socket.element.addEventListener("players", event => {
 
 	renderTeam(teamPanelT, "t", tPlayers, "No terrorists")
 	renderTeam(teamPanelCT, "ct", ctPlayers, "No counter-terrorists")
+
+	// 本地玩家队伍确定后立即更新面板可见性与位置
+	updatePanelVisibility()
 })
 
-// Handle showTeamPanel config toggle
+// Handle panel visibility: separate teammate/enemy panels based on local player team
 function updatePanelVisibility() {
-	let show = true
-	if (global.config && global.config.radar && global.config.radar.showTeamPanel !== undefined) {
-		show = global.config.radar.showTeamPanel
+	let showTeammate = true
+	let showEnemy = true
+	let enemySide = "right"
+	if (global.config && global.config.radar) {
+		showTeammate = global.config.radar.showTeammatePanel !== false
+		showEnemy = global.config.radar.showEnemyPanel !== false
+		enemySide = global.config.radar.enemyPanelSide || "right"
 	}
-	teamPanelT.style.display = show ? "" : "none"
-	teamPanelCT.style.display = show ? "" : "none"
+
+	// 根据本地玩家队伍判断哪个面板是队友、哪个是敌人
+	let localTeam = ""
+	if (global.localPlayerNum != null && global.playerDots[global.localPlayerNum]) {
+		let cls = global.playerDots[global.localPlayerNum].className
+		if (cls.includes("CT")) localTeam = "CT"
+		else if (cls.includes("T")) localTeam = "T"
+	}
+
+	// 默认：T 面板在左，CT 面板在右
+	// 如果本地玩家是 CT，则 CT 面板是队友面板，T 面板是敌人面板
+	// 如果本地玩家是 T，则 T 面板是队友面板，CT 面板是敌人面板
+	let teammatePanel, enemyPanel
+	if (localTeam === "CT") {
+		teammatePanel = teamPanelCT
+		enemyPanel = teamPanelT
+	} else {
+		teammatePanel = teamPanelT
+		enemyPanel = teamPanelCT
+	}
+
+	// 队友面板显示在敌人面板的对面
+	let teammateSide = (enemySide === "left") ? "right" : "left"
+
+	// 设置队友面板
+	teammatePanel.style.display = showTeammate ? "" : "none"
+	teammatePanel.classList.remove("team-panel-left", "team-panel-right")
+	teammatePanel.classList.add("team-panel-" + teammateSide)
+
+	// 设置敌人面板
+	enemyPanel.style.display = showEnemy ? "" : "none"
+	enemyPanel.classList.remove("team-panel-left", "team-panel-right")
+	enemyPanel.classList.add("team-panel-" + enemySide)
 }
 
 document.addEventListener("configchange", updatePanelVisibility)

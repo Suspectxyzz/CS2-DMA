@@ -109,7 +109,7 @@ div.dot.color5 { background: #ffffff; }
 
 /* 敌方玩家外部红圈，不覆盖内部填充色 */
 div.dot.enemy {
-	box-shadow: 0 0 0 .8vmin rgba(255, 50, 50, 0.95), 0 0 1.6vmin .8vmin rgba(0, 0, 0, .2);
+	box-shadow: 0 0 0 1.2vmin rgba(255, 50, 50, 0.95), 0 0 1.6vmin .8vmin rgba(0, 0, 0, .2);
 }
 
 div.dot.bomb {
@@ -143,16 +143,30 @@ div.dot.shooting::after {
 }
 
 div.dot.flashed {
-	box-shadow: 0 0 1.6vmin .8vmin rgba(0, 0, 0, .2), inset 0 0 2vmin 1vmin rgba(255, 255, 255, .8);
+	background: #ffffff !important;
+	box-shadow: 0 0 1.6vmin .8vmin rgba(255, 255, 255, .4), inset 0 0 2vmin 1vmin rgba(255, 255, 255, .9);
 }
 
 div.dot.flashed.active {
-	box-shadow: 0 0 0 .2vmin rgba(0, 0, 0, .9), 0 0 0 1vmin rgba(255, 255, 255, .9), 0 0 2.4vmin 1.2vmin rgba(255, 255, 255, .2), inset 0 0 2vmin 1vmin rgba(255, 255, 255, .8);
+	background: #ffffff !important;
+	box-shadow: 0 0 0 .2vmin rgba(0, 0, 0, .9), 0 0 0 1vmin rgba(255, 255, 255, .9), 0 0 2.4vmin 1.2vmin rgba(255, 255, 255, .2), inset 0 0 2vmin 1vmin rgba(255, 255, 255, .9);
 }
 
 /* 被观察的敌方玩家同时显示红色边缘和白色观察框 */
 div.dot.enemy.active {
-	box-shadow: 0 0 0 .8vmin rgba(255, 50, 50, 0.95), 0 0 0 .2vmin rgba(0, 0, 0, .9), 0 0 0 1vmin rgba(255, 255, 255, .9), 0 0 2.4vmin 1.2vmin rgba(255, 255, 255, .2);
+	box-shadow: 0 0 0 1.2vmin rgba(255, 50, 50, 0.95), 0 0 0 .2vmin rgba(0, 0, 0, .9), 0 0 0 1vmin rgba(255, 255, 255, .9), 0 0 2.4vmin 1.2vmin rgba(255, 255, 255, .2);
+}
+
+/* 敌方被闪：白底+红环 */
+div.dot.enemy.flashed {
+	background: #ffffff !important;
+	box-shadow: 0 0 0 1.2vmin rgba(255, 50, 50, 0.95), 0 0 1.6vmin .8vmin rgba(255, 255, 255, .4), inset 0 0 2vmin 1vmin rgba(255, 255, 255, .9);
+}
+
+/* 敌方被闪且被观察：白底+红环+观察框 */
+div.dot.enemy.flashed.active {
+	background: #ffffff !important;
+	box-shadow: 0 0 0 1.2vmin rgba(255, 50, 50, 0.95), 0 0 0 .2vmin rgba(0, 0, 0, .9), 0 0 0 1vmin rgba(255, 255, 255, .9), 0 0 2.4vmin 1.2vmin rgba(255, 255, 255, .2), inset 0 0 2vmin 1vmin rgba(255, 255, 255, .9);
 }
 
 /* 选中观察的玩家高亮 */

@@ -15,6 +15,11 @@
 		<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
 	</svg>
 </button>
+<button id="rotate90-toggle" class="settings-toggle rotate90-toggle" title="旋转90度" data-i18n-title="rotate90_title" aria-label="旋转90度">
+	<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+		<path d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+	</svg>
+</button>
 <div id="conn-status" class="conn-status conn-status--connecting">...</div>
 
 	<div id="settings-panel" class="settings-panel" hidden>
@@ -35,8 +40,19 @@
 			<div class="settings-group" data-group="display">
 				<h3 data-i18n="group_display">显示</h3>
 				<div class="settings-row">
-				<label for="cfg-showTeamPanel" data-i18n="showTeamPanel">显示队伍面板</label>
-				<input type="checkbox" id="cfg-showTeamPanel" data-config="radar.showTeamPanel" checked>
+				<label for="cfg-showTeammatePanel" data-i18n="showTeammatePanel">显示队友面板</label>
+				<input type="checkbox" id="cfg-showTeammatePanel" data-config="radar.showTeammatePanel" checked>
+			</div>
+			<div class="settings-row">
+				<label for="cfg-showEnemyPanel" data-i18n="showEnemyPanel">显示敌人面板</label>
+				<input type="checkbox" id="cfg-showEnemyPanel" data-config="radar.showEnemyPanel" checked>
+			</div>
+			<div class="settings-row">
+				<label for="cfg-enemyPanelSide" data-i18n="enemyPanelSide">敌人面板位置</label>
+				<select id="cfg-enemyPanelSide" data-config="radar.enemyPanelSide">
+					<option value="left" data-i18n="opt_left">左侧</option>
+					<option value="right" data-i18n="opt_right">右侧</option>
+				</select>
 			</div>
 			<div class="settings-row">
 				<label for="cfg-followRotation" data-i18n="followRotation">地图跟随旋转</label>

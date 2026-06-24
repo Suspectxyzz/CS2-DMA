@@ -36,7 +36,7 @@ socket.element.addEventListener("smokes", event => {
 		// If the element does not exist yet, add it
 		if (!smokeElement) {
 			// Do not add a new smoke element if it has already started fading out
-			if (smoke.time > 20.1) continue
+			if (smoke.time > 21) continue
 
 			// Create a new element
 			smokeElement = document.createElement("div")

@@ -301,7 +301,8 @@ function handleBackendMessage(raw) {
       // 稳定实体 ID（后端 EntityAddr 低 32 位），避免位置变化时创建重复 DOM 元素
       var stableId = pr.m_entity_id || ("idx_" + k);
       // 后端 m_is_effect=true 表示已爆开，作为特效渲染；否则作为飞行中投掷物渲染
-      var isEffect = pr.m_is_effect === true;
+      // fallback：若后端某帧未发送 m_is_effect，只要 m_exploded=true 且类型是效果类，也当作效果处理
+      var isEffect = (pr.m_is_effect === true) || (pr.m_exploded === true && (type === "smoke" || type === "inferno" || type === "flash"));
       if (type === "smoke") {
         if (isEffect) {
           // 已爆开：推送给烟雾特效渲染器
@@ -374,22 +375,6 @@ function handleBackendMessage(raw) {
           team: mapTeam(pr.m_team),
           position: pposOut
         });
-      }
-    }
-    // [Debug] 投掷物拆分调试日志（每 2 秒打印一次）
-    if (projectiles.length > 0) {
-      if (!window._projDebugLastTime || Date.now() - window._projDebugLastTime > 2000) {
-        window._projDebugLastTime = Date.now()
-        console.log("[WebRadar Debug] split result:", {
-          total: projectiles.length,
-          smokes: smokes.length,
-          infernos: infernos.length,
-          flashbangs: flashbangs.length,
-          projs: projs.length
-        })
-        if (smokes.length > 0) console.log("[WebRadar Debug] smokes:", smokes)
-        if (infernos.length > 0) console.log("[WebRadar Debug] infernos:", infernos)
-        if (flashbangs.length > 0) console.log("[WebRadar Debug] flashbangs:", flashbangs)
       }
     }
     dispatchEvent("smokes", smokes);

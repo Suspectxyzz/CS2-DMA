@@ -26,6 +26,10 @@ const I18N = {
 
 		// 显示组
 		showTeamPanel: "显示队伍面板",
+		showTeammatePanel: "显示队友面板",
+		showEnemyPanel: "显示敌人面板",
+		enemyPanelSide: "敌人面板位置",
+		rotate90_title: "旋转90度",
 		followRotation: "地图跟随旋转",
 		playerDotScale: "玩家点大小",
 		bombDotScale: "炸弹点大小",
@@ -75,6 +79,8 @@ const I18N = {
 		opt_none: "无",
 		opt_color: "颜色",
 		opt_scale: "缩放",
+		opt_left: "左侧",
+		opt_right: "右侧",
 
 		// 观战面板
 		spectator_header: "观战列表",
@@ -115,6 +121,10 @@ const I18N = {
 		group_smoothing: "Smoothing",
 
 		showTeamPanel: "Team Panel",
+		showTeammatePanel: "Show teammate panel",
+		showEnemyPanel: "Show enemy panel",
+		enemyPanelSide: "Enemy panel position",
+		rotate90_title: "Rotate 90°",
 		followRotation: "Follow Rotation",
 		playerDotScale: "Player Dot Size",
 		bombDotScale: "Bomb Dot Size",
@@ -157,6 +167,8 @@ const I18N = {
 		opt_none: "None",
 		opt_color: "Color",
 		opt_scale: "Scale",
+		opt_left: "Left",
+		opt_right: "Right",
 
 		spectator_header: "Spectators",
 

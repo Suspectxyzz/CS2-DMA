@@ -8,7 +8,6 @@ socket.element.addEventListener("projectiles", event => {
 
 	let projectiles = event.data
 	let activeProjectiles = []
-	let type = global.config.radar.plainProjectiles ? 'hc' : 'img'
 
 	// For each projectile in the packet
 	for (let projectile of projectiles) {
@@ -34,6 +33,8 @@ socket.element.addEventListener("projectiles", event => {
 			let cssClass = (projectile.team === "CT" || projectile.team === "T") ? projectile.team : "U"
 			projectileElement.className = cssClass
 
+			// 每次创建新投掷物时读取最新配置，确保 plainProjectiles 切换后生效
+			let type = global.config.radar.plainProjectiles ? 'hc' : 'img'
 			projectileElement.style.backgroundImage = `url('/img/projectile-${type}-${projectile.type}-${imgTeam}.webp')`
 			if (projectile.type == 'frag') projectileElement.dataset.isfrag = 'true'
 

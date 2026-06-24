@@ -102,3 +102,31 @@ document.addEventListener("configchange", function(event) {
 		}
 	}
 })
+
+// +90 雷达旋转
+function updateRotate90() {
+	let container = document.getElementById("container")
+	if (!container) return
+	let rotate90 = !!(global.config && global.config.radar && global.config.radar.rotate90)
+	if (rotate90) {
+		container.style.transform = "rotate(90deg)"
+		container.style.transformOrigin = "center center"
+	} else {
+		container.style.transform = ""
+		container.style.transformOrigin = ""
+	}
+}
+
+// 按钮点击切换 +90 旋转
+document.addEventListener("DOMContentLoaded", function() {
+	let btn = document.getElementById("rotate90-toggle")
+	if (btn) {
+		btn.addEventListener("click", function() {
+			let current = !!(global.config && global.config.radar && global.config.radar.rotate90)
+			applySetting("radar.rotate90", !current)
+		})
+	}
+})
+
+// 监听配置变化更新旋转
+document.addEventListener("configchange", updateRotate90)
