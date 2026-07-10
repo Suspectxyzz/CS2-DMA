@@ -212,6 +212,11 @@ namespace MenuConfig
 	inline ImColor VisibleColor = ImColor(0, 255, 0, 255);
 	inline ImColor HiddenColor = ImColor(255, 0, 0, 255);
 
+	// ======== VPK 可见性检查（Task 5-8: 基于地图几何 BVH 射线检测）========
+	// 开启时用真实遮挡（射线检测）替代 VisibilityColoring 的距离/角度近似
+	// 关闭或当前地图无几何数据时回退到原逻辑
+	inline bool    VPKVisibilityCheck = false;
+
 	// ======== ESP gap-closure stage 3a: Sound ESP (Task 10) ========
 	inline bool    ShowSoundESP = false;
 	inline ImColor SoundESPColor = ImColor(0, 150, 255, 200);

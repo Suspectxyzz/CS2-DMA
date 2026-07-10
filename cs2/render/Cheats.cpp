@@ -17,6 +17,7 @@
 #include "../utils/Logger.h"
 #include "../utils/DmaHealth.h"
 #include "../utils/StageTimer.h"
+#include "../utils/VisibilityChecker.h"
 #include "WebRadar.h"
 
 // g_dmaHealth is defined in Threads.cpp; DmaHealth.h does not export it.
@@ -79,8 +80,26 @@ void Cheats::Run()
 				? globalVars::g_dmaFailReason : std::string{};
 			ImVec2 reasonSize = failReason.empty() ? ImVec2(0, 0) : ImGui::CalcTextSize(failReason.c_str());
 
-			float maxTextWidth = (textSize.x > reasonSize.x) ? textSize.x : reasonSize.x;
-			float totalHeight = textSize.y + (failReason.empty() ? 0.0f : (reasonSize.y + 6.0f));
+			// PCILeech 内存解密进度（橙色，仅在解密触发时显示）
+			std::string decryptText;
+			if (ProcessMgr.MemoryDecryptProgress.load(std::memory_order_relaxed) >= 0) {
+				if (ProcessMgr.MemoryDecryptTimedOut.load(std::memory_order_relaxed)) {
+					decryptText = u8"[!] 内存解密超时，尝试 DTB 修复";
+				} else {
+					char dbuf[64];
+					snprintf(dbuf, sizeof(dbuf), u8"[*] 内存解密中 %d%%",
+						ProcessMgr.MemoryDecryptProgress.load(std::memory_order_relaxed));
+					decryptText = dbuf;
+				}
+			}
+			ImVec2 decryptSize = decryptText.empty() ? ImVec2(0, 0) : ImGui::CalcTextSize(decryptText.c_str());
+
+			float maxTextWidth = textSize.x;
+			if (reasonSize.x > maxTextWidth) maxTextWidth = reasonSize.x;
+			if (decryptSize.x > maxTextWidth) maxTextWidth = decryptSize.x;
+			float totalHeight = textSize.y;
+			if (!failReason.empty()) totalHeight += reasonSize.y + 6.0f;
+			if (!decryptText.empty()) totalHeight += decryptSize.y + 6.0f;
 			ImVec2 textPos = { (screenSize.x - maxTextWidth) / 2, (screenSize.y - totalHeight) / 2 };
 
 			drawList->AddRectFilled(
@@ -95,9 +114,16 @@ void Cheats::Run()
 			ImVec2 statusPos = { textPos.x + (maxTextWidth - textSize.x) / 2, textPos.y };
 			drawList->AddText(statusPos, IM_COL32(232, 232, 240, 255), statusText);
 			// 失败原因（红色，在状态文本下方）
+			float lineY = textPos.y + textSize.y;
 			if (!failReason.empty()) {
-				ImVec2 reasonPos = { textPos.x + (maxTextWidth - reasonSize.x) / 2, textPos.y + textSize.y + 6.0f };
+				ImVec2 reasonPos = { textPos.x + (maxTextWidth - reasonSize.x) / 2, lineY + 6.0f };
 				drawList->AddText(reasonPos, IM_COL32(255, 80, 80, 255), failReason.c_str());
+				lineY += reasonSize.y + 6.0f;
+			}
+			// 内存解密进度（橙色，在失败原因下方）
+			if (!decryptText.empty()) {
+				ImVec2 decryptPos = { textPos.x + (maxTextWidth - decryptSize.x) / 2, lineY + 6.0f };
+				drawList->AddText(decryptPos, ImGui::ColorConvertFloat4ToU32(UITheme::Warning), decryptText.c_str());
 			}
 
 			return;
@@ -245,7 +271,25 @@ void Cheats::Run()
 			{
 				// Task 9: Visibility coloring — pick box color based on spotted mask
 				// and screen visibility. Falls back to BoxColor when disabled.
-				bool isVisibleNow = (Entity.Pawn.bSpottedByMask != 0) || Entity.Pawn.ScreenPosValid;
+				// Task 5-8: VPK 可见性检查开启时，用 BVH 射线检测真实遮挡替代近似逻辑
+				bool isVisibleNow;
+				if (MenuConfig::VPKVisibilityCheck && g_visibilityChecker.IsEnabled())
+				{
+					// 射线起点：本地玩家眼睛位置（CameraPos；为 0 时回退到脚部 + 眼睛高度）
+					Vec3 fromEye = LocalPlayerSnapshot.Pawn.CameraPos;
+					if (fromEye.x == 0.f && fromEye.y == 0.f && fromEye.z == 0.f)
+					{
+						fromEye = LocalPlayerSnapshot.Pawn.Pos;
+						fromEye.z += 64.f;
+					}
+					// 射线终点：敌人头部骨骼位置（进入此分支前已保证 BonePosCount > head）
+					const Vec3& toTarget = Entity.Pawn.BoneData.BonePosList[BONEINDEX::head].Pos;
+					isVisibleNow = g_visibilityChecker.IsVisible(fromEye, toTarget);
+				}
+				else
+				{
+					isVisibleNow = (Entity.Pawn.bSpottedByMask != 0) || Entity.Pawn.ScreenPosValid;
+				}
 				ImColor entityCol = MenuConfig::VisibilityColoring
 					? (isVisibleNow ? MenuConfig::VisibleColor : MenuConfig::HiddenColor)
 					: MenuConfig::BoxColor;
@@ -486,6 +530,8 @@ void Cheats::Run()
 		if (snap.MapName[0] != '\0' && snap.MapName != lastMapName) {
 			LOG_DEBUG("Render", "Map changed: '{}' -> '{}'", lastMapName, snap.MapName);
 			GrenadeHelper::UpdateMap(snap.MapName);
+			// Task 5-8: VPK 可见性检查 —— 加载新地图几何数据并构建 BVH
+			g_visibilityChecker.UpdateForMap(snap.MapName);
 			lastMapName = snap.MapName;
 		}
 		GrenadeHelper::Render(LocalPlayerSnapshot);
@@ -494,6 +540,16 @@ void Cheats::Run()
 		if (GrenadeHelper::NeedSave) {
 			GrenadeHelper::SaveToFile(GrenadeHelper::CurrentMap);
 			GrenadeHelper::NeedSave = false;
+		}
+
+		// Task 5-8: VPK 可见性检查 —— 当前地图无几何数据时在屏幕底部提示
+		if (MenuConfig::VPKVisibilityCheck && !g_visibilityChecker.IsEnabled()) {
+			ImDrawList* dl = ImGui::GetBackgroundDrawList();
+			const char* hint = u8"当前地图无 VPK 几何数据，使用近似可见性";
+			ImVec2 ts = ImGui::CalcTextSize(hint);
+			ImVec2 screen = ImGui::GetIO().DisplaySize;
+			dl->AddText(ImVec2(10, screen.y - ts.y - 10),
+				ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 0.6f, 0.0f, 1.0f)), hint);
 		}
 
 		// Spectator List overlay

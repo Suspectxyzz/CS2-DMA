@@ -325,7 +325,7 @@ div.label span .weapon-icon {
 	border-radius: 100%;
 	opacity: .8;
 	transform-origin: center;
-	background: #9F9D9D;
+	background: radial-gradient(circle, #9F9D9D 0%, #9F9D9D 60%, transparent 100%);
 	overflow: hidden;
 	border-color: #D7D7D7;
 	transform: translate(-50%, 50%);
@@ -344,12 +344,12 @@ div.label span .weapon-icon {
 }
 
 #smokes > div.CT {
-	background: #678FAA;
+	background: radial-gradient(circle, #678FAA 0%, #678FAA 60%, transparent 100%);
 	border-color: #77C5F6;
 }
 
 #smokes > div.T {
-	background: #CCBA7D;
+	background: radial-gradient(circle, #CCBA7D 0%, #CCBA7D 60%, transparent 100%);
 	border-color: #F1D369;
 }
 

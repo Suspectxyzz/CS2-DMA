@@ -435,7 +435,30 @@ bool Offset::CheckGameVersion(const std::string& steamInfData)
 	// Convert steam.inf VersionDate (e.g. "2026/06/19") to timestamp
 	if (!info.versionDate.empty() && GameUpdateTimestamp > 0) {
 		int year = 0, month = 0, day = 0;
+		bool parsed = false;
+
+		// Try numeric slash format first: "2026/06/19"
 		if (sscanf_s(info.versionDate.c_str(), "%d/%d/%d", &year, &month, &day) == 3) {
+			parsed = true;
+		} else {
+			// steam.inf actually returns "Jun 16 2026" (month abbreviation)
+			char monBuf[4] = {};
+			if (sscanf_s(info.versionDate.c_str(), "%3s %d %d", monBuf, (unsigned)sizeof(monBuf), &day, &year) == 3) {
+				static const char* const monthNames[] = {
+					"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"
+				};
+				std::string monStr(monBuf);
+				for (int i = 0; i < 12; i++) {
+					if (monStr == monthNames[i]) {
+						month = i + 1;
+						parsed = true;
+						break;
+					}
+				}
+			}
+		}
+
+		if (parsed) {
 			struct tm tm_val = {};
 			tm_val.tm_year = year - 1900;
 			tm_val.tm_mon = month - 1;

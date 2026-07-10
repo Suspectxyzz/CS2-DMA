@@ -418,7 +418,7 @@ VOID DataThread()
 			// Get2DBox uses head bone 闁?bones required for any ESP drawing
 			bool needBones = anyESPDraw;
 			bool needViewAngle = MenuConfig::ShowEyeRay || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled;
-			bool needCameraPos = MenuConfig::ShowEyeRay;
+			bool needCameraPos = MenuConfig::ShowEyeRay || MenuConfig::VPKVisibilityCheck;
 			bool needWeapon = MenuConfig::ShowWeaponESP || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled || MenuConfig::ShowWeaponAmmo || MenuConfig::ShowWeaponIcon;
 
 			// ------- 1. Read matrix -------

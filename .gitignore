@@ -43,6 +43,7 @@ reference/
 *.user
 *.userosscache
 *.sln.docstates
+.agents/
 
 # ===== 操作系统 =====
 .DS_Store
@@ -53,3 +54,5 @@ desktop.ini
 *.tmp
 *.bak
 /gchdma/
+/CSHUB/
+.gitignore

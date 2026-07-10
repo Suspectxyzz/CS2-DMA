@@ -532,6 +532,9 @@ static void DrawTab_Visuals() {
 			ImGui::ColorEdit4(lang.visuals_visible_color.c_str(), reinterpret_cast<float*>(&MenuConfig::VisibleColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::ColorEdit4(lang.visuals_hidden_color.c_str(), reinterpret_cast<float*>(&MenuConfig::HiddenColor), ImGuiColorEditFlags_NoInputs);
 		}
+		// VPK 可见性检查（Task 5-8: 基于地图几何 BVH 射线检测真实遮挡）
+		Gui.MyCheckBox(lang.visuals_vpk_visibility.c_str(), &MenuConfig::VPKVisibilityCheck);
+		tip("Use map geometry ray-cast for real occlusion detection (requires map data files in data/maps/)", "使用地图几何射线检测真实遮挡（需要在 data/maps/ 放置地图数据文件）");
 	}
 
 	// ======== Sound ESP (Task 17: independent section from Advanced ESP) ========

@@ -302,6 +302,7 @@ public:
 	std::string visuals_visibility;
 	std::string visuals_visible_color;
 	std::string visuals_hidden_color;
+	std::string visuals_vpk_visibility;
 	std::string visuals_sound_esp;
 	std::string visuals_sound_color;
 	std::string visuals_bomb_timer;
@@ -613,6 +614,7 @@ public:
 		this->visuals_visibility = "Visibility Coloring";
 		this->visuals_visible_color = "Visible Color";
 		this->visuals_hidden_color = "Hidden Color";
+		this->visuals_vpk_visibility = "VPK Visibility Check";
 		this->visuals_sound_esp = "Sound ESP";
 		this->visuals_sound_color = "Sound Color";
 		this->visuals_bomb_timer = "C4 Bomb Timer";
@@ -965,6 +967,7 @@ public:
 		this->visuals_visibility = u8"\u53ef\u89c1\u6027\u7740\u8272";
 		this->visuals_visible_color = u8"\u53ef\u89c1\u989c\u8272";
 		this->visuals_hidden_color = u8"\u4e0d\u53ef\u89c1\u989c\u8272";
+		this->visuals_vpk_visibility = u8"VPK \u53ef\u89c1\u6027\u68c0\u67e5";
 		this->visuals_sound_esp = u8"\u58f0\u97f3 ESP";
 		this->visuals_sound_color = u8"\u58f0\u97f3\u989c\u8272";
 		this->visuals_bomb_timer = u8"C4 \u5012\u8ba1\u65f6\u7a97\u53e3";

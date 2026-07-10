@@ -218,6 +218,11 @@ public:
 	// 供上层（main.cpp / Cheats UI）展示给用户。
 	std::string lastDmaError;
 
+	// PCILeech 内存解密进度（暴露给 GUI 线程轮询）
+	// -1 = 未触发（正常连接，无需解密），0-100 = 解密进度百分比
+	std::atomic<int> MemoryDecryptProgress{ -1 };
+	std::atomic<bool> MemoryDecryptTimedOut{ false };
+
 public:
 
 	~ProcessManager()
@@ -450,6 +455,60 @@ private:
 	}
 
 public:
+	// Wait for PCILeech memory decryption to complete (mirrors ProCS2 sub_140008AE0).
+	// Returns true if modules are accessible (or become accessible within 50s),
+	// false on timeout. Progress is exposed via MemoryDecryptProgress atomic
+	// for GUI polling. On normal connections this returns immediately.
+	bool WaitForMemoryDecryption()
+	{
+		if (!this->HANDLE || ProcessID == 0) return true;
+
+		// Fast path: if VMMDLL_Map_GetModuleFromNameU succeeds, memory is not
+		// encrypted and no waiting is needed (MemoryDecryptProgress stays -1).
+		PVMMDLL_MAP_MODULEENTRY pModuleEntry = nullptr;
+		if (VMMDLL_Map_GetModuleFromNameU(this->HANDLE, ProcessID,
+				const_cast<LPSTR>(AttachProcessName.c_str()), &pModuleEntry, 0)) {
+			if (pModuleEntry) VMMDLL_MemFree(pModuleEntry);
+			return true;
+		}
+
+		LOG_INFO("ProcessMgr", "[!] Memory encryption detected, decrypting...");
+		MemoryDecryptProgress.store(0, std::memory_order_relaxed);
+		MemoryDecryptTimedOut.store(false, std::memory_order_relaxed);
+
+		// Initialize VFS plugins (required for VfsReadW to access \misc\procinfo\)
+		if (!s_fixCr3PluginsInitialized) {
+			if (!VMMDLL_InitializePlugins(this->HANDLE)) {
+				LOG_ERROR("ProcessMgr", "WaitForMemoryDecryption: VMMDLL_InitializePlugins failed");
+				return false;
+			}
+			s_fixCr3PluginsInitialized = true;
+		}
+
+		// Poll progress_percent.txt (max 50s, 200ms interval)
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(50);
+		while (std::chrono::steady_clock::now() < deadline) {
+			BYTE buf[4] = { 0 };
+			DWORD bytesRead = 0;
+			if (VMMDLL_VfsReadW(this->HANDLE,
+					(LPWSTR)L"\\misc\\procinfo\\progress_percent.txt",
+					buf, 3, &bytesRead, 0) == VMMDLL_STATUS_SUCCESS) {
+				int progress = atoi(reinterpret_cast<LPSTR>(buf));
+				MemoryDecryptProgress.store(progress, std::memory_order_relaxed);
+				if (progress == 100) {
+					LOG_INFO("ProcessMgr", "Memory decryption complete (progress=100)");
+					return true;
+				}
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		}
+
+		LOG_WARNING("ProcessMgr", "[!] Memory decryption timed out (50s)");
+		MemoryDecryptTimedOut.store(true, std::memory_order_relaxed);
+		return false;
+	}
+
+public:
 	// Attempt CR3/DTB remediation. Returns true if probe modules are accessible.
 	bool FixCr3()
 	{
@@ -458,6 +517,12 @@ public:
 		if (ProcessID == 0) {
 			LOG_WARNING("ProcessMgr", "FixCr3: ProcessID is 0, nothing to fix");
 			return false;
+		}
+
+		// Wait for PCILeech memory decryption before attempting DTB fix.
+		// On normal connections this returns immediately (no extra delay).
+		if (!WaitForMemoryDecryption()) {
+			LOG_WARNING("ProcessMgr", "[!] Memory decryption timed out, attempting DTB fix anyway");
 		}
 
 		if (this->HANDLE)

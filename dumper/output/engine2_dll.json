@@ -85,6 +85,16 @@
         "metadata": [],
         "parent": null
       },
+      "EngineLoopState_t": {
+        "fields": {
+          "m_nPlatWindowHeight": 28,
+          "m_nPlatWindowWidth": 24,
+          "m_nRenderHeight": 36,
+          "m_nRenderWidth": 32
+        },
+        "metadata": [],
+        "parent": null
+      },
       "EntComponentInfo_t": {
         "fields": {
           "m_nFlags": 36,
@@ -420,6 +430,26 @@
         "parent": null
       }
     },
-    "enums": {}
+    "enums": {
+      "EntityDormancyType_t": {
+        "alignment": 4,
+        "members": {
+          "ENTITY_DORMANT": 1,
+          "ENTITY_NOT_DORMANT": 0,
+          "ENTITY_SUSPENDED": 2
+        },
+        "type": "uint32"
+      },
+      "EntityIOTargetType_t": {
+        "alignment": 4,
+        "members": {
+          "ENTITY_IO_TARGET_EHANDLE": 6,
+          "ENTITY_IO_TARGET_ENTITYNAME": 2,
+          "ENTITY_IO_TARGET_ENTITYNAME_OR_CLASSNAME": 7,
+          "ENTITY_IO_TARGET_INVALID": -1
+        },
+        "type": "uint32"
+      }
+    }
   }
 }

@@ -127,6 +127,8 @@ namespace MyConfigSaver {
         configFile << "VisibilityColoring " << MenuConfig::VisibilityColoring << std::endl;
         configFile << "VisibleColor " << MenuConfig::VisibleColor.Value.x << " " << MenuConfig::VisibleColor.Value.y << " " << MenuConfig::VisibleColor.Value.z << " " << MenuConfig::VisibleColor.Value.w << std::endl;
         configFile << "HiddenColor " << MenuConfig::HiddenColor.Value.x << " " << MenuConfig::HiddenColor.Value.y << " " << MenuConfig::HiddenColor.Value.z << " " << MenuConfig::HiddenColor.Value.w << std::endl;
+        // Task 5-8: VPK Visibility Check
+        configFile << "VPKVisibilityCheck " << MenuConfig::VPKVisibilityCheck << std::endl;
         // Task 10: Sound ESP
         configFile << "ShowSoundESP " << MenuConfig::ShowSoundESP << std::endl;
         configFile << "SoundESPColor " << MenuConfig::SoundESPColor.Value.x << " " << MenuConfig::SoundESPColor.Value.y << " " << MenuConfig::SoundESPColor.Value.z << " " << MenuConfig::SoundESPColor.Value.w << std::endl;
@@ -305,6 +307,8 @@ namespace MyConfigSaver {
                 if (key == "VisibilityColoring") iss >> MenuConfig::VisibilityColoring;
                 if (key == "VisibleColor") iss >> MenuConfig::VisibleColor.Value.x >> MenuConfig::VisibleColor.Value.y >> MenuConfig::VisibleColor.Value.z >> MenuConfig::VisibleColor.Value.w;
                 if (key == "HiddenColor") iss >> MenuConfig::HiddenColor.Value.x >> MenuConfig::HiddenColor.Value.y >> MenuConfig::HiddenColor.Value.z >> MenuConfig::HiddenColor.Value.w;
+                // Task 5-8: VPK Visibility Check
+                if (key == "VPKVisibilityCheck") iss >> MenuConfig::VPKVisibilityCheck;
                 // Task 10: Sound ESP
                 if (key == "ShowSoundESP") iss >> MenuConfig::ShowSoundESP;
                 if (key == "SoundESPColor") iss >> MenuConfig::SoundESPColor.Value.x >> MenuConfig::SoundESPColor.Value.y >> MenuConfig::SoundESPColor.Value.z >> MenuConfig::SoundESPColor.Value.w;
