@@ -776,11 +776,12 @@ namespace Render
 	}
 
 	// ================================================================
-	// ESP gap-closure stage 2: unified text shadow helper.
-	// Draws text with a 1px black shadow offset, reusing the caller's
-	// alpha channel. Existing Gui.StrokeText already draws a 4-corner
-	// shadow, so this helper is provided for new ESP features that call
-	// ImDrawList directly and want consistent shadow styling.
+	// ESP text outline helper (formerly DrawTextShadow).
+	// Draws an 8-direction stroke behind the text, gated by the master
+	// toggle MenuConfig::TextOutlineEnabled. Stroke color/alpha and pixel
+	// offset come from MenuConfig::TextOutlineColor / TextOutlineThickness.
+	// When the toggle is off (or thickness <= 0), text is drawn plain.
+	// The function name is retained to avoid churning all call sites.
 	// ================================================================
 	void DrawTextShadow(ImDrawList* drawList, ImFont* font, float fontSize,
 	                     const ImVec2& pos, ImU32 color, const char* text,
@@ -790,10 +791,18 @@ namespace Render
 
 		if (fontSize > 0.f && font) ImGui::PushFont(font);
 
-		constexpr float shadowOffset = 1.f;
-		ImU32 shadowAlpha = (color >> IM_COL32_A_SHIFT) & 0xFF;
-		drawList->AddText(ImVec2(pos.x + shadowOffset, pos.y + shadowOffset),
-		                  IM_COL32(0, 0, 0, shadowAlpha), text, textEnd);
+		if (MenuConfig::TextOutlineEnabled) {
+			const float t = MenuConfig::TextOutlineThickness;
+			if (t > 0.f) {
+				const ImU32 oc = MenuConfig::TextOutlineColor;
+				for (int dy = -1; dy <= 1; ++dy) {
+					for (int dx = -1; dx <= 1; ++dx) {
+						if (dx == 0 && dy == 0) continue;
+						drawList->AddText(ImVec2(pos.x + dx * t, pos.y + dy * t), oc, text, textEnd);
+					}
+				}
+			}
+		}
 		drawList->AddText(pos, color, text, textEnd);
 
 		if (fontSize > 0.f && font) ImGui::PopFont();
@@ -866,6 +875,24 @@ namespace Render
 
 		drawList->AddCircle(ImVec2(screenPos.x, screenPos.y), radiusA, colA, 32, 2.0f);
 		drawList->AddCircle(ImVec2(screenPos.x, screenPos.y), radiusB, colB, 32, 2.0f);
+	}
+
+	// ================================================================
+	// Footstep ESP: persistent pulsing circle at a player's feet while
+	// they are moving on ground. Radius oscillates 16-24px over 600ms;
+	// alpha is constant (caller only invokes this while isMoving).
+	// ================================================================
+	void DrawFootstepESP(ImDrawList* drawList, const Vec2& screenPos,
+	                     uint64_t nowMs, ImU32 color)
+	{
+		if (!drawList) return;
+		if (!IsValidFloat(screenPos.x) || !IsValidFloat(screenPos.y)) return;
+
+		constexpr float PI = 3.14159265358979323846f;
+		float radius = 20.f + 4.f * sinf((float)nowMs * 0.001f * 2.f * PI / 0.6f);
+		if (radius < 1.f) radius = 1.f;
+
+		drawList->AddCircle(ImVec2(screenPos.x, screenPos.y), radius, color, 36, 2.0f);
 	}
 
 	// ================================================================

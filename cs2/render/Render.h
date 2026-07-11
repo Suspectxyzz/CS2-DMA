@@ -82,6 +82,11 @@ private:
 	void DrawSoundESP(ImDrawList* drawList, const Vec2& screenPos,
 	                  uint64_t nowMs, uint64_t soundUntilMs, ImU32 color);
 
+	// Footstep ESP: persistent pulsing circle at a player's feet while
+	// moving on ground (caller decides isMoving; this only draws the pulse).
+	void DrawFootstepESP(ImDrawList* drawList, const Vec2& screenPos,
+	                     uint64_t nowMs, ImU32 color);
+
 	// ESP gap-closure stage 3b: C4 bomb timer overlay (Task 11).
 	// Draws a draggable ImGui window at the screen center showing the C4
 	// countdown progress bar and the defuse progress bar when applicable.

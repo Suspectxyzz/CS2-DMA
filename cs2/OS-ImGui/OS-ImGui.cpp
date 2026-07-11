@@ -1,5 +1,6 @@
 #pragma once
 #include "OS-ImGui.h"
+#include "../game/MenuConfig.h"
 
 /****************************************************
 * Copyright (C)	: Liv
@@ -29,8 +30,21 @@ namespace OSImGui
 
     void OSImGui::StrokeText(const std::string& Text, Vec2 Pos, ImColor Color, float FontSize, bool KeepCenter)
     {
-        this->Text(Text, Vec2(Pos.x - 1, Pos.y - 1), ImColor(0, 0, 0), FontSize, KeepCenter);
-        this->Text(Text, Vec2(Pos.x + 1, Pos.y + 1), ImColor(0, 0, 0), FontSize, KeepCenter);
+        // 8-direction outline gated by the master toggle in MenuConfig.
+        // Thickness controls the pixel offset of each stroke pass. When the
+        // toggle is off (or thickness <= 0), text is drawn plain.
+        if (MenuConfig::TextOutlineEnabled) {
+            const float t = MenuConfig::TextOutlineThickness;
+            if (t > 0.f) {
+                const ImColor oc = MenuConfig::TextOutlineColor;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dx == 0 && dy == 0) continue;
+                        this->Text(Text, Vec2(Pos.x + dx * t, Pos.y + dy * t), oc, FontSize, KeepCenter);
+                    }
+                }
+            }
+        }
         this->Text(Text, Pos, Color, FontSize, KeepCenter);
     }
 

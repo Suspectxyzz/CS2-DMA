@@ -59,6 +59,9 @@ namespace MyConfigSaver {
         configFile << "WeaponFontSize " << MenuConfig::WeaponFontSize << std::endl;
         configFile << "DistanceColor " << MenuConfig::DistanceColor.Value.x << " " << MenuConfig::DistanceColor.Value.y << " " << MenuConfig::DistanceColor.Value.z << " " << MenuConfig::DistanceColor.Value.w << std::endl;
         configFile << "DistanceFontSize " << MenuConfig::DistanceFontSize << std::endl;
+        configFile << "TextOutlineEnabled " << MenuConfig::TextOutlineEnabled << std::endl;
+        configFile << "TextOutlineColor " << MenuConfig::TextOutlineColor.Value.x << " " << MenuConfig::TextOutlineColor.Value.y << " " << MenuConfig::TextOutlineColor.Value.z << " " << MenuConfig::TextOutlineColor.Value.w << std::endl;
+        configFile << "TextOutlineThickness " << MenuConfig::TextOutlineThickness << std::endl;
         configFile << "SafeZoneEnabled " << MenuConfig::SafeZoneEnabled << std::endl;
         configFile << "SafeZoneRadius " << MenuConfig::SafeZoneRadius << std::endl;
         configFile << "SafeZoneShape " << MenuConfig::SafeZoneShape << std::endl;
@@ -132,6 +135,9 @@ namespace MyConfigSaver {
         // Task 10: Sound ESP
         configFile << "ShowSoundESP " << MenuConfig::ShowSoundESP << std::endl;
         configFile << "SoundESPColor " << MenuConfig::SoundESPColor.Value.x << " " << MenuConfig::SoundESPColor.Value.y << " " << MenuConfig::SoundESPColor.Value.z << " " << MenuConfig::SoundESPColor.Value.w << std::endl;
+        // Footstep ESP
+        configFile << "ShowFootstepESP " << MenuConfig::ShowFootstepESP << std::endl;
+        configFile << "FootstepColor " << MenuConfig::FootstepColor.Value.x << " " << MenuConfig::FootstepColor.Value.y << " " << MenuConfig::FootstepColor.Value.z << " " << MenuConfig::FootstepColor.Value.w << std::endl;
         // Task 11: C4 Bomb Timer
         configFile << "ShowBombTimer " << MenuConfig::ShowBombTimer << std::endl;
         configFile << "BombTimerX " << MenuConfig::BombTimerX << std::endl;
@@ -234,6 +240,9 @@ namespace MyConfigSaver {
                 if (key == "WeaponFontSize") iss >> MenuConfig::WeaponFontSize;
                 if (key == "DistanceColor") iss >> MenuConfig::DistanceColor.Value.x >> MenuConfig::DistanceColor.Value.y >> MenuConfig::DistanceColor.Value.z >> MenuConfig::DistanceColor.Value.w;
                 if (key == "DistanceFontSize") iss >> MenuConfig::DistanceFontSize;
+                if (key == "TextOutlineEnabled") iss >> MenuConfig::TextOutlineEnabled;
+                if (key == "TextOutlineColor") iss >> MenuConfig::TextOutlineColor.Value.x >> MenuConfig::TextOutlineColor.Value.y >> MenuConfig::TextOutlineColor.Value.z >> MenuConfig::TextOutlineColor.Value.w;
+                if (key == "TextOutlineThickness") iss >> MenuConfig::TextOutlineThickness;
                 if (key == "SafeZoneEnabled") iss >> MenuConfig::SafeZoneEnabled;
                 if (key == "SafeZoneRadius") iss >> MenuConfig::SafeZoneRadius;
                 if (key == "SafeZoneShape") iss >> MenuConfig::SafeZoneShape;
@@ -312,6 +321,9 @@ namespace MyConfigSaver {
                 // Task 10: Sound ESP
                 if (key == "ShowSoundESP") iss >> MenuConfig::ShowSoundESP;
                 if (key == "SoundESPColor") iss >> MenuConfig::SoundESPColor.Value.x >> MenuConfig::SoundESPColor.Value.y >> MenuConfig::SoundESPColor.Value.z >> MenuConfig::SoundESPColor.Value.w;
+                // Footstep ESP
+                if (key == "ShowFootstepESP") iss >> MenuConfig::ShowFootstepESP;
+                if (key == "FootstepColor") iss >> MenuConfig::FootstepColor.Value.x >> MenuConfig::FootstepColor.Value.y >> MenuConfig::FootstepColor.Value.z >> MenuConfig::FootstepColor.Value.w;
                 // Task 11: C4 Bomb Timer
                 if (key == "ShowBombTimer") iss >> MenuConfig::ShowBombTimer;
                 if (key == "BombTimerX") iss >> MenuConfig::BombTimerX;

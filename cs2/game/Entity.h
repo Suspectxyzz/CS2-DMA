@@ -58,6 +58,7 @@ public:
 	// ESP gap-closure stage 1: extended tactical fields
 	bool Scoped = false;
 	bool Defusing = false;
+	bool IsWalking = false;
 	int AmmoClip = -1;
 	uint64_t SoundUntilMs = 0;
 	Vec3 Velocity;

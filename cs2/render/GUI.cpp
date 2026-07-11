@@ -307,6 +307,15 @@ static void DrawTab_Visuals() {
 
 	// ======== Info & Text (Task 17: removed WeaponESP, added Spectator List) ========
 	if (ImGui::CollapsingHeader(lang.header_info.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		// --- Text Outline (applies to all ESP text) ---
+		Gui.MyCheckBox(lang.visuals_text_outline.c_str(), &MenuConfig::TextOutlineEnabled);
+		if (MenuConfig::TextOutlineEnabled) {
+			ImGui::SameLine(0, 16);
+			ImGui::ColorEdit4(lang.visuals_text_outline_color.c_str(), reinterpret_cast<float*>(&MenuConfig::TextOutlineColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::SetNextItemWidth(150);
+			ImGui::SliderFloat(lang.visuals_text_outline_thickness.c_str(), &MenuConfig::TextOutlineThickness, 1.f, 5.f, "%.1f px");
+		}
+
 		Gui.MyCheckBox(lang.visuals_name.c_str(), &MenuConfig::ShowPlayerName);
 		if (MenuConfig::ShowPlayerName) {
 			ImGui::SameLine(0, 16);
@@ -544,6 +553,16 @@ static void DrawTab_Visuals() {
 		if (MenuConfig::ShowSoundESP) {
 			ImGui::SameLine(0, 16);
 			ImGui::ColorEdit4(lang.visuals_sound_color.c_str(), reinterpret_cast<float*>(&MenuConfig::SoundESPColor), ImGuiColorEditFlags_NoInputs);
+		}
+	}
+
+	// ======== Footstep ESP (velocity-inferred footstep pulse) ========
+	if (ImGui::CollapsingHeader(lang.visuals_footstep_esp.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		Gui.MyCheckBox(lang.visuals_footstep_esp.c_str(), &MenuConfig::ShowFootstepESP);
+		tip("Pulsing circle at enemy feet while moving (walk-shift silent excluded)", "敌方移动时脚下显示脉动圈（静步除外）");
+		if (MenuConfig::ShowFootstepESP) {
+			ImGui::SameLine(0, 16);
+			ImGui::ColorEdit4(lang.visuals_footstep_color.c_str(), reinterpret_cast<float*>(&MenuConfig::FootstepColor), ImGuiColorEditFlags_NoInputs);
 		}
 	}
 
@@ -905,7 +924,7 @@ static void DrawTab_Settings() {
 			ImGui::TextDisabled("(%s)", lang.settings_restarttip.c_str());
 		}
 
-		// Resolution selection (common 4:3 and 16:9 presets)
+		// Resolution selection (presets + custom width/height input)
 		{
 			struct ResPreset { int w, h; const char* label; };
 			static const ResPreset resPresets[] = {
@@ -929,7 +948,18 @@ static void DrawTab_Settings() {
 			};
 			constexpr int resCount = sizeof(resPresets) / sizeof(resPresets[0]);
 
-			// Find current selection
+			// Custom mode is sticky: once the user picks "Custom..." it stays on
+			// until they pick a preset. Initialize once from the loaded config
+			// (custom = not Auto and not matching any preset).
+			static bool isCustomMode = []() {
+				if (MenuConfig::RenderWidth == 0 && MenuConfig::RenderHeight == 0) return false;
+				for (int i = 1; i < resCount; i++) {
+					if (MenuConfig::RenderWidth == resPresets[i].w && MenuConfig::RenderHeight == resPresets[i].h) return false;
+				}
+				return true;
+			}();
+
+			// Find current preset selection (only meaningful when not custom)
 			int curRes = 0;
 			for (int i = 1; i < resCount; i++) {
 				if (MenuConfig::RenderWidth == resPresets[i].w && MenuConfig::RenderHeight == resPresets[i].h) {
@@ -937,27 +967,49 @@ static void DrawTab_Settings() {
 					break;
 				}
 			}
-			// If custom value not in list, show as "Custom (WxH)"
-			bool isCustom = (curRes == 0 && (MenuConfig::RenderWidth != 0 || MenuConfig::RenderHeight != 0));
+
 			char customLabel[64] = {};
-			if (isCustom)
-				_snprintf_s(customLabel, _TRUNCATE, "Custom (%dx%d)", MenuConfig::RenderWidth, MenuConfig::RenderHeight);
+			if (isCustomMode)
+				_snprintf_s(customLabel, _TRUNCATE, "%s (%dx%d)", lang.settings_custom_resolution.c_str(), MenuConfig::RenderWidth, MenuConfig::RenderHeight);
 
 			ImGui::SetNextItemWidth(220);
-			if (ImGui::BeginCombo(lang.settings_resolution.c_str(), isCustom ? customLabel : resPresets[curRes].label)) {
+			if (ImGui::BeginCombo(lang.settings_resolution.c_str(), isCustomMode ? customLabel : resPresets[curRes].label)) {
 				for (int i = 0; i < resCount; i++) {
-					bool selected = (i == curRes && !isCustom);
+					bool selected = (i == curRes && !isCustomMode);
 					if (ImGui::Selectable(resPresets[i].label, selected)) {
 						MenuConfig::RenderWidth = resPresets[i].w;
 						MenuConfig::RenderHeight = resPresets[i].h;
+						isCustomMode = false;
 					}
 					if (selected) ImGui::SetItemDefaultFocus();
 				}
+				// Custom entry: seeds a sane default if currently Auto
+				if (ImGui::Selectable(lang.settings_custom_resolution.c_str(), isCustomMode)) {
+					isCustomMode = true;
+					if (MenuConfig::RenderWidth == 0 && MenuConfig::RenderHeight == 0) {
+						MenuConfig::RenderWidth = 1920;
+						MenuConfig::RenderHeight = 1080;
+					}
+				}
+				if (isCustomMode) ImGui::SetItemDefaultFocus();
 				ImGui::EndCombo();
 			}
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", lang.settings_renderautotip.c_str());
 			ImGui::SameLine(0, 8);
 			ImGui::TextDisabled("(%s)", lang.settings_restarttip.c_str());
+
+			// Manual width/height input when in custom mode
+			if (isCustomMode) {
+				ImGui::Indent();
+				ImGui::SetNextItemWidth(90);
+				ImGui::InputInt(lang.settings_res_width.c_str(), &MenuConfig::RenderWidth, 1, 10);
+				ImGui::SameLine(0, 12);
+				ImGui::SetNextItemWidth(90);
+				ImGui::InputInt(lang.settings_res_height.c_str(), &MenuConfig::RenderHeight, 1, 10);
+				if (MenuConfig::RenderWidth < 0) MenuConfig::RenderWidth = 0;
+				if (MenuConfig::RenderHeight < 0) MenuConfig::RenderHeight = 0;
+				ImGui::Unindent();
+			}
 		}
 	}
 

@@ -73,6 +73,7 @@ namespace Offset
 	// ESP gap-closure stage 1: extended tactical offsets
 	inline DWORD bIsScoped;              // C_CSPlayerPawn::m_bIsScoped
 	inline DWORD bIsDefusing;            // C_CSPlayerPawn::m_bIsDefusing
+	inline DWORD bIsWalking;             // C_CSPlayerPawn::m_bIsWalking
 	inline DWORD vecVelocity;            // C_BaseEntity::m_vecVelocity
 	inline DWORD iClip1;                 // C_BasePlayerWeapon::m_iClip1
 	// Weapon item definition (for reliable weapon name lookup)

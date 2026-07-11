@@ -177,8 +177,9 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::PawnArmor = SafeGetUint64(fields, "m_ArmorValue");
 			Offset::bIsScoped = SafeGetUint64(fields, "m_bIsScoped");
 			Offset::bIsDefusing = SafeGetUint64(fields, "m_bIsDefusing");
-			LOG_DEBUG("Offsets", "C_CSPlayerPawn: EyeAngles=0x{:X} PawnArmor=0x{:X} Scoped=0x{:X} Defusing=0x{:X}",
-				Offset::angEyeAngles, Offset::PawnArmor, Offset::bIsScoped, Offset::bIsDefusing);
+			Offset::bIsWalking = SafeGetUint64(fields, "m_bIsWalking");
+			LOG_DEBUG("Offsets", "C_CSPlayerPawn: EyeAngles=0x{:X} PawnArmor=0x{:X} Scoped=0x{:X} Defusing=0x{:X} Walking=0x{:X}",
+				Offset::angEyeAngles, Offset::PawnArmor, Offset::bIsScoped, Offset::bIsDefusing, Offset::bIsWalking);
 
 			// Calculate bSpottedByMask
 			uint64_t m_entitySpottedState = SafeGetUint64(fields, "m_entitySpottedState");

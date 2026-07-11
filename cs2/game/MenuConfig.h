@@ -221,6 +221,10 @@ namespace MenuConfig
 	inline bool    ShowSoundESP = false;
 	inline ImColor SoundESPColor = ImColor(0, 150, 255, 200);
 
+	// ======== Footstep ESP (velocity-inferred footstep pulse) ========
+	inline bool    ShowFootstepESP = false;
+	inline ImColor FootstepColor = ImColor(255, 200, 0, 180);
+
 	// ======== ESP gap-closure stage 3b: C4 Bomb Timer Overlay (Task 11) ========
 	inline bool    ShowBombTimer = false;
 	inline float   BombTimerX = -1.f;   // -1 = default center
@@ -272,6 +276,15 @@ namespace MenuConfig
 	inline float WeaponFontSize = 14.f;
 	inline ImColor DistanceColor = ImColor(255, 255, 255, 255);
 	inline float DistanceFontSize = 14.f;
+
+	// ======== Text Outline (ESP font stroke, applies to all ESP text) ========
+	// Master toggle + style for the 8-direction outline drawn behind every ESP
+	// text. When off, text is drawn plain (no stroke). Color/alpha and thickness
+	// are user-configurable; thickness controls the pixel offset of each stroke
+	// pass. Default on with 1px black to preserve legacy readability.
+	inline bool  TextOutlineEnabled = true;
+	inline ImColor TextOutlineColor = ImColor(0, 0, 0, 255);
+	inline float TextOutlineThickness = 1.f;
 
 	// ======== Hotkey Bindings ========
 	enum HotkeyActionType {

@@ -396,6 +396,7 @@ VOID DataThread()
 			                  MenuConfig::ShowEyeRay || MenuConfig::ShowLineToEnemy ||
 			                  MenuConfig::ShowHeadDot || MenuConfig::ShowArmorBar ||
 			                  MenuConfig::ShowSoundESP ||
+			                  MenuConfig::ShowFootstepESP ||
 			                  MenuConfig::ShowPlayerFlags ||
 			                  MenuConfig::ShowWeaponAmmo || MenuConfig::ShowWeaponIcon ||
 			                  MenuConfig::ShowBombTimer || MenuConfig::ShowWorldProjectileTimers ||
@@ -1357,7 +1358,10 @@ VOID DataThread()
 				Vec3 velocityBuf[MAX_ENTITIES]{};
 			DWORD shotsBuf[MAX_ENTITIES]{};
 				static DWORD lastShotsFired[MAX_ENTITIES];
+				int fFlagsBuf[MAX_ENTITIES]{};
+				uint8_t walkingBuf[MAX_ENTITIES]{};
 				uint8_t localScoped = 0, localDefusing = 0;
+				int localFFlags = 0; uint8_t localWalking = 0;
 				Vec3 localVelocity{};
 
 				for (int batchStart = 0; batchStart < count; batchStart += STATUS_BATCH) {
@@ -1373,6 +1377,10 @@ VOID DataThread()
 							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::bIsDefusing, &defusingBuf[i], sizeof(uint8_t));
 						if (Offset::vecVelocity)
 							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::vecVelocity, &velocityBuf[i], sizeof(Vec3));
+						if (MenuConfig::ShowFootstepESP && Offset::fFlags)
+							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::fFlags, &fFlagsBuf[i], sizeof(int));
+						if (MenuConfig::ShowFootstepESP && Offset::bIsWalking)
+							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::bIsWalking, &walkingBuf[i], sizeof(uint8_t));
 						if (MenuConfig::ShowSoundESP && Offset::iShotsFired)
 							ProcessMgr.AddScatterReadRequest(h, ce.pawnAddr + Offset::iShotsFired, &shotsBuf[i], sizeof(DWORD));
 				}
@@ -1383,6 +1391,10 @@ VOID DataThread()
 							ProcessMgr.AddScatterReadRequest(h, localPlayer.Pawn.Address + Offset::bIsDefusing, &localDefusing, sizeof(uint8_t));
 						if (Offset::vecVelocity)
 							ProcessMgr.AddScatterReadRequest(h, localPlayer.Pawn.Address + Offset::vecVelocity, &localVelocity, sizeof(Vec3));
+						if (MenuConfig::ShowFootstepESP && Offset::fFlags)
+							ProcessMgr.AddScatterReadRequest(h, localPlayer.Pawn.Address + Offset::fFlags, &localFFlags, sizeof(int));
+						if (MenuConfig::ShowFootstepESP && Offset::bIsWalking)
+							ProcessMgr.AddScatterReadRequest(h, localPlayer.Pawn.Address + Offset::bIsWalking, &localWalking, sizeof(uint8_t));
 					}
 					ProcessMgr.ExecuteReadScatter(h);
 					VMMDLL_Scatter_CloseHandle(h);
@@ -1397,6 +1409,10 @@ VOID DataThread()
 						ce.entity.Pawn.Defusing = defusingBuf[i] != 0;
 					if (Offset::vecVelocity)
 						ce.entity.Pawn.Velocity = velocityBuf[i];
+					if (MenuConfig::ShowFootstepESP && Offset::fFlags)
+						ce.entity.Pawn.fFlags = fFlagsBuf[i];
+					if (MenuConfig::ShowFootstepESP && Offset::bIsWalking)
+						ce.entity.Pawn.IsWalking = walkingBuf[i] != 0;
 					// Task 10: Sound ESP 闁?fire ripple when ShotsFired increases.
 					if (MenuConfig::ShowSoundESP && Offset::iShotsFired) {
 						if (shotsBuf[i] > lastShotsFired[i]) {
@@ -1414,6 +1430,10 @@ VOID DataThread()
 						localPlayer.Pawn.Defusing = localDefusing != 0;
 					if (Offset::vecVelocity)
 						localPlayer.Pawn.Velocity = localVelocity;
+					if (MenuConfig::ShowFootstepESP && Offset::fFlags)
+						localPlayer.Pawn.fFlags = localFFlags;
+					if (MenuConfig::ShowFootstepESP && Offset::bIsWalking)
+						localPlayer.Pawn.IsWalking = localWalking != 0;
 				}
 			}
 		}

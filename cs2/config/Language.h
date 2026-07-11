@@ -305,6 +305,8 @@ public:
 	std::string visuals_vpk_visibility;
 	std::string visuals_sound_esp;
 	std::string visuals_sound_color;
+	std::string visuals_footstep_esp;
+	std::string visuals_footstep_color;
 	std::string visuals_bomb_timer;
 	std::string visuals_world_esp;
 	std::string visuals_world_timers;
@@ -355,10 +357,18 @@ public:
 	std::string visuals_eyeray_thickness;
 	std::string visuals_line_thickness;
 	std::string visuals_name_size;
-	std::string visuals_weapon_size;
-	std::string visuals_distance_size;
-	std::string visuals_healthbar_width;
-	std::string visuals_armorbar_width;
+		std::string visuals_weapon_size;
+		std::string visuals_distance_size;
+		std::string visuals_healthbar_width;
+		std::string visuals_armorbar_width;
+
+		// Text outline (ESP font stroke) + custom resolution input
+		std::string visuals_text_outline;
+		std::string visuals_text_outline_color;
+		std::string visuals_text_outline_thickness;
+		std::string settings_custom_resolution;
+		std::string settings_res_width;
+		std::string settings_res_height;
 
 	// Task 21: Armor Bar position label (semantically independent from grenade_position)
 	std::string visuals_armorbar_position;
@@ -617,6 +627,8 @@ public:
 		this->visuals_vpk_visibility = "VPK Visibility Check";
 		this->visuals_sound_esp = "Sound ESP";
 		this->visuals_sound_color = "Sound Color";
+		this->visuals_footstep_esp = "Footstep ESP";
+		this->visuals_footstep_color = "Footstep Color";
 		this->visuals_bomb_timer = "C4 Bomb Timer";
 		this->visuals_world_esp = "World ESP";
 		this->visuals_world_timers = "Projectile Timers";
@@ -671,6 +683,14 @@ public:
 		this->visuals_distance_size = "Distance Size";
 		this->visuals_healthbar_width = "Health Bar Width";
 		this->visuals_armorbar_width = "Armor Bar Width";
+
+		// Text outline (ESP font stroke) + custom resolution input
+		this->visuals_text_outline = "Text Outline";
+		this->visuals_text_outline_color = "Outline Color";
+		this->visuals_text_outline_thickness = "Outline Thickness";
+		this->settings_custom_resolution = "Custom...";
+		this->settings_res_width = "Width";
+		this->settings_res_height = "Height";
 
 		// Task 21: Armor Bar position label
 		this->visuals_armorbar_position = "Position";
@@ -970,6 +990,8 @@ public:
 		this->visuals_vpk_visibility = u8"VPK \u53ef\u89c1\u6027\u68c0\u67e5";
 		this->visuals_sound_esp = u8"\u58f0\u97f3 ESP";
 		this->visuals_sound_color = u8"\u58f0\u97f3\u989c\u8272";
+		this->visuals_footstep_esp = u8"\u811a\u6b65 ESP";
+		this->visuals_footstep_color = u8"\u811a\u6b65\u989c\u8272";
 		this->visuals_bomb_timer = u8"C4 \u5012\u8ba1\u65f6\u7a97\u53e3";
 		this->visuals_world_esp = u8"\u4e16\u754c ESP";
 		this->visuals_world_timers = u8"\u6295\u63b7\u7269\u8ba1\u65f6\u5668";
@@ -1024,6 +1046,14 @@ public:
 		this->visuals_distance_size = u8"\u8ddd\u79bb\u5927\u5c0f";
 		this->visuals_healthbar_width = u8"\u8840\u6761\u5bbd\u5ea6";
 		this->visuals_armorbar_width = u8"\u62a4\u7532\u6761\u5bbd\u5ea6";
+
+		// Text outline (ESP font stroke) + custom resolution input
+		this->visuals_text_outline = u8"\u6587\u5b57\u63cf\u8fb9";
+		this->visuals_text_outline_color = u8"\u63cf\u8fb9\u989c\u8272";
+		this->visuals_text_outline_thickness = u8"\u63cf\u8fb9\u7c97\u7ec6";
+		this->settings_custom_resolution = u8"\u81ea\u5b9a\u4e49...";
+		this->settings_res_width = u8"\u5bbd\u5ea6";
+		this->settings_res_height = u8"\u9ad8\u5ea6";
 
 		// Task 21: Armor Bar position label
 		this->visuals_armorbar_position = u8"\u4f4d\u7f6e";

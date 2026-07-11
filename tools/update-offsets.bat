@@ -128,11 +128,11 @@ if "%connector%"=="pcileech" goto run_dma
 goto run_native
 
 :run_native
-"%dumperExe%" -p "%ProcessName%" -f json -o "%outputDir%" -vv
+"%dumperExe%" -p "%ProcessName%" -f json -o "%outputDir%" -vvv
 goto check_result
 
 :run_dma
-"%dumperExe%" -c pcileech -a "%connectorArgs%" -p "%ProcessName%" -f json -o "%outputDir%" -vv
+"%dumperExe%" -c pcileech -a "%connectorArgs%" -p "%ProcessName%" -f json -o "%outputDir%" -vvv
 goto check_result
 
 :check_result

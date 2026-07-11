@@ -319,6 +319,21 @@ void Cheats::Run()
 					ImGui::ColorConvertFloat4ToU32(MenuConfig::SoundESPColor.Value));
 			}
 
+			// Footstep ESP — persistent pulsing circle while enemy moves on ground
+			// (shift-walk filtered via IsWalking, air filtered via FL_ONGROUND).
+			if (MenuConfig::ShowFootstepESP)
+			{
+				float dx = Entity.Pawn.Velocity.x;
+				float dy = Entity.Pawn.Velocity.y;
+				float hSpeed = sqrtf(dx * dx + dy * dy);
+				bool isGrounded = (Entity.Pawn.fFlags & 1) != 0;   // FL_ONGROUND = bit 0
+				if (isGrounded && !Entity.Pawn.IsWalking && hSpeed > 50.f)
+				{
+					Render::DrawFootstepESP(ImGui::GetBackgroundDrawList(), Entity.Pawn.ScreenPos,
+						nowMs, ImGui::ColorConvertFloat4ToU32(MenuConfig::FootstepColor.Value));
+				}
+			}
+
 			if (MenuConfig::ShowHealthBar && !(inSafeZone && MenuConfig::SafeZoneSkipHealthBar))
 			{
 				if (MenuConfig::HealthBarType == 2)
