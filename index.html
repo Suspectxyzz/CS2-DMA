@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>CS2-DMA — External ESP Tool via FPGA DMA Hardware</title>
-    <meta name="description" content="Open-source external CS2 tool built with C++. FPGA DMA hardware reads game memory — ESP, Web Radar, Grenade Helper. No aimbot. MIT License.">
+    <title>CS2-DMA - External ESP Tool via FPGA DMA Hardware</title>
+    <meta name="description" content="Open-source external CS2 tool built with C++. FPGA DMA hardware reads game memory - ESP, Web Radar, Grenade Helper. Zero data upload. MIT License.">
     <meta name="theme-color" content="#00ff9d">
     <meta name="google-site-verification" content="R327HvZ-N9G8la9-L-rY7SKfkYwymKkupxKJ0yqJ1eY" />
     <meta name="msvalidate.01" content="4A15D540F30255D5039DB6467C649752" />
@@ -19,7 +19,7 @@
             --bg:#0a0a0a;--bg-el:#111;--bg-card:#141414;--bg-card-h:#1a1a1a;
             --accent:#00ff9d;--accent-dim:#00cc7d;
             --glow:rgba(0,255,157,.12);--glow-s:rgba(0,255,157,.25);
-            --purple:#7c5cfc;--blue:#00b4d8;
+            --purple:#7c5cfc;--purple-dim:#5a3fd6;--blue:#00b4d8;
             --text:#e8e8e8;--text2:#888;--text3:#555;
             --border:#1e1e1e;--border-h:#2a2a2a;
             --r:12px;--rl:20px;
@@ -80,7 +80,7 @@
         .hero-title .sub{display:block;font-size:clamp(1.4rem,3.5vw,2.4rem);font-weight:700;letter-spacing:-1px;color:var(--text);margin-top:.5rem;
             -webkit-text-fill-color:initial;filter:none;background:none;-webkit-background-clip:initial;background-clip:initial}
 
-        .hero-desc{position:relative;z-index:1;font-size:1.05rem;color:var(--text2);max-width:620px;margin-bottom:3rem;line-height:1.8}
+        .hero-desc{position:relative;z-index:1;font-size:1.05rem;color:var(--text2);max-width:640px;margin-bottom:3rem;line-height:1.8}
         .hero-actions{position:relative;z-index:1;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
 
         .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 1.6rem;border-radius:10px;font-size:.88rem;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:all .3s cubic-bezier(.4,0,.2,1);text-decoration:none;outline:none;position:relative}
@@ -122,8 +122,10 @@
         .section-tag{display:inline-flex;align-items:center;gap:.5rem;font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:2.5px;color:var(--accent);margin-bottom:1rem}
         .section-tag::before{content:'';width:20px;height:1px;background:var(--accent)}
         .section-header.center .section-tag::before{display:none}
+        .section-tag.purple{color:var(--purple)}
+        .section-tag.purple::before{background:var(--purple)}
         .section-title{font-size:clamp(2rem,4.5vw,3rem);font-weight:800;letter-spacing:-1.5px;line-height:1.15;margin-bottom:1rem}
-        .section-desc{font-size:1.02rem;color:var(--text2);max-width:560px;line-height:1.7}
+        .section-desc{font-size:1.02rem;color:var(--text2);max-width:600px;line-height:1.7}
         .section-header.center .section-desc{margin:0 auto}
 
         /* ── FEATURES ── */
@@ -135,6 +137,25 @@
             background:rgba(0,255,157,.06);border:1px solid rgba(0,255,157,.1);position:relative;z-index:1}
         .feature-card h3{font-size:1rem;font-weight:700;margin-bottom:.5rem;position:relative;z-index:1}
         .feature-card p{color:var(--text2);font-size:.83rem;line-height:1.65;position:relative;z-index:1}
+
+        /* ── MORE PILLS ── */
+        .more-strip{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin-top:3rem}
+        .pill{display:inline-flex;align-items:center;gap:.4rem;background:var(--bg-card);border:1px solid var(--border);border-radius:100px;padding:.5rem 1rem;font-size:.78rem;color:var(--text2);transition:all .25s}
+        .pill:hover{border-color:rgba(0,255,157,.3);color:var(--text);transform:translateY(-2px)}
+        .pill .pd{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+        /* ── ADVANCED ── */
+        .adv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem}
+        .adv-card{background:linear-gradient(180deg,rgba(124,92,252,.05),var(--bg-card));border:1px solid rgba(124,92,252,.18);border-radius:var(--r);padding:1.75rem;transition:all .35s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden}
+        .adv-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(124,92,252,.08) 0%,transparent 60%);opacity:0;transition:opacity .35s}
+        .adv-card:hover{border-color:rgba(124,92,252,.4);transform:translateY(-4px)}.adv-card:hover::before{opacity:1}
+        .adv-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;margin-bottom:1rem;
+            background:rgba(124,92,252,.1);border:1px solid rgba(124,92,252,.2);position:relative;z-index:1}
+        .adv-card h3{font-size:.95rem;font-weight:700;margin-bottom:.4rem;position:relative;z-index:1;color:#c8b8ff}
+        .adv-card p{color:var(--text2);font-size:.82rem;line-height:1.6;position:relative;z-index:1}
+        .adv-note{margin-top:2.5rem;text-align:center;background:rgba(124,92,252,.06);border:1px solid rgba(124,92,252,.18);border-radius:var(--r);padding:1.25rem 1.5rem;font-size:.88rem;color:#b8a5ff}
+        .adv-note a{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+        .adv-note .qq{font-family:'JetBrains Mono',monospace;color:#fff;font-weight:700}
 
         /* ── SHOWCASE ── */
         .showcase-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem}
@@ -159,6 +180,7 @@
         .arch-box::before{content:'ARCHITECTURE';position:absolute;top:1rem;right:1.5rem;font-size:.62rem;font-weight:600;letter-spacing:2px;color:var(--text3);font-family:'JetBrains Mono',monospace}
         .arch-box pre{font-family:'JetBrains Mono',monospace;font-size:.8rem;line-height:1.9;color:var(--text2)}
         .arch-box pre .hl{color:var(--accent);font-weight:600}
+        .arch-box pre .hl2{color:var(--purple);font-weight:600}
         .arch-box pre .cm{color:var(--text3)}
 
         /* ── STEPS ── */
@@ -171,10 +193,6 @@
         .step-body p{color:var(--text2);font-size:.85rem;line-height:1.6}
         .step-body a{color:var(--accent);font-weight:500;transition:opacity .2s}
         .step-body a:hover{opacity:.8}
-        .code-block{background:var(--bg-el);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem 1.75rem;margin-top:1.5rem;overflow-x:auto;position:relative}
-        .code-block::before{content:'POWERSHELL';position:absolute;top:.75rem;right:1rem;font-size:.6rem;font-weight:600;letter-spacing:1.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-        .code-block code{font-family:'JetBrains Mono',monospace;font-size:.78rem;line-height:1.8;color:var(--text2)}
-        .code-block .cm{color:var(--text3)}.code-block .kw{color:var(--accent)}.code-block .str{color:var(--purple)}
 
         /* ── CTA ── */
         .cta{position:relative;z-index:1;padding:8rem 0;text-align:center}
@@ -201,6 +219,7 @@
         /* ── RESPONSIVE ── */
         @media(max-width:1024px){
             .features-grid{grid-template-columns:repeat(2,1fr)}
+            .adv-grid{grid-template-columns:repeat(2,1fr)}
             .stats-grid{grid-template-columns:repeat(2,1fr)}
         }
         @media(max-width:768px){
@@ -227,6 +246,7 @@
             .section-title{font-size:clamp(1.6rem,6vw,2.2rem)}
             .features-grid{grid-template-columns:1fr}
             .feature-card{padding:1.5rem}
+            .adv-grid{grid-template-columns:1fr}
             .showcase-grid{grid-template-columns:1fr}
             .showcase-wide{grid-column:span 1}
             .stats-grid{grid-template-columns:repeat(2,1fr);gap:.75rem}
@@ -236,8 +256,6 @@
             .arch-box pre{font-size:.68rem}
             .steps-list{gap:.75rem}
             .step{flex-direction:column;gap:1rem;padding:1.25rem}
-            .code-block{padding:1.25rem}
-            .code-block code{font-size:.7rem}
             .cta{padding:5rem 0}
             .cta-actions{flex-direction:column;align-items:stretch;max-width:320px;margin:0 auto}
             .cta-actions .btn{justify-content:center}
@@ -266,6 +284,7 @@
         <li><a href="#features" data-i18n="nav_features">Features</a></li>
         <li><a href="#screenshots" data-i18n="nav_screenshots">Screenshots</a></li>
         <li><a href="#architecture" data-i18n="nav_architecture">Architecture</a></li>
+        <li><a href="#advanced" data-i18n="nav_advanced">Advanced</a></li>
         <li><a href="#quickstart" data-i18n="nav_quickstart">Quick Start</a></li>
         <li><a href="https://github.com/chao-shushu/CS2-DMA" target="_blank">GitHub</a></li>
     </ul>
@@ -296,7 +315,7 @@
 
     <p class="hero-desc reveal" data-i18n="hero_desc">
         A free, read-only external CS2 tool built with C++, using DMA hardware via FPGA devices.
-        ESP, Web Radar, Grenade Helper — no data upload, no telemetry, no server connection. Actively maintained with continuous updates and bug fixes.
+        ESP, Web Radar, Grenade Helper &mdash; zero data upload, no telemetry. Actively maintained with continuous updates and bug fixes.
     </p>
 
     <div class="hero-actions reveal">
@@ -352,69 +371,80 @@
         <div class="section-header center">
             <div class="section-tag" data-i18n="feat_tag">Features</div>
             <h2 class="section-title" data-i18n="feat_title">Everything You Need</h2>
-            <p class="section-desc" data-i18n="feat_desc">Full-featured external ESP system with DMA hardware optimization, designed for minimal latency and maximum stability.</p>
+            <p class="section-desc" data-i18n="feat_desc">Full-featured read-only external ESP system with DMA hardware optimization, designed for minimal latency and maximum stability.</p>
         </div>
         <div class="features-grid">
             <div class="feature-card reveal">
                 <div class="f-icon">&#128065;</div>
                 <h3 data-i18n="f1t">Visuals / ESP</h3>
-                <p data-i18n="f1d">Box, Bone, Health Bar, Armor Bar, Weapon, Distance, Player Name, Eye Ray, Snaplines, Head Dot, Safe Zone, Spectator List — fully customizable.</p>
+                <p data-i18n="f1d">Box, Bone, Health/Armor Bars, Weapon, Distance, Player Name, Eye Ray, Snaplines, Head Dot, Text Outline, Safe Zone &mdash; fully customizable.</p>
             </div>
             <div class="feature-card reveal reveal-delay-1">
-                <div class="f-icon">&#128163;</div>
-                <h3 data-i18n="f2t">Bomb ESP</h3>
-                <p data-i18n="f2d">Planted / Carried / Dropped / Defusing status display with explosion and defuse countdown timers.</p>
+                <div class="f-icon">&#128296;</div>
+                <h3 data-i18n="f2t">Weapon &amp; Ammo ESP</h3>
+                <p data-i18n="f2d">Weapon name, weapon icons (weapons.ttf glyph), ammo count (XX/YY) with low-ammo warning. Option to hide knife icons.</p>
             </div>
             <div class="feature-card reveal reveal-delay-2">
-                <div class="f-icon">&#128165;</div>
-                <h3 data-i18n="f3t">Projectile ESP</h3>
-                <p data-i18n="f3d">Real-time display of in-flight flashbangs, smokes, HE grenades, molotovs, and decoys with explosion radius rendering.</p>
+                <div class="f-icon">&#128100;</div>
+                <h3 data-i18n="f3t">Player Intel</h3>
+                <p data-i18n="f3d">Player flags (Blind/Scoped/Defusing/Kit/Money), bar value labels, spectator list with team color &amp; mode, ESP preview window.</p>
             </div>
             <div class="feature-card reveal reveal-delay-3">
-                <div class="f-icon">&#128225;</div>
-                <h3 data-i18n="f4t">Web Radar</h3>
-                <p data-i18n="f4d">Built-in WebSocket server. Any device on the LAN can view real-time radar via browser. Remote sharing via Cloudflare tunnel — no server needed.</p>
+                <div class="f-icon">&#128163;</div>
+                <h3 data-i18n="f4t">Bomb &amp; C4 Timer</h3>
+                <p data-i18n="f4d">Planted/Carried/Dropped/Defusing status. Draggable on-screen C4 countdown with defuse progress bar and kit detection.</p>
             </div>
             <div class="feature-card reveal">
-                <div class="f-icon">&#127919;</div>
-                <h3 data-i18n="f5t">Grenade Helper</h3>
-                <p data-i18n="f5d">Per-map preset throw positions with real-time direction arrow and distance indicator. Record, edit, and delete custom positions.</p>
+                <div class="f-icon">&#128165;</div>
+                <h3 data-i18n="f5t">Projectile &amp; World ESP</h3>
+                <p data-i18n="f5d">In-flight nades with explosion radius. World timers for smokes/infernos/decoys. Dropped-weapon ESP with category filter.</p>
             </div>
             <div class="feature-card reveal reveal-delay-1">
-                <div class="f-icon">&#9889;</div>
-                <h3 data-i18n="f6t">DMA Optimization</h3>
-                <p data-i18n="f6d">Scatter batch reads, on-demand field reading, tiered entity caching, zero-copy snapshot — sub-frame latency.</p>
+                <div class="f-icon">&#128266;</div>
+                <h3 data-i18n="f6t">Sound &amp; Footstep ESP</h3>
+                <p data-i18n="f6d">Ripple animation at enemy position on weapon fire. Movement pulse circle (excludes silent walk).</p>
             </div>
             <div class="feature-card reveal reveal-delay-2">
-                <div class="f-icon">&#128736;</div>
-                <h3 data-i18n="f7t">Config System</h3>
-                <p data-i18n="f7d">Create / save / load / delete multiple configs. Auto-loads _autosave.config on startup. Full JSON-based settings.</p>
+                <div class="f-icon">&#128064;</div>
+                <h3 data-i18n="f7t">Visibility Coloring</h3>
+                <p data-i18n="f7d">VPK map geometry BVH ray occlusion check. ESP elements two-color by visibility (visible vs hidden behind walls).</p>
+            </div>
+            <div class="feature-card reveal reveal-delay-3">
+                <div class="f-icon">&#127919;</div>
+                <h3 data-i18n="f8t">Crosshair &amp; Safe Zone</h3>
+                <p data-i18n="f8d">4 crosshair styles (Cross/Dot/Circle/Cross+Dot), enemy color change. Crosshair safe-zone cutout (circle/square, per-element).</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="f-icon">&#128225;</div>
+                <h3 data-i18n="f9t">Web Radar</h3>
+                <p data-i18n="f9d">Embedded WebSocket server. LAN access + Cloudflare tunnel. QR code, per-map calibration, team/spectator panels, advisory &amp; bomb escape arrow.</p>
+            </div>
+            <div class="feature-card reveal reveal-delay-1">
+                <div class="f-icon">&#127919;</div>
+                <h3 data-i18n="f10t">Grenade Helper</h3>
+                <p data-i18n="f10d">Per-map preset throw positions with real-time direction arrow &amp; distance. Record, edit, delete custom positions. Flash/smoke/HE/molotov.</p>
+            </div>
+            <div class="feature-card reveal reveal-delay-2">
+                <div class="f-icon">&#9889;</div>
+                <h3 data-i18n="f11t">DMA Optimization</h3>
+                <p data-i18n="f11d">Scatter batch reads, on-demand fields, tiered entity caching, zero-copy snapshot, quintic interpolation, 500Hz CameraWorker thread.</p>
             </div>
             <div class="feature-card reveal reveal-delay-3">
                 <div class="f-icon">&#128737;</div>
-                <h3 data-i18n="f8t">Crash Handler</h3>
-                <p data-i18n="f8d">SEH + std::terminate capture. Auto-generates .log + .dmp with recent logs, feature state, and system info.</p>
+                <h3 data-i18n="f12t">Stability &amp; Diagnostics</h3>
+                <p data-i18n="f12d">Player-count health check, tiered DMA refresh, adaptive shard discovery, crash handler (.log+.dmp), troubleshoot tool, performance monitor.</p>
             </div>
-            <div class="feature-card reveal">
-                <div class="f-icon">&#127919;</div>
-                <h3 data-i18n="f9t">Crosshair Overlay</h3>
-                <p data-i18n="f9d">4 styles (Cross/Dot/Circle/Cross+Dot), adjustable size &amp; color. Turns custom color when aiming at an enemy.</p>
-            </div>
-            <div class="feature-card reveal reveal-delay-1">
-                <div class="f-icon">&#128064;</div>
-                <h3 data-i18n="f10t">Spectator List</h3>
-                <p data-i18n="f10d">Detect who is spectating you. Shows spectator name, team color, and spectate mode ([Eye]/[Chase]/[Roam]).</p>
-            </div>
-            <div class="feature-card reveal reveal-delay-2">
-                <div class="f-icon">&#128202;</div>
-                <h3 data-i18n="f11t">Performance Monitor</h3>
-                <p data-i18n="f11d">On-screen overlay: FPS (color-coded), frame time, entity count, grenade count, spectator count.</p>
-            </div>
-            <div class="feature-card reveal reveal-delay-3">
-                <div class="f-icon">&#128274;</div>
-                <h3 data-i18n="f12t">Auto Validation</h3>
-                <p data-i18n="f12d">Startup checks: GitHub offset comparison, game version via Steam API, and auto update detection with proxy support.</p>
-            </div>
+        </div>
+
+        <div class="more-strip reveal">
+            <span class="pill"><span class="pd"></span><span data-i18n="more1">Multi-config autosave</span></span>
+            <span class="pill"><span class="pd"></span><span data-i18n="more2">15 hotkeys (dual-source)</span></span>
+            <span class="pill"><span class="pd"></span><span data-i18n="more3">Auto update check</span></span>
+            <span class="pill"><span class="pd"></span><span data-i18n="more4">DMA offset dumper</span></span>
+            <span class="pill"><span class="pd"></span><span data-i18n="more5">Steam API version check</span></span>
+            <span class="pill"><span class="pd"></span><span data-i18n="more6">System proxy auto-detect</span></span>
+            <span class="pill"><span class="pd"></span><span data-i18n="more7">Multi-monitor</span></span>
+            <span class="pill"><span class="pd"></span><span data-i18n="more8">Multi-language</span></span>
         </div>
     </div>
 </section>
@@ -483,8 +513,8 @@
                 <div class="stat-lbl" data-i18n="st1">Language Standard</div>
             </div>
             <div class="stat-card reveal reveal-delay-1">
-                <div class="stat-num">6</div>
-                <div class="stat-lbl" data-i18n="st2">Concurrent Threads</div>
+                <div class="stat-num">500Hz</div>
+                <div class="stat-lbl" data-i18n="st2">Camera Worker</div>
             </div>
             <div class="stat-card reveal reveal-delay-2">
                 <div class="stat-num">&lt;1</div>
@@ -497,18 +527,52 @@
         </div>
 
         <div class="arch-box reveal">
-            <pre data-i18n="arch_pre"><span class="hl">ConnectionThread</span>  <span class="cm">&mdash;&mdash; Game process lifecycle management (state machine)</span>
-<span class="hl">DataThread</span>        <span class="cm">&mdash;&mdash; Core pipeline: matrix &rarr; local player &rarr; entities &rarr; scatter read</span>
-<span class="hl">SlowUpdateThread</span>  <span class="cm">&mdash;&mdash; Low-frequency: entity list base address, map name</span>
-<span class="hl">KeysCheckThread</span>   <span class="cm">&mdash;&mdash; Keyboard state polling (DMA reads kernel key state)</span>
-<span class="hl">WebRadarThread</span>    <span class="cm">&mdash;&mdash; WebSocket broadcast: GameSnapshot &rarr; JSON</span>
-<span class="hl">Main Thread</span>       <span class="cm">&mdash;&mdash; ImGui window + ESP rendering (read-only Snapshot)</span>
-
-<span class="cm">Data flow:</span>
-  DataThread &mdash;&mdash;<span class="hl"> scatter DMA read </span>&mdash;&rarr; GameSnapshot (<span class="hl">shared_mutex</span>)
-      &boxvr;&mdash;&rarr; Render Thread  (<span class="hl">shared_lock</span>, read-only)
-      &boxur;&mdash;&rarr; WebRadar Thread (<span class="hl">shared_lock</span>, read-only)</pre>
+            <pre data-i18n="arch_pre"></pre>
         </div>
+    </div>
+</section>
+
+<!-- ═══ ADVANCED (Not Open-Sourced) ═══ -->
+<section class="section" id="advanced">
+    <div class="container">
+        <div class="section-header center">
+            <div class="section-tag purple" data-i18n="adv_tag">Advanced</div>
+            <h2 class="section-title" data-i18n="adv_title">Advanced Features (Not Open-Sourced)</h2>
+            <p class="section-desc" data-i18n="adv_desc">The open-source version is read-only DMA. The following advanced features are implemented via KMBox and similar hardware and are not open-sourced.</p>
+        </div>
+        <div class="adv-grid">
+            <div class="adv-card reveal">
+                <div class="adv-icon">&#127919;</div>
+                <h3 data-i18n="a1t">AimBot</h3>
+                <p data-i18n="a1d">FOV circle, smoothing, bone selection (Head/Neck/Chest/Pelvis), visibility check, bone fallback, 6 weapon-class configs.</p>
+            </div>
+            <div class="adv-card reveal reveal-delay-1">
+                <div class="adv-icon">&#128165;</div>
+                <h3 data-i18n="a2t">TriggerBot</h3>
+                <p data-i18n="a2d">Auto-fire with always/hold mode, delay, jitter, and hold duration control.</p>
+            </div>
+            <div class="adv-card reveal reveal-delay-2">
+                <div class="adv-icon">&#129518;</div>
+                <h3 data-i18n="a3t">Magnet TriggerBot</h3>
+                <p data-i18n="a3d">Magnetic assist &mdash; pure auto or hold, FOV, smoothing, 6 weapon-class specific configs.</p>
+            </div>
+            <div class="adv-card reveal">
+                <div class="adv-icon">&#128296;</div>
+                <h3 data-i18n="a4t">SprayControl</h3>
+                <p data-i18n="a4d">Auto recoil control with predicted landing-point visualization. Intensity auto-calculated from sensitivity.</p>
+            </div>
+            <div class="adv-card reveal reveal-delay-1">
+                <div class="adv-icon">&#128187;</div>
+                <h3 data-i18n="a5t">Hardware Support</h3>
+                <p data-i18n="a5d">KMBox NET / KMBox NET+ / KMBox B Pro / MAKCU device integration.</p>
+            </div>
+            <div class="adv-card reveal reveal-delay-2">
+                <div class="adv-icon">&#9888;</div>
+                <h3 data-i18n="a6t">Preset System</h3>
+                <p data-i18n="a6d">Safe / Competitive / Stealth one-click presets, plus velocity prediction and FOV circle visualization.</p>
+            </div>
+        </div>
+        <div class="adv-note reveal" data-i18n="adv_note"></div>
     </div>
 </section>
 
@@ -518,7 +582,7 @@
         <div class="section-header">
             <div class="section-tag" data-i18n="qs_tag">Quick Start</div>
             <h2 class="section-title" data-i18n="qs_title">Get Started in Minutes</h2>
-            <p class="section-desc" data-i18n="qs_desc">Download the release package and start using immediately — no build required.</p>
+            <p class="section-desc" data-i18n="qs_desc">Download the release package and start using immediately &mdash; no build required.</p>
         </div>
 
         <div class="steps-list">
@@ -557,14 +621,6 @@
                     <p data-i18n="qs5d">Toggle features on/off. Configure Visuals, Radar, Grenade Helper, Settings, and Config profiles.</p>
                 </div>
             </div>
-        </div>
-
-        <div class="code-block reveal">
-            <code><span class="cm"># Build from source (optional)</span>
-<span class="kw">git clone</span> <span class="str">https://github.com/chao-shushu/CS2-DMA.git</span>
-<span class="kw">cd</span> CS2-DMA
-&amp; <span class="str">"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"</span> `
-    <span class="str">"dma.slnx"</span> <span class="kw">/p:Configuration=Release /p:Platform=x64 /t:Rebuild /m</span></code>
         </div>
     </div>
 </section>
@@ -624,66 +680,48 @@
     // ── Mobile toggle ──
     const mobToggle = document.getElementById('mobToggle');
     const navMid = document.getElementById('navMid');
-    
     mobToggle.addEventListener('click', () => {
         const isOpen = navMid.classList.toggle('open');
         mobToggle.setAttribute('aria-expanded', isOpen);
-        // Set focus to first link when menu opens
-        if (isOpen && navMid.querySelector('a')) {
-            navMid.querySelector('a').focus();
-        }
+        if (isOpen && navMid.querySelector('a')) navMid.querySelector('a').focus();
     });
     document.querySelectorAll('.nav-mid a').forEach(a => {
-        a.addEventListener('click', () => {
-            navMid.classList.remove('open');
-            mobToggle.setAttribute('aria-expanded', 'false');
-        });
+        a.addEventListener('click', () => { navMid.classList.remove('open'); mobToggle.setAttribute('aria-expanded','false'); });
     });
     document.addEventListener('click', e => {
         if (!navMid.classList.contains('open')) return;
         if (e.target.closest('.nav-mid') || e.target.closest('.mob-toggle')) return;
-        navMid.classList.remove('open');
-        mobToggle.setAttribute('aria-expanded', 'false');
+        navMid.classList.remove('open'); mobToggle.setAttribute('aria-expanded','false');
     });
 
     // ── Intersection Observer for reveal animations ──
     const obs = new IntersectionObserver((entries) => {
-        entries.forEach(e => {
-            if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); }
-        });
+        entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
     }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
     document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
 
     // ── Fetch GitHub Release (with localStorage cache) ──
     const CACHE_KEY = 'cs2dma_release';
-    const CACHE_TTL = 30 * 60 * 1000; // 30 min
     function applyRelease(data) {
         document.getElementById('relVer').textContent = data.tag_name || data.name || '--';
-        if (data.published_at) {
-            document.getElementById('relDate').textContent = new Date(data.published_at).toLocaleDateString('en-CA');
-        }
+        if (data.published_at) document.getElementById('relDate').textContent = new Date(data.published_at).toLocaleDateString('en-CA');
         const dl = (data.assets || []).reduce((s, a) => s + (a.download_count || 0), 0) + 169;
         document.getElementById('relDL').textContent = dl.toLocaleString();
         document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
     }
     function applyFallback() {
         const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-            try { applyRelease(JSON.parse(cached)); return; } catch(e) {}
-        }
+        if (cached) { try { applyRelease(JSON.parse(cached)); return; } catch(e) {} }
         document.getElementById('relVer').textContent = '--';
         document.getElementById('relDate').textContent = '--';
         document.getElementById('relDL').textContent = '--';
         document.querySelectorAll('.meta-chip').forEach(el => el.classList.remove('ld'));
     }
-
     fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases/latest')
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(data => {
             applyRelease(data);
             try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, _ts: Date.now() })); } catch(e) {}
-            // ── Check for beta/pre-release (chained to avoid race) ──
-            const stableTag = data.tag_name || '';
             return fetch('https://api.github.com/repos/chao-shushu/CS2-DMA/releases');
         })
         .then(r => { if (!r) return null; if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -706,36 +744,50 @@
         })
         .catch(() => { applyFallback(); });
 
+    // ── Architecture pre HTML (shared, escaped via innerHTML) ──
+    const ARCH_EN = '<span class="hl">ConnectionThread</span>  <span class="cm">\u2014\u2014 Game process lifecycle management (state machine)</span>\n<span class="hl">DataThread</span>        <span class="cm">\u2014\u2014 Core pipeline: matrix \u2192 local player \u2192 entities \u2192 scatter read</span>\n<span class="hl">SlowUpdateThread</span>  <span class="cm">\u2014\u2014 Low-frequency: entity list base address, map name</span>\n<span class="hl">KeysCheckThread</span>   <span class="cm">\u2014\u2014 Keyboard polling (DMA kernel key state + local)</span>\n<span class="hl">WebRadarThread</span>    <span class="cm">\u2014\u2014 WebSocket broadcast: GameSnapshot \u2192 JSON</span>\n<span class="hl2">CameraWorker</span>      <span class="cm">\u2014\u2014 500Hz view matrix reads, decoupled from render</span>\n<span class="hl2">DmaAdminThread</span>    <span class="cm">\u2014\u2014 Async tiered DMA refresh (Probe / Repair / Full)</span>\n<span class="hl">Main Thread</span>       <span class="cm">\u2014\u2014 ImGui window + ESP rendering (read-only Snapshot)</span>\n\n<span class="cm">Data flow:</span>\n  DataThread \u2014\u2014<span class="hl"> scatter DMA read </span>\u2014\u2192 GameSnapshot (<span class="hl">double-buffer + atomic</span>)\n      \u251c\u2014\u2192 Render Thread   (<span class="hl">read-only</span>)\n      \u2514\u2014\u2192 WebRadar Thread  (<span class="hl">read-only</span>)';
+    const ARCH_ZH = '<span class="hl">ConnectionThread</span>  <span class="cm">\u2014\u2014 \u6e38\u620f\u8fdb\u7a0b\u751f\u547d\u5468\u671f\u7ba1\u7406\uff08\u72b6\u6001\u673a\uff09</span>\n<span class="hl">DataThread</span>        <span class="cm">\u2014\u2014 \u6838\u5fc3\u6570\u636e\u7ba1\u7ebf\uff1a\u77e9\u9635 \u2192 \u672c\u5730\u73a9\u5bb6 \u2192 \u5b9e\u4f53 \u2192 Scatter \u8bfb\u53d6</span>\n<span class="hl">SlowUpdateThread</span>  <span class="cm">\u2014\u2014 \u4f4e\u9891\u66f4\u65b0\uff1a\u5b9e\u4f53\u5217\u8868\u57fa\u5740\u3001\u5730\u56fe\u540d</span>\n<span class="hl">KeysCheckThread</span>   <span class="cm">\u2014\u2014 \u952e\u76d8\u8f6e\u8be2\uff08DMA \u5185\u6838\u952e\u76d8\u72b6\u6001 + \u672c\u673a\uff09</span>\n<span class="hl">WebRadarThread</span>    <span class="cm">\u2014\u2014 WebSocket \u5e7f\u64ad\uff1aGameSnapshot \u2192 JSON</span>\n<span class="hl2">CameraWorker</span>      <span class="cm">\u2014\u2014 500Hz \u89c6\u56fe\u77e9\u9635\u8bfb\u53d6\uff0c\u4e0e\u6e32\u67d3\u89e3\u8026</span>\n<span class="hl2">DmaAdminThread</span>    <span class="cm">\u2014\u2014 \u5f02\u6b65\u5206\u7ea7 DMA \u5237\u65b0\uff08Probe / Repair / Full\uff09</span>\n<span class="hl">\u4e3b\u7ebf\u7a0b (Render)</span>   <span class="cm">\u2014\u2014 ImGui \u7a97\u53e3 + ESP \u6e32\u67d3\uff08\u53ea\u8bfb Snapshot\uff09</span>\n\n<span class="cm">\u6570\u636e\u6d41\uff1a</span>\n  DataThread \u2014\u2014<span class="hl"> scatter DMA \u8bfb\u53d6 </span>\u2014\u2192 GameSnapshot (<span class="hl">\u53cc\u7f13\u51b2 + \u539f\u5b50\u4ea4\u6362</span>)\n      \u251c\u2014\u2192 \u6e32\u67d3\u7ebf\u7a0b   (<span class="hl">\u53ea\u8bfb</span>)\n      \u2514\u2014\u2192 WebRadar \u7ebf\u7a0b  (<span class="hl">\u53ea\u8bfb</span>)';
+
     // ── i18n ──
     const T = {
         en: {
-            nav_features:'Features', nav_screenshots:'Screenshots', nav_architecture:'Architecture', nav_quickstart:'Quick Start', nav_author:'Author',
+            nav_features:'Features', nav_screenshots:'Screenshots', nav_architecture:'Architecture', nav_advanced:'Advanced', nav_quickstart:'Quick Start', nav_author:'Author',
             hero_badge:'Free & Open Source \u2022 Actively Maintained \u2022 Zero Data Upload', hero_title:'External ESP Tool',
-            hero_desc:'A free, read-only external CS2 tool built with C++, using DMA hardware via FPGA devices. ESP, Web Radar, Grenade Helper \u2014 no data upload, no telemetry, no server connection. Actively maintained with continuous updates and bug fixes.',
+            hero_desc:'A free, read-only external CS2 tool built with C++, using DMA hardware via FPGA devices. ESP, Web Radar, Grenade Helper \u2014 zero data upload, no telemetry. Actively maintained with continuous updates and bug fixes.',
             hero_star:'Star on GitHub', hero_download:'Download', hero_source:'Source Code',
             rel_ver:'Version', rel_date:'Updated', rel_dl:'Downloads',
             beta_banner:'A new beta version is available!', beta_link:'View Release',
             feat_tag:'Features', feat_title:'Everything You Need',
-            feat_desc:'Full-featured external ESP system with DMA hardware optimization, designed for minimal latency and maximum stability.',
-            f1t:'Visuals / ESP', f1d:'Box, Bone, Health Bar, Armor Bar, Weapon, Distance, Player Name, Eye Ray, Snaplines, Head Dot, Safe Zone, Spectator List \u2014 fully customizable.',
-            f2t:'Bomb ESP', f2d:'Planted / Carried / Dropped / Defusing status display with explosion and defuse countdown timers.',
-            f3t:'Projectile ESP', f3d:'Real-time display of in-flight flashbangs, smokes, HE grenades, molotovs, and decoys with explosion radius rendering.',
-            f4t:'Web Radar', f4d:'Built-in WebSocket server. Any device on the LAN can view real-time radar via browser. Remote sharing via Cloudflare tunnel \u2014 no server needed.',
-            f5t:'Grenade Helper', f5d:'Per-map preset throw positions with real-time direction arrow and distance indicator. Record, edit, and delete custom positions.',
-            f6t:'DMA Optimization', f6d:'Scatter batch reads, on-demand field reading, tiered entity caching, zero-copy snapshot \u2014 sub-frame latency.',
-            f7t:'Config System', f7d:'Create / save / load / delete multiple configs. Auto-loads _autosave.config on startup. Full JSON-based settings.',
-            f8t:'Crash Handler', f8d:'SEH + std::terminate capture. Auto-generates .log + .dmp with recent logs, feature state, and system info.',
-            f9t:'Crosshair Overlay', f9d:'4 styles (Cross/Dot/Circle/Cross+Dot), adjustable size & color. Turns custom color when aiming at an enemy.',
-            f10t:'Spectator List', f10d:'Detect who is spectating you. Shows spectator name, team color, and spectate mode ([Eye]/[Chase]/[Roam]).',
-            f11t:'Performance Monitor', f11d:'On-screen overlay: FPS (color-coded), frame time, entity count, grenade count, spectator count.',
-            f12t:'Auto Validation', f12d:'Startup checks: GitHub offset comparison, game version via Steam API, and auto update detection with proxy support.',
+            feat_desc:'Full-featured read-only external ESP system with DMA hardware optimization, designed for minimal latency and maximum stability.',
+            f1t:'Visuals / ESP', f1d:'Box, Bone, Health/Armor Bars, Weapon, Distance, Player Name, Eye Ray, Snaplines, Head Dot, Text Outline, Safe Zone \u2014 fully customizable.',
+            f2t:'Weapon & Ammo ESP', f2d:'Weapon name, weapon icons (weapons.ttf glyph), ammo count (XX/YY) with low-ammo warning. Option to hide knife icons.',
+            f3t:'Player Intel', f3d:'Player flags (Blind/Scoped/Defusing/Kit/Money), bar value labels, spectator list with team color & mode, ESP preview window.',
+            f4t:'Bomb & C4 Timer', f4d:'Planted/Carried/Dropped/Defusing status. Draggable on-screen C4 countdown with defuse progress bar and kit detection.',
+            f5t:'Projectile & World ESP', f5d:'In-flight nades with explosion radius. World timers for smokes/infernos/decoys. Dropped-weapon ESP with category filter.',
+            f6t:'Sound & Footstep ESP', f6d:'Ripple animation at enemy position on weapon fire. Movement pulse circle (excludes silent walk).',
+            f7t:'Visibility Coloring', f7d:'VPK map geometry BVH ray occlusion check. ESP elements two-color by visibility (visible vs hidden behind walls).',
+            f8t:'Crosshair & Safe Zone', f8d:'4 crosshair styles (Cross/Dot/Circle/Cross+Dot), enemy color change. Crosshair safe-zone cutout (circle/square, per-element).',
+            f9t:'Web Radar', f9d:'Embedded WebSocket server. LAN access + Cloudflare tunnel. QR code, per-map calibration, team/spectator panels, advisory & bomb escape arrow.',
+            f10t:'Grenade Helper', f10d:'Per-map preset throw positions with real-time direction arrow & distance. Record, edit, delete custom positions. Flash/smoke/HE/molotov.',
+            f11t:'DMA Optimization', f11d:'Scatter batch reads, on-demand fields, tiered entity caching, zero-copy snapshot, quintic interpolation, 500Hz CameraWorker thread.',
+            f12t:'Stability & Diagnostics', f12d:'Player-count health check, tiered DMA refresh, adaptive shard discovery, crash handler (.log+.dmp), troubleshoot tool, performance monitor.',
+            more1:'Multi-config autosave', more2:'15 hotkeys (dual-source)', more3:'Auto update check', more4:'DMA offset dumper', more5:'Steam API version check', more6:'System proxy auto-detect', more7:'Multi-monitor', more8:'Multi-language',
             ss_tag:'Screenshots', ss_title:'See It in Action',
             ss_desc:'Real gameplay captures demonstrating the tool\'s ESP, radar, and grenade helper capabilities.',
             ss_esp:'Visuals / ESP', ss_bomb:'Bomb ESP', ss_proj:'Projectile ESP', ss_radar:'Web Radar', ss_gren:'Grenade Helper',
             arch_tag:'Architecture', arch_title:'Multi-Thread + Snapshot',
             arch_desc:'Clean separation of concerns with lock-free rendering and sub-frame data latency.',
-            st1:'Language Standard', st2:'Concurrent Threads', st3:'Frame Data Latency', st4:'Redundant Read Reduction',
-            arch_pre:'<span class="hl">ConnectionThread</span>  <span class="cm">\u2014\u2014 Game process lifecycle management (state machine)</span>\n<span class="hl">DataThread</span>        <span class="cm">\u2014\u2014 Core pipeline: matrix \u2192 local player \u2192 entities \u2192 scatter read</span>\n<span class="hl">SlowUpdateThread</span>  <span class="cm">\u2014\u2014 Low-frequency: entity list base address, map name</span>\n<span class="hl">KeysCheckThread</span>   <span class="cm">\u2014\u2014 Keyboard state polling (DMA reads kernel key state)</span>\n<span class="hl">WebRadarThread</span>    <span class="cm">\u2014\u2014 WebSocket broadcast: GameSnapshot \u2192 JSON</span>\n<span class="hl">Main Thread</span>       <span class="cm">\u2014\u2014 ImGui window + ESP rendering (read-only Snapshot)</span>\n\n<span class="cm">Data flow:</span>\n  DataThread \u2014\u2014<span class="hl"> scatter DMA read </span>\u2014\u2192 GameSnapshot (<span class="hl">shared_mutex</span>)\n      \u251c\u2014\u2192 Render Thread  (<span class="hl">shared_lock</span>, read-only)\n      \u2514\u2014\u2192 WebRadar Thread (<span class="hl">shared_lock</span>, read-only)',
+            st1:'Language Standard', st2:'Camera Worker', st3:'Frame Data Latency', st4:'Redundant Read Reduction',
+            arch_pre: ARCH_EN,
+            adv_tag:'Advanced', adv_title:'Advanced Features (Not Open-Sourced)',
+            adv_desc:'The open-source version is read-only DMA. The following advanced features are implemented via KMBox and similar hardware and are not open-sourced.',
+            a1t:'AimBot', a1d:'FOV circle, smoothing, bone selection (Head/Neck/Chest/Pelvis), visibility check, bone fallback, 6 weapon-class configs.',
+            a2t:'TriggerBot', a2d:'Auto-fire with always/hold mode, delay, jitter, and hold duration control.',
+            a3t:'Magnet TriggerBot', a3d:'Magnetic assist \u2014 pure auto or hold, FOV, smoothing, 6 weapon-class specific configs.',
+            a4t:'SprayControl', a4d:'Auto recoil control with predicted landing-point visualization. Intensity auto-calculated from sensitivity.',
+            a5t:'Hardware Support', a5d:'KMBox NET / KMBox NET+ / KMBox B Pro / MAKCU device integration.',
+            a6t:'Preset System', a6d:'Safe / Competitive / Stealth one-click presets, plus velocity prediction and FOV circle visualization.',
+            adv_note:'To get the advanced version, please join QQ group <span class="qq">965428002</span>. <a href="https://github.com/chao-shushu/CS2-DMA" target="_blank">View on GitHub \u2192</a>',
             qs_tag:'Quick Start', qs_title:'Get Started in Minutes',
             qs_desc:'Download the release package and start using immediately \u2014 no build required.',
             qs1t:'Download the Latest Release', qs1d:'Go to the <a href="https://github.com/chao-shushu/CS2-DMA/releases" target="_blank">Releases</a> page and download CS2-DMA-Release.zip.',
@@ -749,33 +801,43 @@
             disclaimer:'This project is for educational and research purposes only. The authors are not responsible for any misuse. Do not use in real competitive matches. Use at your own risk.'
         },
         zh: {
-            nav_features:'\u529f\u80fd', nav_screenshots:'\u622a\u56fe', nav_architecture:'\u67b6\u6784', nav_quickstart:'\u5feb\u901f\u5f00\u59cb', nav_author:'\u4f5c\u8005\u4e3b\u9875',
+            nav_features:'\u529f\u80fd', nav_screenshots:'\u622a\u56fe', nav_architecture:'\u67b6\u6784', nav_advanced:'\u9ad8\u7ea7\u529f\u80fd', nav_quickstart:'\u5feb\u901f\u5f00\u59cb', nav_author:'\u4f5c\u8005\u4e3b\u9875',
             hero_badge:'\u514d\u8d39\u5f00\u6e90 \u2022 \u6301\u7eed\u66f4\u65b0 \u2022 \u96f6\u6570\u636e\u4e0a\u4f20', hero_title:'\u5916\u90e8 ESP \u5de5\u5177',
-            hero_desc:'\u514d\u8d39\u3001\u53ea\u8bfb\u7684 CS2 \u5916\u90e8\u5de5\u5177\uff0c\u57fa\u4e8e C++ + FPGA DMA \u786c\u4ef6\u3002ESP\u3001\u96f7\u8fbe\u3001\u6295\u63b7\u7269\u52a9\u624b \u2014\u2014 \u65e0\u6570\u636e\u4e0a\u4f20\u3001\u65e0\u9065\u6d4b\u3001\u65e0\u670d\u52a1\u5668\u8fde\u63a5\u3002\u6301\u7eed\u66f4\u65b0\u4e0e Bug \u4fee\u590d\uff0c\u6ce8\u91cd\u9690\u79c1\u4fdd\u62a4\u3002',
+            hero_desc:'\u514d\u8d39\u3001\u53ea\u8bfb\u7684 CS2 \u5916\u90e8\u5de5\u5177\uff0c\u57fa\u4e8e C++ + FPGA DMA \u786c\u4ef6\u3002ESP\u3001\u7f51\u9875\u96f7\u8fbe\u3001\u6295\u63b7\u7269\u52a9\u624b \u2014\u2014 \u96f6\u6570\u636e\u4e0a\u4f20\u3001\u65e0\u9065\u6d4b\u3002\u6301\u7eed\u66f4\u65b0\u4e0e Bug \u4fee\u590d\uff0c\u6ce8\u91cd\u9690\u79c1\u4fdd\u62a4\u3002',
             hero_star:'\u5728 GitHub \u4e0a Star', hero_download:'\u4e0b\u8f7d', hero_source:'\u67e5\u770b\u6e90\u7801',
             rel_ver:'\u7248\u672c', rel_date:'\u66f4\u65b0\u65e5\u671f', rel_dl:'\u4e0b\u8f7d\u6b21\u6570',
             beta_banner:'\u6709\u65b0\u7684\u6d4b\u8bd5\u7248\u672c\uff01', beta_link:'\u67e5\u770b\u53d1\u5e03',
             feat_tag:'\u529f\u80fd\u7279\u6027', feat_title:'\u5168\u529f\u80fd\u8986\u76d6',
-            feat_desc:'\u5168\u529f\u80fd\u5916\u90e8 ESP \u7cfb\u7edf\uff0c\u914d\u5408 DMA \u786c\u4ef6\u4f18\u5316\uff0c\u4e3a\u6700\u4f4e\u5ef6\u8fdf\u548c\u6781\u81f4\u7a33\u5b9a\u800c\u8bbe\u8ba1\u3002',
-            f1t:'Visuals / ESP', f1d:'\u65b9\u6846\u3001\u9aa8\u9abc\u3001\u8840\u91cf\u6761\u3001\u62a4\u7532\u6761\u3001\u6b66\u5668\u3001\u8ddd\u79bb\u3001\u73a9\u5bb6\u540d\u79f0\u3001\u89c6\u7ebf\u3001\u8fde\u7ebf\u3001\u5934\u90e8\u5706\u70b9\u3001\u5b89\u5168\u533a\u57df\u3001\u89c2\u4f17\u5217\u8868 \u2014\u2014 \u5b8c\u5168\u53ef\u81ea\u5b9a\u4e49\u3002',
-            f2t:'\u70b8\u5f39 ESP', f2d:'\u70b8\u5f39\u5df2\u5b89\u88c5 / \u88ab\u643a\u5e26 / \u6389\u843d / \u6b63\u5728\u62c6\u9664\u72b6\u6001\u663e\u793a\uff0c\u7206\u70b8\u5012\u8ba1\u65f6\u4e0e\u62c6\u9664\u5012\u8ba1\u65f6\u3002',
-            f3t:'\u6295\u63b7\u7269 ESP', f3d:'\u5b9e\u65f6\u663e\u793a\u98de\u884c\u4e2d\u7684\u95ea\u5149\u5f39\u3001\u70df\u96fe\u5f39\u3001HE\u3001\u71c3\u70e7\u5f39\u3001\u8bf1\u9975\u5f39\uff0c\u5e76\u6e32\u67d3\u7206\u70b8/\u6548\u679c\u8303\u56f4\u5708\u3002',
-            f4t:'\u7f51\u9875\u96f7\u8fbe', f4d:'\u5185\u5d4c WebSocket \u670d\u52a1\u5668\uff0c\u5c40\u57df\u7f51\u5185\u4efb\u4f55\u8bbe\u5907\u6d4f\u89c8\u5668\u5373\u53ef\u67e5\u770b\u5b9e\u65f6\u96f7\u8fbe\u3002\u8fdc\u7a0b\u5171\u4eab\u652f\u6301 Cloudflare \u96a7\u9053\uff0c\u65e0\u9700\u670d\u52a1\u5668\u3002',
-            f5t:'\u6295\u63b7\u7269\u52a9\u624b', f5d:'\u6309\u5730\u56fe\u52a0\u8f7d\u9884\u8bbe\u6295\u63b7\u70b9\u4f4d\uff0c\u5b9e\u65f6\u65b9\u5411\u5f15\u5bfc\u7bad\u5934 + \u8ddd\u79bb\u63d0\u793a\u3002\u652f\u6301\u5f55\u5236/\u7f16\u8f91/\u5220\u9664\u81ea\u5b9a\u4e49\u70b9\u4f4d\u3002',
-            f6t:'DMA \u4f4e\u5ef6\u8fdf\u4f18\u5316', f6d:'Scatter \u6279\u91cf\u8bfb\u53d6\u3001\u6309\u9700\u8bfb\u53d6\u3001\u5b9e\u4f53\u7f13\u5b58\u5206\u5c42\u3001\u5feb\u7167\u96f6\u62f7\u8d1d \u2014\u2014 \u6570\u636e\u5ef6\u8fdf < 1 \u5e27\u3002',
-            f7t:'\u914d\u7f6e\u7cfb\u7edf', f7d:'\u521b\u5efa / \u4fdd\u5b58 / \u52a0\u8f7d / \u5220\u9664\u591a\u5957\u914d\u7f6e\u3002\u542f\u52a8\u81ea\u52a8\u52a0\u8f7d _autosave.config\u3002\u5b8c\u5168 JSON \u683c\u5f0f\u3002',
-            f8t:'\u5d29\u6e83\u5904\u7406', f8d:'SEH + std::terminate \u6355\u83b7\uff0c\u81ea\u52a8\u751f\u6210 .log + .dmp\uff0c\u542b\u6700\u8fd1\u65e5\u5fd7\u3001\u529f\u80fd\u72b6\u6001\u3001\u7cfb\u7edf\u4fe1\u606f\u3002',
-            f9t:'\u51c6\u661f\u8986\u76d6\u5c42', f9d:'4 \u79cd\u6837\u5f0f\uff08\u5341\u5b57/\u5706\u70b9/\u5706\u5708/\u5341\u5b57+\u5706\u70b9\uff09\uff0c\u53ef\u8c03\u5927\u5c0f\u989c\u8272\u3002\u7784\u51c6\u654c\u4eba\u65f6\u81ea\u52a8\u53d8\u8272\u3002',
-            f10t:'\u89c2\u4f17\u5217\u8868', f10d:'\u68c0\u6d4b\u8c01\u5728\u89c2\u6218\u4f60\uff0c\u663e\u793a\u89c2\u4f17\u540d\u79f0\u3001\u961f\u4f0d\u989c\u8272\u3001\u89c2\u6218\u6a21\u5f0f\uff08[Eye]/[Chase]/[Roam]\uff09\u3002',
-            f11t:'\u6027\u80fd\u76d1\u63a7', f11d:'\u5c4f\u5e55\u8986\u76d6\u5c42\uff1aFPS\uff08\u989c\u8272\u7f16\u7801\uff09\u3001\u5e27\u65f6\u95f4\u3001\u5b9e\u4f53\u6570\u3001\u6295\u63b7\u7269\u6570\u3001\u89c2\u4f17\u6570\u3002',
-            f12t:'\u81ea\u52a8\u6821\u9a8c', f12d:'\u542f\u52a8\u68c0\u67e5\uff1aGitHub \u504f\u79fb\u5bf9\u6bd4\u3001Steam API \u6e38\u620f\u7248\u672c\u68c0\u6d4b\u3001\u81ea\u52a8\u66f4\u65b0\u63d0\u793a\uff08\u652f\u6301\u4ee3\u7406\uff09\u3002',
+            feat_desc:'\u5168\u529f\u80fd\u53ea\u8bfb\u5916\u90e8 ESP \u7cfb\u7edf\uff0c\u914d\u5408 DMA \u786c\u4ef6\u4f18\u5316\uff0c\u4e3a\u6700\u4f4e\u5ef6\u8fdf\u548c\u6781\u81f4\u7a33\u5b9a\u800c\u8bbe\u8ba1\u3002',
+            f1t:'Visuals / ESP', f1d:'\u65b9\u6846\u3001\u9aa8\u9abc\u3001\u8840\u91cf/\u62a4\u7532\u6761\u3001\u6b66\u5668\u3001\u8ddd\u79bb\u3001\u73a9\u5bb6\u540d\u79f0\u3001\u89c6\u7ebf\u3001\u8fde\u7ebf\u3001\u5934\u90e8\u5706\u70b9\u3001\u6587\u672c\u63cf\u8fb9\u3001\u5b89\u5168\u533a\u57df \u2014\u2014 \u5b8c\u5168\u53ef\u81ea\u5b9a\u4e49\u3002',
+            f2t:'\u6b66\u5668\u4e0e\u5f39\u836f ESP', f2d:'\u6b66\u5668\u540d\u79f0\u3001\u6b66\u5668\u56fe\u6807\uff08weapons.ttf \u5b57\u5f62\uff09\u3001\u5f39\u836f\u91cf\uff08XX/YY\uff09\u4f4e\u5f39\u836f\u8b66\u544a\uff0c\u53ef\u9009\u9690\u85cf\u5315\u9996\u56fe\u6807\u3002',
+            f3t:'\u73a9\u5bb6\u60c5\u62a5', f3d:'\u73a9\u5bb6\u72b6\u6001\u6807\u5fd7\uff08\u81f4\u76f2/\u5f00\u955c/\u62c6\u5f39/\u62c6\u5f39\u5668/\u91d1\u94b1\uff09\u3001\u6761\u5f62\u6570\u503c\u6807\u7b7e\u3001\u89c2\u4f17\u5217\u8868\uff08\u961f\u4f0d\u989c\u8272/\u6a21\u5f0f\uff09\u3001ESP \u9884\u89c8\u7a97\u53e3\u3002',
+            f4t:'\u70b8\u5f39\u4e0e C4 \u8ba1\u65f6\u5668', f4d:'\u70b8\u5f39\u5df2\u5b89\u88c5/\u88ab\u643a\u5e26/\u6389\u843d/\u62c6\u9664\u72b6\u6001\u3002\u53ef\u62d6\u52a8\u7684\u5c4f\u5e55 C4 \u5012\u8ba1\u65f6\uff0c\u542b\u62c6\u5f39\u8fdb\u5ea6\u6761\u548c\u62c6\u5f39\u5668\u68c0\u6d4b\u3002',
+            f5t:'\u6295\u63b7\u7269\u4e0e\u4e16\u754c ESP', f5d:'\u98de\u884c\u4e2d\u6295\u63b7\u7269\u53ca\u7206\u70b8\u8303\u56f4\u5708\u3002\u70df\u96fe/\u71c3\u70e7/\u8bf1\u9975\u4e16\u754c\u8ba1\u65f6\u5668\u3002\u5730\u4e0a\u6389\u843d\u6b66\u5668 ESP\uff0c\u6309\u7c7b\u522b\u8fc7\u6ee4\u3002',
+            f6t:'\u58f0\u97f3\u4e0e\u811a\u6b65 ESP', f6d:'\u654c\u65b9\u5f00\u706b\u65f6\u4f4d\u7f6e\u6ce2\u7eb9\u52a8\u753b\u3002\u79fb\u52a8\u811a\u6b65\u8109\u52a8\u5708\uff08\u9759\u6b65\u9664\u5916\uff09\u3002',
+            f7t:'\u53ef\u89c1\u6027\u7740\u8272', f7d:'\u57fa\u4e8e VPK \u5730\u56fe\u51e0\u4f55 BVH \u5c04\u7ebf\u906e\u6321\u68c0\u6d4b\uff0c\u6309\u53ef\u89c1\u6027\u5bf9 ESP \u5143\u7d20\u53cc\u8272\u7740\u8272\uff08\u53ef\u89c1/\u88ab\u5899\u906e\u6321\uff09\u3002',
+            f8t:'\u51c6\u661f\u4e0e\u5b89\u5168\u533a', f8d:'4 \u79cd\u51c6\u661f\u6837\u5f0f\uff08\u5341\u5b57/\u5706\u70b9/\u5706\u5708/\u5341\u5b57+\u5706\u70b9\uff09\uff0c\u7784\u51c6\u654c\u4eba\u53d8\u8272\u3002\u51c6\u5fc3\u5b89\u5168\u533a\u88c1\u5207\uff08\u5706\u5f62/\u65b9\u5f62\uff0c\u6309\u5143\u7d20\uff09\u3002',
+            f9t:'\u7f51\u9875\u96f7\u8fbe', f9d:'\u5185\u5d4c WebSocket \u670d\u52a1\u5668\uff0c\u5c40\u57df\u7f51 + Cloudflare \u96a7\u9053\u3002\u4e8c\u7ef4\u7801\u3001\u6309\u5730\u56fe\u6821\u51c6\u3001\u961f\u4f0d/\u89c2\u6218\u9762\u677f\u3001\u63d0\u793a\u4e0e\u70b8\u5f39\u9003\u751f\u7bad\u5934\u3002',
+            f10t:'\u6295\u63b7\u7269\u52a9\u624b', f10d:'\u6309\u5730\u56fe\u52a0\u8f7d\u9884\u8bbe\u6295\u63b7\u70b9\u4f4d\uff0c\u5b9e\u65f6\u65b9\u5411\u7bad\u5934 + \u8ddd\u79bb\u3002\u652f\u6301\u5f55\u5236/\u7f16\u8f91/\u5220\u9664\uff0c\u95ea\u5149/\u70df\u96fe/HE/\u71c3\u70e7\u5f39\u3002',
+            f11t:'DMA \u4f4e\u5ef6\u8fdf\u4f18\u5316', f11d:'Scatter \u6279\u91cf\u8bfb\u53d6\u3001\u6309\u9700\u8bfb\u53d6\u3001\u5b9e\u4f53\u7f13\u5b58\u5206\u5c42\u3001\u5feb\u7167\u96f6\u62f7\u8d1d\u3001\u4e94\u6b21\u63d2\u503c\u5e73\u6ed1\u3001500Hz CameraWorker \u7ebf\u7a0b\u3002',
+            f12t:'\u7a33\u5b9a\u6027\u4e0e\u8bca\u65ad', f12d:'\u73a9\u5bb6\u6570\u5065\u5eb7\u68c0\u67e5\u3001\u5206\u7ea7 DMA \u5237\u65b0\u3001\u81ea\u9002\u5e94\u5206\u7247\u3001\u5d29\u6e83\u5904\u7406\uff08.log+.dmp\uff09\u3001\u81ea\u52a9\u6392\u969c\u5de5\u5177\u3001\u6027\u80fd\u76d1\u63a7\u3002',
+            more1:'\u591a\u914d\u7f6e\u81ea\u52a8\u4fdd\u5b58', more2:'15 \u4e2a\u70ed\u952e\uff08\u53cc\u6e90\uff09', more3:'\u81ea\u52a8\u68c0\u67e5\u66f4\u65b0', more4:'DMA \u504f\u79fb\u63d0\u53d6', more5:'Steam API \u7248\u672c\u68c0\u67e5', more6:'\u7cfb\u7edf\u4ee3\u7406\u81ea\u52a8\u68c0\u6d4b', more7:'\u591a\u663e\u793a\u5668', more8:'\u591a\u8bed\u8a00',
             ss_tag:'\u622a\u56fe', ss_title:'\u5b9e\u9645\u6548\u679c',
             ss_desc:'\u771f\u5b9e\u6e38\u620f\u622a\u56fe\uff0c\u5c55\u793a ESP\u3001\u96f7\u8fbe\u3001\u6295\u63b7\u7269\u52a9\u624b\u7b49\u529f\u80fd\u6548\u679c\u3002',
             ss_esp:'Visuals / ESP', ss_bomb:'\u70b8\u5f39 ESP', ss_proj:'\u6295\u63b7\u7269 ESP', ss_radar:'\u7f51\u9875\u96f7\u8fbe', ss_gren:'\u6295\u63b7\u7269\u52a9\u624b',
             arch_tag:'\u67b6\u6784', arch_title:'\u591a\u7ebf\u7a0b + \u5feb\u7167',
             arch_desc:'\u6e05\u6670\u7684\u804c\u8d23\u5206\u79bb\uff0c\u65e0\u9501\u6e32\u67d3\uff0c\u6570\u636e\u5ef6\u8fdf\u4f4e\u4e8e 1 \u5e27\u3002',
-            st1:'\u8bed\u8a00\u6807\u51c6', st2:'\u5e76\u53d1\u7ebf\u7a0b', st3:'\u5e27\u6570\u636e\u5ef6\u8fdf', st4:'\u5197\u4f59\u8bfb\u53d6\u51cf\u5c11',
-            arch_pre:'<span class="hl">ConnectionThread</span>  <span class="cm">\u2014\u2014 \u6e38\u620f\u8fdb\u7a0b\u751f\u547d\u5468\u671f\u7ba1\u7406\uff08\u72b6\u6001\u673a\uff09</span>\n<span class="hl">DataThread</span>        <span class="cm">\u2014\u2014 \u6838\u5fc3\u6570\u636e\u7ba1\u7ebf\uff1a\u77e9\u9635 \u2192 \u672c\u5730\u73a9\u5bb6 \u2192 \u5b9e\u4f53 \u2192 Scatter \u8bfb\u53d6</span>\n<span class="hl">SlowUpdateThread</span>  <span class="cm">\u2014\u2014 \u4f4e\u9891\u66f4\u65b0\uff1a\u5b9e\u4f53\u5217\u8868\u57fa\u5740\u3001\u5730\u56fe\u540d</span>\n<span class="hl">KeysCheckThread</span>   <span class="cm">\u2014\u2014 \u952e\u76d8\u72b6\u6001\u8f6e\u8be2\uff08DMA \u8bfb\u53d6\u5185\u6838\u952e\u76d8\u72b6\u6001\uff09</span>\n<span class="hl">WebRadarThread</span>    <span class="cm">\u2014\u2014 WebSocket \u5e7f\u64ad\uff1aGameSnapshot \u2192 JSON</span>\n<span class="hl">\u4e3b\u7ebf\u7a0b (Render)</span>   <span class="cm">\u2014\u2014 ImGui \u7a97\u53e3 + ESP \u6e32\u67d3\uff08\u53ea\u8bfb Snapshot\uff09</span>\n\n<span class="cm">\u6570\u636e\u6d41\uff1a</span>\n  DataThread \u2014\u2014<span class="hl"> scatter DMA \u8bfb\u53d6 </span>\u2014\u2192 GameSnapshot (<span class="hl">shared_mutex</span>)\n      \u251c\u2014\u2192 \u6e32\u67d3\u7ebf\u7a0b  (<span class="hl">shared_lock</span>, \u53ea\u8bfb)\n      \u2514\u2014\u2192 WebRadar \u7ebf\u7a0b (<span class="hl">shared_lock</span>, \u53ea\u8bfb)',
+            st1:'\u8bed\u8a00\u6807\u51c6', st2:'Camera \u7ebf\u7a0b', st3:'\u5e27\u6570\u636e\u5ef6\u8fdf', st4:'\u5197\u4f59\u8bfb\u53d6\u51cf\u5c11',
+            arch_pre: ARCH_ZH,
+            adv_tag:'\u9ad8\u7ea7\u529f\u80fd', adv_title:'\u9ad8\u7ea7\u529f\u80fd\uff08\u4e0d\u5f00\u6e90\uff09',
+            adv_desc:'\u5f00\u6e90\u7248\u672c\u4e3a\u7eaf\u53ea\u8bfb DMA\u3002\u4ee5\u4e0b\u9ad8\u7ea7\u529f\u80fd\u57fa\u4e8e KMBox \u7b49\u786c\u4ef6\u5b9e\u73b0\uff0c\u4e0d\u5f00\u6e90\u3002',
+            a1t:'\u81ea\u7784 AimBot', a1d:'FOV \u5708\u3001\u5e73\u6ed1\u3001\u9aa8\u9abc\u9009\u62e9\uff08\u5934/\u9888/\u80f8/\u76c6\u9aa8\uff09\u3001\u53ef\u89c1\u6027\u68c0\u67e5\u3001\u90e8\u4f4d\u964d\u7ea7\u30016 \u7c7b\u6b66\u5668\u7ec6\u5206\u53c2\u6570\u3002',
+            a2t:'\u81ea\u52a8\u5f00\u706b TriggerBot', a2d:'\u81ea\u52a8\u5f00\u706b\uff0c\u652f\u6301\u59cb\u7ec8/\u6309\u952e\u6a21\u5f0f\u3001\u5ef6\u8fdf\u3001\u6296\u52a8\u3001\u6309\u4f4f\u65f6\u957f\u3002',
+            a3t:'\u78c1\u529b\u5438\u9644 Magnet', a3d:'\u78c1\u529b\u5438\u9644 \u2014\u2014 \u7eaf\u81ea\u52a8\u6216\u6309\u952e\u3001FOV\u3001\u5e73\u6ed1\u30016 \u7c7b\u6b66\u5668\u7ec6\u5206\u53c2\u6570\u3002',
+            a4t:'\u81ea\u52a8\u538b\u67aa SprayControl', a4d:'\u81ea\u52a8\u538b\u67aa\uff0c\u9884\u4f30\u843d\u70b9\u53ef\u89c6\u5316\uff0c\u5f3a\u5ea6\u6309\u7075\u654f\u5ea6\u81ea\u52a8\u8ba1\u7b97\u3002',
+            a5t:'\u786c\u4ef6\u652f\u6301', a5d:'\u652f\u6301 KMBox NET / KMBox NET+ / KMBox B Pro / MAKCU \u8bbe\u5907\u96c6\u6210\u3002',
+            a6t:'\u9884\u8bbe\u7cfb\u7edf', a6d:'\u5b89\u5168 / \u7ade\u6280 / \u9690\u853d \u4e00\u952e\u9884\u8bbe\uff0c\u53ca\u901f\u5ea6\u9884\u6d4b\u4e0e FOV \u5708\u53ef\u89c6\u5316\u3002',
+            adv_note:'\u83b7\u53d6\u9ad8\u7ea7\u7248\u672c\uff0c\u8bf7\u52a0\u5165 QQ \u7fa4 <span class="qq">965428002</span>\u3002 <a href="https://github.com/chao-shushu/CS2-DMA" target="_blank">\u5728 GitHub \u67e5\u770b \u2192</a>',
             qs_tag:'\u5feb\u901f\u5f00\u59cb', qs_title:'\u51e0\u5206\u949f\u5373\u53ef\u4e0a\u624b',
             qs_desc:'\u4e0b\u8f7d Release \u5305\u5373\u53ef\u76f4\u63a5\u4f7f\u7528\uff0c\u65e0\u9700\u7f16\u8bd1\u3002',
             qs1t:'\u4e0b\u8f7d\u6700\u65b0\u7248\u672c', qs1d:'\u524d\u5f80 <a href="https://github.com/chao-shushu/CS2-DMA/releases" target="_blank">Releases</a> \u9875\u9762\u4e0b\u8f7d CS2-DMA-Release.zip\u3002',
@@ -792,39 +854,26 @@
 
     const urlLang = new URLSearchParams(location.search).get('lang');
     let lang;
-    if (urlLang === 'zh' || urlLang === 'en') {
-        lang = urlLang;
-    } else {
-        const browserZh = /^zh/i.test(navigator.language || navigator.userLanguage || '');
-        lang = browserZh ? 'zh' : 'en';
-    }
-    if (!urlLang) {
-        const u = new URL(location);
-        u.searchParams.set('lang', lang);
-        history.replaceState(null, '', u);
-    }
-    if (lang === 'zh') {
+    if (urlLang === 'zh' || urlLang === 'en') lang = urlLang;
+    else lang = /^zh/i.test(navigator.language || navigator.userLanguage || '') ? 'zh' : 'en';
+    if (!urlLang) { const u = new URL(location); u.searchParams.set('lang', lang); history.replaceState(null, '', u); }
+
+    function applyLang(l) {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const k = el.getAttribute('data-i18n');
-            if (T.zh[k]) el.innerHTML = T.zh[k];
+            if (T[l][k] !== undefined) el.innerHTML = T[l][k];
         });
-        document.documentElement.lang = 'zh-CN';
+        document.documentElement.lang = l === 'en' ? 'en' : 'zh-CN';
+        const lbl = l === 'en' ? '\u4e2d\u6587' : 'English';
+        document.getElementById('langBtn').textContent = lbl;
+        document.querySelectorAll('.mob-lang-top').forEach(b => b.textContent = lbl);
     }
-    document.getElementById('langBtn').textContent = lang === 'en' ? '\u4e2d\u6587' : 'English';
-    document.querySelectorAll('.mob-lang-top').forEach(b => b.textContent = lang === 'en' ? '\u4e2d\u6587' : 'English');
+    applyLang(lang);
 
     window.toggleLang = function() {
         lang = lang === 'en' ? 'zh' : 'en';
-        document.querySelectorAll('[data-i18n]').forEach(el => {
-            const k = el.getAttribute('data-i18n');
-            if (T[lang][k]) el.innerHTML = T[lang][k];
-        });
-        document.getElementById('langBtn').textContent = lang === 'en' ? '\u4e2d\u6587' : 'English';
-        document.querySelectorAll('.mob-lang-top').forEach(b => b.textContent = lang === 'en' ? '\u4e2d\u6587' : 'English');
-        document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
-        const u = new URL(location);
-        u.searchParams.set('lang', lang);
-        history.replaceState(null, '', u);
+        applyLang(lang);
+        const u = new URL(location); u.searchParams.set('lang', lang); history.replaceState(null, '', u);
     };
 })();
 </script>
