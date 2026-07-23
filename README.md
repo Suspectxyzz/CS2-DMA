@@ -1,137 +1,149 @@
 **English** | **[中文](README_CN.md)**
 
 # CS2-DMA
+
 ![3feefde8e0a9558fad9e715bdb83c18c](https://github.com/user-attachments/assets/5f5adad4-4aa0-4f44-888e-cc24f6bc5231)
 
-
-An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory Access) hardware to read game memory via FPGA devices and render ESP, radar, grenade helper, and more on a separate machine. This project does not and will never include aimbot-related features via kmbox or similar devices.
+An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory Access) hardware to read game memory via FPGA devices and render ESP, radar, grenade helper, and more on a separate machine. The open-source version is read-only DMA and does not include any aimbot-related features.
 
 ![C++](https://img.shields.io/badge/C%2B%2B-17-blue.svg)
 ![Visual Studio](https://img.shields.io/badge/IDE-Visual%20Studio%202026-5C2D91?logo=visual-studio&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6)
 ![License](https://img.shields.io/badge/license-MIT-green)
-During the development phase, your feedback and feature suggestions are needed. You can provide feedback to me in the issue section.
+![Version](https://img.shields.io/badge/version-1.5.0-blue)
+
 > ⭐ If you like this project, please give it a Star to support the author's continued updates!
-> If you would like to contact me, you can do so via QQ: 3594296990 or email: kuchao1012@outlook.com (I don't check this often).
+> Join QQ group: 965428002 for the latest updates and help.
+
 ---
 
 ## Features
 
 ### Visuals / ESP
-- **Box ESP** — Normal / Dynamic / Corner styles with fill, rounding, and thickness options
-- **Bone ESP** — Full skeleton rendering
-- **Health Bar / Armor Bar** — Horizontal or vertical, with damage fallback animation
-- **Weapon ESP** — Displays currently held weapon name
-- **Distance ESP** — Shows distance to enemies
-- **Player Name** — Displays player nicknames
-- **Eye Ray** — Shows enemy view direction
-- **Snaplines** — Lines from screen edge to enemies
-- **Head Dot** — Head position marker
-- **Safe Zone** — Crosshair area ESP cutout to reduce visual clutter
-- **Spectator List** — Detect who is spectating you, show spectator name, team color, and spectate mode ([Eye]/[Chase]/[Roam])
-- **ESP Preview** — Preview window with single-color (1 fake player) and tri-color (Default/Visible/Hidden) modes to visualize all ESP elements without entering a match
-- **Sound ESP** — Ripple animation at enemy position when they fire weapons
-- **Player Flags** — Status indicators above enemies: Blind / Scoped / Defusing / Kit / Money
-- **Weapon Icon ESP** — Weapon icons rendered using the weapons.ttf glyph font (with option to hide knife icons)
-- **Weapon Ammo ESP** — Displays ammo count (XX/YY) with low-ammo warning color
-- **Bar Value Labels** — Numeric health/armor values displayed beside the bars
-- **World Projectile Timers** — World-space countdown timers for active smokes, infernos (molotovs), and decoys with independent toggles
-- **Dropped Weapon ESP** — Displays names and icons of weapons dropped on the ground, filterable by weapon category
-- **Bomb Timer Overlay** — Draggable on-screen C4 countdown window with defuse progress bar and kit detection
-- **Visibility Coloring** — Changes enemy color based on wall visibility (visible vs hidden behind walls)
-<img width="827" height="524" alt="image" src="https://github.com/user-attachments/assets/6589c93a-007a-467f-966b-6b6126f92d60" />
+
+- **Box ESP** - Normal / Dynamic / Rounded / Corner styles with fill, rounding, and thickness options
+- **Bone ESP** - Full skeleton rendering
+- **Health Bar / Armor Bar** - Horizontal or vertical, with damage fallback animation
+- **Bar Value Labels** - Numeric health/armor values displayed beside the bars
+- **Weapon ESP** - Displays currently held weapon name
+- **Weapon Icon ESP** - Weapon icons rendered using the weapons.ttf glyph font (with option to hide knife icons)
+- **Weapon Ammo ESP** - Displays ammo count (XX/YY) with low-ammo warning color
+- **Distance ESP** - Shows distance to enemies
+- **Player Name** - Displays player nicknames
+- **Eye Ray** - Shows enemy view direction
+- **Snaplines** - Lines from screen top/center/bottom to enemies
+- **Head Dot** - Head position marker
+- **Text Outline** - Global 8-direction stroke for all ESP text, configurable color and thickness
+- **Safe Zone** - Crosshair area ESP cutout (circle/square, mask/skip mode, per-element skip) to reduce visual clutter
+- **Spectator List** - Detect who is spectating you, show spectator name, team color, and spectate mode ([Eye]/[Chase]/[Roam])
+- **ESP Preview** - Preview window with single-color (1 fake player) and tri-color (Default/Visible/Hidden) modes to visualize all ESP elements without entering a match
+- **Sound ESP** - Ripple animation at enemy position when they fire weapons
+- **Footstep ESP** - Movement pulse circle at enemy position (excludes silent walk)
+- **Player Flags** - Status indicators above enemies: Blind / Scoped / Defusing / Kit / Money
+- **World Projectile Timers** - World-space countdown timers for active smokes, infernos (molotovs), and decoys with independent toggles
+- **Dropped Weapon ESP** - Displays names and icons of weapons dropped on the ground, filterable by weapon category
+- **Bomb Timer Overlay** - Draggable on-screen C4 countdown window with defuse progress bar and kit detection
+- **Visibility Coloring** - VPK map geometry BVH ray occlusion check, two-color ESP based on visibility (visible vs hidden behind walls)
+
 <img width="1905" height="721" alt="image" src="https://github.com/user-attachments/assets/1481cf2b-075c-40dd-a895-a9cde3d9bf9d" />
 
+### Crosshair Overlay
 
-### Crosshair Overlay (Fusion Tab)
 - 4 crosshair styles: Cross / Dot / Circle / Cross+Dot
 - Adjustable arm length, thickness, gap, and color
 - Enemy color change: crosshair turns custom color when aiming at an enemy
 - Crosshair Safe Zone integration
 
 ### Bomb ESP
+
 - Planted / Carried / Dropped / Defusing status display
 - Explosion and defuse countdown timers
-<img width="837" height="517" alt="image" src="https://github.com/user-attachments/assets/8f7d1785-b21e-41a5-80e2-ebd7e122f4aa" />
+
 <img width="969" height="554" alt="image" src="https://github.com/user-attachments/assets/e9cd275e-eed7-4f2f-b860-6d9041a4253c" />
 
-
 ### Projectile ESP
+
 - Real-time display of in-flight flashbangs, smokes, HE grenades, molotovs, and decoys
 - Explosion/effect radius circle rendering
-<img width="838" height="523" alt="image" src="https://github.com/user-attachments/assets/79e82266-5a15-4029-ab8e-b7b8fa647302" />
+
 <img width="1874" height="701" alt="image" src="https://github.com/user-attachments/assets/ca3c1dbe-4044-4bd9-b57f-d39eddd66ca5" />
 
-
 ### Web Radar
+
 - Built-in WebSocket server (default port 22006, configurable in menu)
-- Frontend assets embedded into cs2.exe — single-file deployment, no extra files
-- Three-tier transport fallback: WebSocket → SSE → HTTP polling
-- **LAN Access** — Toggle Web Radar in the menu, then any LAN device can view real-time radar via browser (menu shows local IP + one-click copy URL)
-- **Public Access (built-in Cloudflare Tunnel)** — One-click start/stop cloudflared quick tunnel from the menu, auto-captures public URL (requires cloudflared installed: `winget install Cloudflare.cloudflared`)
-- **Other Public Access** — See [Public Access Setup](#public-access-setup) below (ngrok / frp / port forwarding)
-- **DMA Health State Machine** — Three-state monitor (Healthy / Degraded / Failed) tracking DMA read success/failure streaks with automatic recovery
-- **VT/IOMMU Rejection Detection** — Detects suspected VT/IOMMU blocking after 3 consecutive Full refresh failures and alerts the user
-- **RTT Monitor** — /api/ping endpoint + frontend latency indicator with 3-state status (connecting/live/error)
-- **Page Update Auto-Reload** — Pushes pageUpdate event to clients for automatic browser refresh when resources change
-- **Origin Allowlist** — CORS control to restrict allowed source domains for /api/* endpoints
-- **Password Authentication** — Optional WebSocket URL query parameter (?password=xxx) for access protection
-- **Per-Map Radar Calibration** — Adjustable rotation, scale, and X/Y offset per map with auto-save
-- **Runtime Stats Panel** — Real-time statistics: send frequency, client count, frames sent/dropped, coalesced frames, payload bytes, bytes/sec
-- **Team Panel** — Frontend T/CT player cards with character model images, weapon icons, ammo, and utility slots
-- **Spectator Panel** — Frontend spectator list with team-colored borders
-- **Advisory Indicators** — Frontend status hints: planting / defusing / sole survivor
-- **Bomb Escape Arrow** — Frontend directional arrow showing escape route from bomb explosion radius when planted
-- **QR Code** — In-menu QR code for quick mobile access to the radar URL
-<img width="840" height="517" alt="image" src="https://github.com/user-attachments/assets/6dbaf41a-4dfd-41f8-85e4-8fa2d9b1a52f" />
+- Frontend assets embedded into cs2.exe - single-file deployment, no extra files
+- Three-tier transport fallback: WebSocket -> SSE -> HTTP polling
+- **LAN Access** - Toggle Web Radar in the menu, then any LAN device can view real-time radar via browser (menu shows local IP + one-click copy URL)
+- **Public Access (built-in Cloudflare Tunnel)** - One-click start/stop cloudflared quick tunnel from the menu, auto-captures public URL (requires cloudflared installed: `winget install Cloudflare.cloudflared`); ngrok / frp / router port forwarding also supported
+- **DMA Health State Machine** - Three-state monitor (Healthy / Degraded / Failed) tracking DMA read success/failure streaks with automatic recovery
+- **VT/IOMMU Rejection Detection** - Detects suspected VT/IOMMU blocking after 3 consecutive Full refresh failures and alerts the user
+- **RTT Monitor** - /api/ping endpoint + frontend latency indicator with 3-state status (connecting/live/error)
+- **Page Update Auto-Reload** - Pushes pageUpdate event to clients for automatic browser refresh when resources change
+- **Origin Allowlist** - CORS control to restrict allowed source domains for /api/* endpoints
+- **Password Authentication** - Optional WebSocket URL query parameter (?password=xxx) for access protection
+- **Per-Map Radar Calibration** - Adjustable rotation, scale, and X/Y offset per map with auto-save
+- **Runtime Stats Panel** - Real-time statistics: send frequency, client count, frames sent/dropped, coalesced frames, payload bytes, bytes/sec
+- **Team Panel** - Frontend T/CT player cards with character model images, weapon icons, ammo, and utility slots
+- **Spectator Panel** - Frontend spectator list with team-colored borders
+- **Advisory Indicators** - Frontend status hints: planting / defusing / sole survivor
+- **Bomb Escape Arrow** - Frontend directional arrow showing escape route from bomb explosion radius when planted
+- **QR Code** - In-menu QR code for quick mobile access to the radar URL
+
 <img width="773" height="457" alt="image" src="https://github.com/user-attachments/assets/5fb4025a-d06b-4f2e-b81f-ba9b55281252" />
 
 ### Grenade Helper
+
 - Per-map preset throw positions (JSON format)
 - Real-time direction arrow + distance indicator
 - Record / edit / delete custom positions
 - Supports flash, smoke, HE, and molotov types
+
 <img width="1615" height="1031" alt="image" src="https://github.com/user-attachments/assets/9fb5df0e-9699-4a5a-8253-ca65b0d2aad5" />
 
 ### Hotkeys
-- Custom key bindings for 16 actions (Box/Bone/Health/Weapon/Name/Distance/EyeRay/Snapline/Bomb/Projectile/Spectator/TeamCheck/WebRadar/SafeZone/Crosshair/ReloadGame)
+
+- 15 customizable key bindings (Box/Bone/Health/Weapon/Name/Distance/EyeRay/Snapline/Bomb/Projectile/TeamCheck/WebRadar/SafeZone/Crosshair/ReloadGame)
 - Dual-source key detection: DMA (target machine) + `GetAsyncKeyState` (local machine)
 - Persistent config save/load
 
 ### DMA Low-Latency Optimization
-- **Scatter Batch Reads** — All entity data is merged into a single DMA operation, eliminating per-read PCIe round-trip latency
-- **On-Demand Reading** — Only reads fields required by currently enabled features; the entire data pipeline sleeps when no features are active — zero wasted transfers
-- **Tiered Entity Caching** — High-frequency data (position, health) is read every frame; low-frequency data (name, team) updates at 5/50 frame intervals, reducing 80%+ redundant reads
-- **Zero-Copy Snapshot** — `DataThread` holds a write lock only briefly during pointer swap; render thread reads without blocking — data latency < 1 frame, say goodbye to flickering boxes
-- **Bone Reliability Check** — Validates bone data sanity and caches last reliable skeleton for 150ms to suppress flickering
-- **Snapshot Interpolation** — Quintic ease smoothing + velocity extrapolation for player positions, eliminating stutter between DMA frames
-- **CameraWorker Thread** — Dedicated 500Hz background thread for view matrix reads, decoupled from render loop to eliminate mouse-look stutter
 
-### Performance Monitor
-- On-screen overlay: FPS (color-coded), frame time, entity count, grenade count, spectator count
-- Toggle from Settings tab
+- **Scatter Batch Reads** - All entity data is merged into a single DMA operation, eliminating per-read PCIe round-trip latency
+- **On-Demand Reading** - Only reads fields required by currently enabled features; the entire data pipeline sleeps when no features are active - zero wasted transfers
+- **Tiered Entity Caching** - High-frequency data (position, health) is read every frame; low-frequency data (name, team) updates at 5/50 frame intervals, reducing 80%+ redundant reads
+- **Zero-Copy Snapshot** - Double buffer + atomic pointer swap; writer holds lock only briefly, render thread reads without blocking - data latency < 1 frame, say goodbye to flickering boxes
+- **Bone Reliability Check** - Validates bone data sanity and caches last reliable skeleton for 150ms to suppress flickering
+- **Snapshot Interpolation** - Quintic ease smoothing + velocity extrapolation for player positions, eliminating stutter between DMA frames
+- **CameraWorker Thread** - Dedicated 500Hz background thread for view matrix reads, decoupled from render loop to eliminate mouse-look stutter
+
+### Performance Monitor & Stability
+
+- **Performance Monitor** - On-screen overlay: FPS (color-coded), frame time, entity count, grenade count, spectator count
+- **Debug Stats Overlay** - Detailed 7-stage timing (matrix/local/entities/scatter/weapon/bomb/projectile) plus WebRadar statistics overlay
+- **Player Count Health Check** - Detects when read player count drops below expected and auto-triggers DMA repair
+- **Tiered DMA Refresh** - Progressive recovery: Probe (100 failures) -> Repair (300) -> Full (500) with address re-init and cache reset
+- **Adaptive Shard Discovery** - Dynamically splits entity list scanning into 1/2/4/10 shards based on entity count for optimal throughput
+- **Data Reliability Tolerance** - Multiple grace periods (core stale hold, zero-pawn grace, hierarchy missing hold, controller missing hold, death confirm) to tolerate DMA jitter without flickering
+- **Extreme Stability** - Due to the nature of DMA transfers, dirty data is unavoidable. This project focuses on optimizing data validation and reliability - no flickering boxes, no missed players
 
 ### Other
-- **Config System** — Create / save / load / delete multiple configs, auto-loads `_autosave.config` on startup
-- **Auto Update Check** — Compares local version against GitHub Releases on startup; offers to redirect to download page if newer version available
-- **DMA Offset Update** — Automatically runs cs2-dumper in DMA mode to extract offsets when game update detected, replacing the online comparison approach
-- **Game Version Check** — Queries Steam API for latest CS2 news timestamp and compares with local offset date to detect outdated offsets
-- **System Proxy Auto-Detection** — Automatically detects and uses system proxy (manual/PAC/WPAD) for GitHub and Steam API connections, helpful for users behind firewalls
-- **Multi-Monitor Support** — Enumerate all displays; select target monitor for overlay rendering with auto-positioned window
-- **Render Resolution** — Resolution presets (4:3, 16:9, 16:10) or auto-detect; DPI-aware rendering
-- **Debug Log Toggle** — Runtime switch for TRACE/DEBUG level logs; zero overhead when disabled
-- **Debug Stats Overlay** — Detailed 7-stage timing (matrix/local/entities/scatter/weapon/bomb/projectile) plus WebRadar statistics overlay
-- **Help Button** — Quick link to project GitHub page from the Settings menu
-- **Multi-language** — Auto-detects system language via `GetUserDefaultUILanguage()` (Chinese for Chinese systems, English for others); manual toggle available
-- **Logging System** — Leveled logging (TRACE → FATAL) with ring buffer for crash diagnostics
-- **Crash Handler** — SEH + <code>std::terminate</code> capture, auto-generates <code>.log</code> + <code>.dmp</code> with recent logs, feature state, and system info
-- **Extreme Stability** — Due to the nature of DMA transfers, dirty data is unavoidable. This project focuses on optimizing data validation and reliability — no flickering boxes, no missed players
-- **Tiered DMA Refresh** — Progressive recovery: Probe (100 failures) → Repair (300) → Full (500) with address re-init and cache reset
-- **Adaptive Shard Discovery** — Dynamically splits entity list scanning into 1/2/4/10 shards based on entity count for optimal throughput
-- **Data Reliability Tolerance** — Multiple grace periods (core stale hold, zero-pawn grace, hierarchy missing hold, controller missing hold, death confirm) to tolerate DMA jitter without flickering
-- **Encryption & Decryption** — Supports CR3 (DTB) repair and automatically enables when encryption is detected, but this is NOT true CR3 decryption! For encrypted environments, contact the author for technical support
-- **VTD** — Not recommended to enable. Although DMA read frequency has been optimized, it may still be detected
-- **Platform Availability** — Works on major competitive platforms, but please do not use in real player matches
+
+- **Config System** - Create / save / load / delete multiple configs, auto-loads `_autosave.config` on startup
+- **Auto Update Check** - Compares local version against GitHub Releases on startup; offers to redirect to download page if newer version available
+- **DMA Offset Update** - Automatically runs cs2-dumper in DMA mode to extract offsets when game update detected, replacing the online comparison approach
+- **Game Version Check** - Queries Steam API for latest CS2 news timestamp and compares with local offset date to detect outdated offsets
+- **System Proxy Auto-Detection** - Automatically detects and uses system proxy (manual/PAC/WPAD) for GitHub and Steam API connections, helpful for users behind firewalls
+- **Multi-Monitor Support** - Enumerate all displays; select target monitor for overlay rendering with auto-positioned window
+- **Render Resolution** - Resolution presets (4:3, 16:9, 16:10) or auto-detect; DPI-aware rendering
+- **Debug Log Toggle** - Runtime switch for TRACE/DEBUG level logs; zero overhead when disabled
+- **Multi-language** - Auto-detects system language via `GetUserDefaultUILanguage()` (Chinese for Chinese systems, English for others); manual toggle available
+- **Logging System** - Leveled logging (TRACE -> FATAL) with ring buffer for crash diagnostics
+- **Crash Handler** - SEH + `std::terminate` capture, auto-generates `.log` + `.dmp` with recent logs, feature state, and system info
+- **Troubleshoot Tool** - `tools/troubleshoot.bat` provides a bilingual 8-item menu: full diagnosis / DMA hardware check / dependency files / config files / port conflicts / log analysis / diagnostic report / one-click auto-fix
+- **Encryption & Decryption** - Supports CR3 (DTB) repair and automatically enables when encryption is detected
+- **VTD** - Not recommended to enable. Although DMA read frequency has been optimized, it may still be detected
+- **Platform Availability** - Works on major competitive platforms, but please do not use in real player matches
+
 ---
 
 ## Quick Start
@@ -158,178 +170,34 @@ CS2-DMA/
 
 ### How to Run
 
-1. **Connect FPGA device** — Ensure your DMA hardware is properly connected to the secondary machine
-2. **Launch CS2 on the main machine** — Open the game and join a match
-3. **Run `cs2.exe` on the secondary machine** — The program will automatically:
+1. **Connect FPGA device** - Ensure your DMA hardware is properly connected to the secondary machine
+2. **Launch CS2 on the main machine** - Open the game and join a match
+3. **Run `cs2.exe` on the secondary machine** - The program will automatically:
    - Initialize DMA connection
    - Search for the `cs2.exe` process
    - Start rendering ESP once the game is detected
-4. **Press `F8` to open the menu** — Toggle features on/off from the menu
+4. **Press `F8` to open the menu** - Toggle features on/off from the menu
 
 ### Menu Tabs
 
 | Tab | Description |
 |-----|-------------|
-| **Visuals** | Box, bone, health bar, armor bar, weapon, distance, name, eye ray, snaplines, spectator list, etc. |
-| **Radar** | Web Radar toggle, port, broadcast interval, LAN URL display & copy, Cloudflare tunnel one-click start/stop, radar calibration (rotation/scale/offset) |
-| **Grenade** | Grenade helper toggle, record positions, edit/delete |
-| **Fusion** | Crosshair overlay (4 styles + enemy color change), crosshair safe zone |
-| **Hotkeys** | Custom key bindings for 16 actions (ESP toggles, feature toggles, reload game) |
-| **Settings** | Frame rate limit, VSync, language, team filter, monitor selection, resolution, performance monitor, debug log |
+| **Visuals** | Box, bone, health bar, armor bar, weapon, weapon icon, ammo, distance, name, eye ray, snaplines, head dot, spectator list, player flags, visibility coloring, sound/footstep ESP, world projectile timers, dropped weapons, bomb timer, crosshair overlay, safe zone, team filter |
+| **Radar** | Web Radar toggle, port, broadcast interval, LAN URL display & copy, Cloudflare tunnel one-click start/stop, QR code, radar calibration (rotation/scale/offset), password auth, Origin allowlist, runtime stats |
+| **Grenade** | Grenade helper toggle, record positions, edit/delete, per-map presets |
+| **Hotkeys** | 15 customizable key bindings (ESP toggles, feature toggles, reload game) |
+| **Settings** | Frame rate limit, VSync, render quality, monitor selection, resolution, menu hotkey, performance monitor, debug stats, debug log, player count health check, offset update, help button |
 | **Config** | Create, save, load, delete config files |
+| **Contact** | Contact author, join QQ group |
 
 ### Offsets Outdated?
 
 After each CS2 update, game offsets may become invalid, causing ESP to not display or show incorrect data. To fix:
 
 1. The program can automatically detect game updates and run cs2-dumper in DMA mode to extract new offsets
-2. Alternatively, get the latest <code>offsets.json</code> and <code>client_dll.json</code> from [cs2-dumper](https://github.com/a2x/cs2-dumper) and replace the files in the <code>data/</code> directory
+2. Alternatively, get the latest `offsets.json` and `client_dll.json` from [cs2-dumper](https://github.com/a2x/cs2-dumper) and replace the files in the `data/` directory
 3. You can also use `tools/update-offsets.bat` to update manually (supports local and DMA modes)
 4. Restart the program
-
----
-
-## Bug Reports
-
-Found an issue? Please submit a bug report via [GitHub Issues](https://github.com/chao-shushu/CS2-DMA/issues).
-
-### What to Include in Your Issue
-
-1. **Problem description** — Briefly describe the issue
-2. **Steps to reproduce** — How to trigger the bug
-3. **Log file** — The latest <code>.log</code> file from <code>logs/</code>
-4. **Crash dump** (if the program crashed) — <code>crash_*.log</code> and <code>crash_*.dmp</code> files from <code>logs/</code>
-5. **Environment info**:
-   - Windows version (e.g. Win11 24H2)
-   - FPGA device model
-   - Whether CS2 was recently updated (are offsets up to date?)
-
-### Where Are the Log Files?
-
-The program automatically generates files in the `logs/` directory:
-- `cs2dma_YYYYMMDD_HHMMSS.log` — Runtime log
-- `crash_YYYYMMDD_HHMMSS.log` — Crash diagnostic report (includes recent logs, feature state, system info)
-- `crash_YYYYMMDD_HHMMSS.dmp` — MiniDump file
-
-> Attaching these files to your issue helps resolve problems much faster.
-
----
-
-## Project Structure
-
-```
-CS2-DMA/
-├── cs2/                        # Main project source
-│   ├── main.cpp                # Entry: init logging, DMA, threads, render window
-│   ├── game/                   # Game logic layer
-│   │   ├── Threads.cpp/h       # Thread definitions (Connection / Data / SlowUpdate / Keys / WebRadar)
-│   │   ├── Entity.cpp/h        # Entity data structures and reading
-│   │   ├── Bone.cpp/h          # Bone definitions and parsing
-│   │   ├── Game.cpp/h          # Game address initialization
-│   │   ├── Offsets.cpp/h       # Offset parsing (dynamically loaded from JSON)
-│   │   ├── GlobalVars.cpp/h    # Global variable reading
-│   │   ├── AppState.h          # Application state machine enum
-│   │   ├── MenuConfig.h        # All menu config items (inline globals)
-│   │   └── View.h              # View matrix
-│   ├── render/                 # Rendering layer
-│   │   ├── Cheats.cpp/h        # ESP main render entry + GameSnapshot definition
-│   │   ├── Render.cpp/h        # Render utilities (box, bone, health bar, etc.)
-│   │   ├── GUI.cpp/h           # ImGui menu interface
-│   │   ├── GrenadeHelper.cpp/h # Grenade helper
-│   │   └── WebRadar.cpp/h      # WebSocket server + radar data serialization
-│   ├── config/                 # Config system
-│   │   ├── ConfigSaver.cpp/h   # Config file read/write
-│   │   ├── ConfigMenu.cpp/h    # Config menu UI
-│   │   ├── SettingsManager.cpp/h # Global settings (language, etc.)
-│   │   └── Language.h          # Multi-language strings
-│   ├── utils/                  # Utility modules
-│   │   ├── Logger.cpp/h        # Logging (singleton, thread-safe, ring buffer)
-│   │   ├── CrashHandler.cpp/h  # Crash handler (MiniDump + diagnostic report)
-│   │   ├── ProcessManager.h    # DMA memory read wrapper (VMMDLL)
-│   │   └── base64.h            # Base64 utility
-│   ├── includes/               # Third-party headers (vmmdll.h, leechcore.h, rapidjson)
-│   ├── SDK/                    # VMMDLL library files (Lib/Include)
-│   └── OS-ImGui/               # ImGui rendering framework wrapper
-├── data/                       # Runtime data
-│   ├── offsets.json            # Game offsets
-│   ├── client_dll.json         # client.dll offsets
-│   └── grenade-helper/         # Grenade helper map data (JSON)
-├── saved/                      # User config storage
-├── logs/                       # Logs and crash dumps
-├── tools/                      # Automation scripts
-│   └── update-offsets.bat      # Offset update tool (supports local/DMA mode)
-├── external/                   # External tools
-│   ├── dumper/                 # cs2-dumper (Rust, for obtaining offsets)
-│   └── webradar/               # cs2_webradar frontend (React)
-├── docs/                       # Documentation
-│   ├── edit-history.md         # Development changelog
-│   └── LICENSE                 # MIT License
-└── dma.slnx                    # Visual Studio solution
-```
-
----
-
-## Build Guide
-
-### Requirements
-
-| Dependency | Version |
-|------------|---------|
-| Visual Studio | 2026 Community or later |
-| C++ Standard | C++17 |
-| Platform | x64 |
-| Windows SDK | 10.0+ |
-
-### Runtime Dependencies
-
-The following DLLs must be in the same directory as `cs2.exe`:
-
-| File | Description |
-|------|-------------|
-| `vmm.dll` | MemProcFS core library |
-| `leechcore.dll` | LeechCore device communication layer |
-| `FTD3XX.dll` | FTDI USB3 driver (required for FPGA devices) |
-
-> These DLLs come from the [MemProcFS](https://github.com/ufrisk/MemProcFS) release package and are included in the repository.
-
-### Build Steps
-
-```powershell
-# 1. Clone the repository
-git clone https://github.com/chao-shushu/CS2-DMA.git
-cd CS2-DMA
-
-# 2. Open dma.slnx in Visual Studio, or build from command line:
-& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" `
-    "dma.slnx" /p:Configuration=Release /p:Platform=x64 /t:Rebuild /m
-
-# Build output: cs2.exe
-```
-
-### Updating Offsets
-
-After game updates, offsets become invalid and need to be re-obtained:
-
-```bat
-# Run tools/update-offsets.bat and select mode from the menu:
-#   1. Native Mode — run on the same machine as CS2 (requires admin)
-#   2. DMA Mode — use FPGA hardware to read memory
-```
-
-The tool calls cs2-dumper from `external/dumper/` and writes results to `data/offsets.json` and `data/client_dll.json`.
-
-> Offsets are version-specific static values. You only need to dump them once after each game update.
-
----
-
-## Usage
-
-### Startup Flow
-
-1. Ensure <code>vmm.dll</code>, <code>leechcore.dll</code>, <code>FTD3XX.dll</code> are in the same directory as <code>cs2.exe</code>
-2. Ensure <code>data/offsets.json</code> and <code>data/client_dll.json</code> match the current game version
-3. Connect the FPGA device and run `cs2.exe` on the **secondary machine**
-4. The program automatically initializes DMA → searches for cs2.exe → starts rendering
 
 ### Hotkeys
 
@@ -340,173 +208,48 @@ The tool calls cs2-dumper from `external/dumper/` and writes results to `data/of
 
 > Key detection supports dual sources: DMA reads the target machine's keyboard state, and `GetAsyncKeyState` reads the local machine's keyboard. Custom hotkeys can be configured in the Hotkeys tab.
 
-### Config File
+---
 
-Global settings are stored in the program directory in JSON format:
+## Advanced Features (Not Open-Sourced)
 
-```json
-{
-    "en": ""
-}
-```
+The open-source version is read-only DMA and does not include any write or aimbot functionality. The following advanced features are implemented via KMBox and similar hardware devices and are **not open-sourced** - only feature descriptions are provided:
 
-| Field | Values | Description |
-|-------|--------|-------------|
-| `en` | `""` / `en` / `ch` | UI language (auto-detect / English / Chinese); default empty string triggers auto-detection via `GetUserDefaultUILanguage()` |
+- **AimBot** - FOV circle / smoothing / bone selection (Head/Neck/Chest/Pelvis) / visibility check / bone fallback / target switch delay / 6 weapon-class specific configs
+- **TriggerBot** - Auto-fire (always/hold mode, delay, jitter, hold duration)
+- **Magnet TriggerBot** - Magnetic assist (pure auto or hold, FOV, smoothing, 6 weapon-class specific configs)
+- **SprayControl** - Auto recoil control (predicted landing point visualization, intensity auto-calculated from sensitivity)
+- **Velocity Prediction** - Lead based on player velocity
+- **Hardware Device Support** - KMBox NET / KMBox NET+ / KMBox B Pro / MAKCU
+- **Preset System** - Safe / Competitive / Stealth one-click presets
+- **FOV Circle & Predicted Landing Point On-Screen Visualization**
 
-Feature configs are saved in `saved/configs/`, with support for multiple profiles via the menu.
+> To get the advanced version, please join QQ group **965428002**.
 
 ---
 
-## Public Access Setup
+## Bug Reports
 
-Web Radar listens on `0.0.0.0:22006` by default, accessible from any LAN device. To access it from the internet, use one of the following methods.
+Found an issue? Please submit a bug report via [GitHub Issues](https://github.com/chao-shushu/CS2-DMA/issues).
 
-### Option 1: Built-in Cloudflare Tunnel (recommended, free, one-click)
+### What to Include in Your Issue
 
-The program has built-in cloudflared quick tunnel management — no manual command-line needed.
+1. **Problem description** - Briefly describe the issue
+2. **Steps to reproduce** - How to trigger the bug
+3. **Log file** - The latest `.log` file from `logs/`
+4. **Crash dump** (if the program crashed) - `crash_*.log` and `crash_*.dmp` files from `logs/`
+5. **Environment info**: Windows version (e.g. Win11 24H2), FPGA device model, whether CS2 was recently updated (are offsets up to date?)
 
-1. Install cloudflared (one-time only):
-```bat
-winget install Cloudflare.cloudflared
-```
-
-2. In cs2.exe menu → Radar tab → "Public Access (Cloudflare Tunnel)" → check "Enable Tunnel"
-3. The program auto-starts cloudflared and captures the public URL, displayed in the menu (one-click copy)
-4. Open that URL in any browser to view the radar
-5. Uncheck to stop the tunnel
-
-> cloudflared process auto-terminates when cs2.exe exits (Job Object managed), no leftover processes.
-> Temporary domains change on each restart. For a fixed domain, refer to the [Cloudflare Tunnel docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to bind your own domain.
-
-### Option 2: ngrok (free tier, simple)
-
-1. Register at [ngrok.com](https://ngrok.com/) and download `ngrok.exe`
-2. Configure authtoken:
-
-```bat
-ngrok config add-authtoken YOUR_TOKEN
-```
-
-3. Expose the port:
-
-```bat
-ngrok http 22006
-```
-
-4. Terminal shows a public URL like `https://xxxx.ngrok-free.app`
-
-### Option 3: frp (self-hosted, requires a server with public IP)
-
-1. Deploy [frps](https://github.com/fatedier/frp) (server) on your public server
-2. Deploy frpc (client) on the machine running cs2.exe, configure `frpc.toml`:
-
-```toml
-serverAddr = "YOUR_SERVER_PUBLIC_IP"
-serverPort = 7000
-
-[[proxies]]
-name = "webradar"
-type = "tcp"
-localIP = "127.0.0.1"
-localPort = 22006
-remotePort = 22006
-```
-
-3. Start frpc, then access `http://YOUR_SERVER_PUBLIC_IP:22006`
-
-### Option 4: Router Port Forwarding (requires public IP)
-
-1. Log into your router admin page, find "Port Forwarding / Virtual Server"
-2. Add rule: external port `22006` → internal IP (LAN IP of the cs2.exe machine) → internal port `22006` → protocol TCP
-3. Access `http://YOUR_PUBLIC_IP:22006`
-
-> Note: This requires your ISP to provide a public IP. Some ISPs require requesting a public IP or using DDNS.
-
-### Security Tips
-
-- Once exposed publicly, anyone with the URL can access your radar. It's recommended to set the **Origin Allowlist** in the cs2.exe menu to restrict allowed source domains
-- Close the tunnel/forwarding when done to avoid prolonged exposure
-- Free temporary domains from cloudflared / ngrok change on each restart
-
----
-
-## Developer Guide
-
-### Architecture Overview
-
-The program uses a **multi-threaded + snapshot** architecture:
-
-```
-┌─────────────────────┐
-│    ConnectionThread │  Game process lifecycle management (state machine)
-├─────────────────────┤
-│    DataThread       │  Core data pipeline: matrix → local player → entities → scatter read
-├─────────────────────┤
-│    SlowUpdateThread │  Low-frequency: entity list base address, map name
-├─────────────────────┤
-│    KeysCheckThread  │  Keyboard state polling (DMA + local dual-source key detection)
-├─────────────────────┤
-│    WebRadarThread   │  WebSocket broadcast: GameSnapshot → JSON
-├─────────────────────┤
-│    Main Thread      │  ImGui window + ESP rendering (read-only Snapshot)
-└─────────────────────┘
-```
-
-**Data flow** — `DataThread` reads game data via DMA and writes to `Cheats::Snapshot` (protected by `shared_mutex`). The render thread and WebRadar thread access the snapshot in read-only mode.
-
-### Key Design Decisions
-
-- **On-demand reading** — `DataThread` dynamically determines which scatter fields to request based on currently enabled features in `MenuConfig`. The entire pipeline sleeps when no features are enabled.
-- **Entity caching** — Controller data (names, team, etc.) is not re-read every frame. Instead, it uses tiered update frequencies: `DISCOVERY_INTERVAL` (5 frames) and `CONTROLLER_REFRESH` (50 frames), significantly reducing DMA read count.
-- **Scatter batch reading** — All dynamic entity fields (position, health, bones, etc.) are combined into a single scatter batch — one DMA operation.
-- **Snapshot mode** — The writer holds `unique_lock` only briefly during data swap; readers use `shared_lock`, so render FPS is not blocked by the data thread.
-- **Log ring buffer** — The last 64 log entries are stored in a fixed-size ring buffer. On crash, CrashHandler can dump them directly without filesystem access.
-
-### Code Conventions
-
-- **Naming** — Classes <code>PascalCase</code>, functions <code>PascalCase</code>, variables <code>camelCase</code>, macros/constants <code>UPPER_SNAKE_CASE</code>
-- **Headers** — Use `#pragma once`
-- **Memory reads** — Always through <code>ProcessMgr</code> (<code>ProcessManager</code> singleton); never call VMMDLL APIs directly
-- **Config items** — Add to <code>MenuConfig.h</code> (inline globals), UI controls in <code>GUI.cpp</code>
-- **Logging** — Use <code>LOG_INFO</code>, <code>LOG_ERROR</code>, etc. — format: <code>LOG_INFO("ModuleName", "message {}", value)</code>
-- **Thread safety** — Shared data protected via <code>Cheats::SnapshotMutex</code>; never read DMA directly from the render thread
-
-### Adding a New Feature
-
-1. **Add config item in `MenuConfig.h`** (e.g. `inline bool ShowNewFeature = false;`)
-2. **Add UI control in `GUI.cpp`** (Checkbox / Slider under the appropriate tab)
-3. **Add serialization in `ConfigSaver.cpp`** (SaveConfig / LoadConfig)
-4. **Add multi-language string in `Language.h`**
-5. **If additional data is needed**: Add scatter fields in `DataThread` (`Threads.cpp`) and update the `GameSnapshot` struct
-6. **Implement render logic in `Cheats.cpp` or `Render.cpp`**
-7. **Test**: Ensure no extra DMA reads occur when the feature is disabled (on-demand reading principle)
-
-### Offset System
-
-Offsets are dynamically loaded from JSON files (`Offsets.cpp` → `Offset::UpdateOffsets()`), not hardcoded. JSON files are generated by [cs2-dumper](https://github.com/a2x/cs2-dumper). To add a new offset:
-
-1. Declare `inline DWORD NewOffset;` in `Offsets.h`
-2. Add JSON parsing logic in `Offsets.cpp` `UpdateOffsets()`
-3. Use `Offset::NewOffset` in `Entity.cpp` or other modules
-
----
-
-## Known Issues
-
-- **Windows keyboard state**: Different Win11 versions have different `gafAsyncKeyState` kernel offsets. The program uses signature scanning (primary, version-independent), PDB resolution (fallback), and hardcoded offsets (last resort); in rare cases, manual offset table updates may be needed
-- **FPGA compatibility**: Only tested with common FPGA DMA (75T reinforced firmware) devices; other devices may require adjustments to `InitDMA()` parameters
-- **Anti-cheat**: Although read-only DMA is harder to detect, please note this project is for learning and research purposes only, not for profit! Use at your own risk!!!
+> You can also run `tools/troubleshoot.bat` to generate a diagnostic report. Attaching it helps resolve problems much faster.
 
 ---
 
 ## Credits
 
-- [CS2_DMA_Extrnal](https://github.com/Mzzzj/CS2_DMA_Extrnal) — Initial codebase and inspiration
-- [MemProcFS](https://github.com/ufrisk/MemProcFS) — DMA memory access framework
-- [cs2-dumper](https://github.com/a2x/cs2-dumper) — Automated offset dumper
-- [cs2_webradar](https://github.com/clauadv/cs2_webradar) — Web Radar frontend
-- [Dear ImGui](https://github.com/ocornut/imgui) — GUI framework
+- [CS2_DMA_Extrnal](https://github.com/Mzzzj/CS2_DMA_Extrnal) - Initial codebase and inspiration
+- [MemProcFS](https://github.com/ufrisk/MemProcFS) - DMA memory access framework
+- [cs2-dumper](https://github.com/a2x/cs2-dumper) - Automated offset dumper
+- [cs2_webradar](https://github.com/clauadv/cs2_webradar) - Web Radar frontend
+- [Dear ImGui](https://github.com/ocornut/imgui) - GUI framework
 
 ## License
 
