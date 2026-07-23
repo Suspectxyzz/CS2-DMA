@@ -19,6 +19,11 @@ typedef long NTSTATUS;
 #include "config/ConfigSaver.h"
 #include "game/OffsetUpdater.h"
 
+#ifdef AIMBOT_ENABLED
+#include "license/LicenseClient.h"
+#include "license/AntiTamper.h"
+#endif
+
 #include "rapidjson/document.h"
 
 #include <iostream>
@@ -243,6 +248,81 @@ static bool CheckForUpdates() {
 	}
 }
 
+// DMA 初始化 + 线程启动（可在启动时或激活后调用）
+static bool g_dmaInitialized = false;
+bool InitializeDMAAndThreads()
+{
+	if (g_dmaInitialized) return true;
+	g_dmaInitialized = true;
+
+	globalVars::gameState.store(AppState::DMA_INITIALIZING);
+	LOG_INFO("DMA", "Initializing DMA device...");
+
+	if (!ProcessMgr.InitDMA()) {
+		globalVars::gameState.store(AppState::DMA_FAILED);
+		LOG_ERROR("DMA", "DMA connection failed! errorText='{}'", ProcessMgr.lastDmaError);
+
+		const std::string& errText = ProcessMgr.lastDmaError;
+		std::string lowerErr;
+		lowerErr.reserve(errText.size());
+		for (char c : errText) {
+			lowerErr.push_back((char)(unsigned char)tolower((unsigned char)c));
+		}
+
+		auto containsAny = [&](std::initializer_list<const char*> keywords) {
+			for (const char* kw : keywords) {
+				if (lowerErr.find(kw) != std::string::npos) return true;
+			}
+			return false;
+		};
+
+		std::string userMsg;
+		if (containsAny({ "iommu", "vt-d", "protection", "guard", "credential", "device guard", "hvci", "memory integrity", "virtualization-based" })) {
+			userMsg = lang.dma_error_vtiommu;
+		} else if (containsAny({ "device", "fpga", "not found", "no such", "hardware", "driver", "leechcore", "unable to connect" })) {
+			userMsg = lang.dma_error_fpga;
+		} else {
+			userMsg = lang.dma_error_unknown;
+			if (!errText.empty()) {
+				userMsg += "\n\n";
+				userMsg += errText;
+			}
+		}
+		globalVars::g_dmaFailReason = userMsg;
+		MessageBoxA(NULL, userMsg.c_str(), "CS2-DMA DMA Error", MB_OK | MB_ICONERROR);
+		return false;
+	}
+
+	LOG_INFO("DMA", "DMA connected successfully");
+	ProcessMgr.init_keystates();
+	globalVars::gameState.store(AppState::SEARCHING_GAME);
+
+	auto safeCreateThread = [](LPTHREAD_START_ROUTINE threadFunc, const char* name) -> bool {
+		HANDLE hThread = CreateThread(nullptr, 0, threadFunc, NULL, 0, 0);
+		if (hThread == NULL) {
+			LOG_ERROR("DMA", "Failed to create {} thread (error: {})", name, (unsigned long)GetLastError());
+			return false;
+		}
+		CloseHandle(hThread);
+		return true;
+	};
+
+	safeCreateThread((LPTHREAD_START_ROUTINE)(ConnectionThread), "ConnectionThread");
+	safeCreateThread((LPTHREAD_START_ROUTINE)(DataThread), "DataThread");
+	safeCreateThread((LPTHREAD_START_ROUTINE)(SlowUpdateThread), "SlowUpdateThread");
+	safeCreateThread((LPTHREAD_START_ROUTINE)(KeysCheckThread), "KeysCheckThread");
+	safeCreateThread((LPTHREAD_START_ROUTINE)(DmaAdminThread), "DmaAdminThread");
+#ifdef AIMBOT_ENABLED
+	safeCreateThread((LPTHREAD_START_ROUTINE)(AimThread), "AimThread");
+#endif
+	LOG_INFO("DMA", "All threads started, searching for cs2.exe...");
+
+	CameraWorker::Start();
+	safeCreateThread((LPTHREAD_START_ROUTINE)(WebRadarThread), "WebRadarThread");
+
+	return true;
+}
+
 void main(HMODULE module) {
 	SetConsoleOutputCP(65001);
 
@@ -277,12 +357,29 @@ void main(HMODULE module) {
 
 	timeBeginPeriod(1);
 
+#ifdef AIMBOT_ENABLED
+	// 反篡改检查：完整性校验 + 增强反调试 + 线程隐藏
+	if (!AntiTamper::CheckOnStartup()) {
+		MessageBoxA(NULL, "Integrity check failed or debugger detected", "CS2-DMA", MB_OK | MB_ICONERROR);
+		ExitProcess(1);
+	}
+#endif
+
 	std::string machineCode = SystemInfo::GetMachineCode();
 
 	Logger::Get().Init("logs", machineCode);
 	CrashHandler::Install("logs");
 	Telemetry::SetMachineCode(machineCode);
 	Telemetry::Init();
+
+#ifdef AIMBOT_ENABLED
+	// 授权检查：加载本地卡密
+	LicenseClient::LicenseState licState = LicenseClient::CheckLicenseOnStartup();
+	bool licensed = (licState == LicenseClient::LicenseState::Valid);
+	LOG_INFO("License", "License state: {}", licensed ? "Valid" : "NeedActivation");
+#else
+	bool licensed = true;
+#endif
 
 	LOG_INFO("DMA", "CS2-DMA starting...");
 	LOG_INFO("DMA", "Software coded by kuchao-chaoshushu");
@@ -382,77 +479,14 @@ void main(HMODULE module) {
 	GrenadeHelper::LoadMapData("data/grenade-helper");
 	LOG_INFO("DMA", "Grenade helper loaded");
 
-	globalVars::gameState.store(AppState::DMA_INITIALIZING);
-	LOG_INFO("DMA", "Initializing DMA device...");
-
-	if (!ProcessMgr.InitDMA()) {
-		globalVars::gameState.store(AppState::DMA_FAILED);
-		LOG_ERROR("DMA", "DMA connection failed! errorText='{}'", ProcessMgr.lastDmaError);
-
-		// 根据错误文本分类失败类型，弹出 MessageBox 醒目提示
-		const std::string& errText = ProcessMgr.lastDmaError;
-		std::string lowerErr;
-		lowerErr.reserve(errText.size());
-		for (char c : errText) {
-			lowerErr.push_back((char)(unsigned char)tolower((unsigned char)c));
-		}
-
-		auto containsAny = [&](std::initializer_list<const char*> keywords) {
-			for (const char* kw : keywords) {
-				if (lowerErr.find(kw) != std::string::npos) return true;
-			}
-			return false;
-		};
-
-		std::string userMsg;
-		if (containsAny({ "iommu", "vt-d", "protection", "guard", "credential", "device guard", "hvci", "memory integrity", "virtualization-based" })) {
-			// VT/IOMMU 拒绝：提示关闭 Credential Guard / Device Guard / HVCI
-			userMsg = lang.dma_error_vtiommu;
-		} else if (containsAny({ "device", "fpga", "not found", "no such", "hardware", "driver", "leechcore", "unable to connect" })) {
-			// FPGA 未找到 / 驱动未加载
-			userMsg = lang.dma_error_fpga;
-		} else {
-			// 其他失败：显示通用提示 + 原始错误
-			userMsg = lang.dma_error_unknown;
-			if (!errText.empty()) {
-				userMsg += "\n\n";
-				userMsg += errText;
-			}
-		}
-		globalVars::g_dmaFailReason = userMsg;
-		MessageBoxA(NULL, userMsg.c_str(), "CS2-DMA DMA Error", MB_OK | MB_ICONERROR);
-	} else {
-		LOG_INFO("DMA", "DMA connected successfully");
-		ProcessMgr.init_keystates();
-		globalVars::gameState.store(AppState::SEARCHING_GAME);
+	if (licensed)
+	{
+		InitializeDMAAndThreads();
 	}
-
-	auto safeCreateThread = [](LPTHREAD_START_ROUTINE threadFunc, const char* name) -> bool {
-		HANDLE hThread = CreateThread(nullptr, 0, threadFunc, NULL, 0, 0);
-		if (hThread == NULL) {
-			LOG_ERROR("DMA", "Failed to create {} thread (error: {})", name, (unsigned long)GetLastError());
-			return false;
-		}
-		CloseHandle(hThread);
-		return true;
-	};
-
-	if (globalVars::gameState.load() != AppState::DMA_FAILED) {
-		safeCreateThread((LPTHREAD_START_ROUTINE)(ConnectionThread), "ConnectionThread");
-		safeCreateThread((LPTHREAD_START_ROUTINE)(DataThread), "DataThread");
-		safeCreateThread((LPTHREAD_START_ROUTINE)(SlowUpdateThread), "SlowUpdateThread");
-		safeCreateThread((LPTHREAD_START_ROUTINE)(KeysCheckThread), "KeysCheckThread");
-		safeCreateThread((LPTHREAD_START_ROUTINE)(DmaAdminThread), "DmaAdminThread");
-		LOG_INFO("DMA", "All threads started, searching for cs2.exe...");
+	else
+	{
+		LOG_INFO("License", "Not licensed, skipping DMA init and threads");
 	}
-
-	// CameraWorker runs its own 500Hz thread; only needs DMA + matrix address,
-	// which become valid once the game is RUNNING (it idles until then).
-	CameraWorker::Start();
-
-	// WebRadar server starts independently — it only needs the HTTP/WS server,
-	// not DMA. Game data broadcast is skipped when DMA is not connected.
-	safeCreateThread((LPTHREAD_START_ROUTINE)(WebRadarThread), "WebRadarThread");
 
 	SetThreadPriority(GetCurrentThread(), HIGH_PRIORITY_CLASS);
 
@@ -462,6 +496,11 @@ void main(HMODULE module) {
 
 	// Signal background threads to exit before tearing down subsystems
 	globalVars::gameState.store(AppState::EXITING);
+
+#ifdef AIMBOT_ENABLED
+	// 停止心跳线程
+	LicenseClient::StopHeartbeat();
+#endif
 
 	// CameraWorker checks EXITING and exits its loop; join before teardown.
 	CameraWorker::Stop();

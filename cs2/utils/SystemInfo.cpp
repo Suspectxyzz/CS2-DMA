@@ -200,6 +200,26 @@ std::string SystemInfo::GetMachineCode()
             {
                 combined += "|" + rows[0].at("ProcessorId");
             }
+
+            // 磁盘序列号（第一块物理硬盘）
+            rows = wmi.Query("SELECT SerialNumber FROM Win32_DiskDrive WHERE MediaType LIKE '%Fixed%' OR MediaType LIKE '%Hard%' ORDER BY Index", {"SerialNumber"});
+            if (!rows.empty() && rows[0].count("SerialNumber") && !rows[0].at("SerialNumber").empty())
+            {
+                combined += "|" + rows[0].at("SerialNumber");
+            }
+
+            // 网卡 MAC 地址（第一块物理网卡，排除虚拟适配器）
+            rows = wmi.Query(
+                "SELECT MACAddress FROM Win32_NetworkAdapter "
+                "WHERE PhysicalAdapter = TRUE AND MACAddress IS NOT NULL "
+                "AND NOT Description LIKE '%Virtual%' AND NOT Description LIKE '%VPN%' "
+                "AND NOT Description LIKE '%Tunnel%' AND NOT Description LIKE '%Loop%' "
+                "ORDER BY Index",
+                {"MACAddress"});
+            if (!rows.empty() && rows[0].count("MACAddress") && !rows[0].at("MACAddress").empty())
+            {
+                combined += "|" + rows[0].at("MACAddress");
+            }
         }
     }
 

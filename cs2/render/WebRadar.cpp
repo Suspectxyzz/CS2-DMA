@@ -859,27 +859,34 @@ bool WebRadarServer::DoHandshake(SOCKET clientSock) {
 	return DoHandshakeWithRequest(clientSock, request);
 }
 
-bool WebRadarServer::SendFrame(SOCKET sock, const std::string& payload) {
-	std::vector<uint8_t> frame;
-	frame.reserve(10 + payload.size());
+// P0 fix #2: extract frame-building so Broadcast can construct once and reuse
+// for all clients (avoids per-client std::vector heap allocation).
+static void BuildFrame(const std::string& payload, std::vector<uint8_t>& out) {
+	out.clear();
+	out.reserve(10 + payload.size());
 
-	// FIN=1, opcode=0x1 (text) — JSON payload, browser receives as string directly
-	frame.push_back(0x81);
+	// FIN=1, opcode=0x1 (text) - JSON payload, browser receives as string directly
+	out.push_back(0x81);
 
 	size_t len = payload.size();
 	if (len < 126) {
-		frame.push_back((uint8_t)len);
+		out.push_back((uint8_t)len);
 	} else if (len < 65536) {
-		frame.push_back(126);
-		frame.push_back((uint8_t)(len >> 8));
-		frame.push_back((uint8_t)(len & 0xFF));
+		out.push_back(126);
+		out.push_back((uint8_t)(len >> 8));
+		out.push_back((uint8_t)(len & 0xFF));
 	} else {
-		frame.push_back(127);
+		out.push_back(127);
 		for (int i = 7; i >= 0; i--)
-			frame.push_back((uint8_t)((len >> (i * 8)) & 0xFF));
+			out.push_back((uint8_t)((len >> (i * 8)) & 0xFF));
 	}
 
-	frame.insert(frame.end(), payload.begin(), payload.end());
+	out.insert(out.end(), payload.begin(), payload.end());
+}
+
+bool WebRadarServer::SendFrame(SOCKET sock, const std::string& payload) {
+	std::vector<uint8_t> frame;
+	BuildFrame(payload, frame);
 
 	int total = (int)frame.size();
 	int sent = 0;
@@ -902,28 +909,51 @@ void WebRadarServer::Broadcast(const std::string& message) {
 
 	int sentCount = 0;
 
-	// Send to WebSocket clients
+	// P0 fix #1+#2: build frame once, snapshot clients, send outside lock.
+	// Avoids serializing all clients behind m_clientsMutex and avoids
+	// per-client frame allocation.
+	std::vector<uint8_t> wsFrame;
+	BuildFrame(message, wsFrame);
+
+	std::vector<SOCKET> wsClients;
 	{
 		std::lock_guard<std::mutex> lock(m_clientsMutex);
-		LOG_TRACE("WebRadar", "Broadcast: {} bytes to {} ws clients", message.size(), m_clients.size());
-		for (auto it = m_clients.begin(); it != m_clients.end(); ) {
-			if (!SendFrame(*it, message)) {
-				int err = WSAGetLastError();
-				if (err == WSAETIMEDOUT) {
-					// Task 9: slow client — skip this broadcast, keep connection
-					m_stats.droppedFramesSlowClient++;
-					LOG_DEBUG("WebRadar", "SendFrame timed out, skipping slow client");
-					++it;
-				} else {
-					LOG_DEBUG("WebRadar", "SendFrame failed (err={}), removing client", err);
-					it = m_clients.erase(it);
-				}
+		wsClients = m_clients;
+	}
+	LOG_TRACE("WebRadar", "Broadcast: {} bytes to {} ws clients", message.size(), wsClients.size());
+
+	std::vector<SOCKET> deadClients;
+	int wsTotal = (int)wsFrame.size();
+	for (SOCKET sock : wsClients) {
+		int sent = 0;
+		bool ok = true;
+		while (sent < wsTotal) {
+			int r = send(sock, (const char*)wsFrame.data() + sent, wsTotal - sent, 0);
+			if (r <= 0) { ok = false; break; }
+			sent += r;
+		}
+		if (!ok) {
+			int err = WSAGetLastError();
+			if (err == WSAETIMEDOUT) {
+				// Task 9: slow client - skip this broadcast, keep connection
+				m_stats.droppedFramesSlowClient++;
+				LOG_DEBUG("WebRadar", "SendFrame timed out, skipping slow client");
 			} else {
-				sentCount++;
-				// Task 17: accumulate bytes actually pushed to clients.
-				m_stats.bytesOutTotal += message.size();
-				++it;
+				LOG_DEBUG("WebRadar", "SendFrame failed (err={}), will remove client", err);
+				deadClients.push_back(sock);
 			}
+		} else {
+			sentCount++;
+			// Task 17: accumulate bytes actually pushed to clients.
+			m_stats.bytesOutTotal += message.size();
+		}
+	}
+
+	// Batch-remove dead clients under lock.
+	if (!deadClients.empty()) {
+		std::lock_guard<std::mutex> lock(m_clientsMutex);
+		for (SOCKET s : deadClients) {
+			m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), s), m_clients.end());
 		}
 	}
 
@@ -1326,19 +1356,6 @@ static std::string SerializeSnapshot(const GameSnapshot& snap) {
 			weapons.PushBack(w, a);
 		}
 		doc.AddMember("m_dropped_weapons", weapons, a);
-	}
-
-	// Spectators (observers)
-	if (!snap.Spectators.empty()) {
-		rapidjson::Value spectators(rapidjson::kArrayType);
-		for (const auto& spec : snap.Spectators) {
-			rapidjson::Value s(rapidjson::kObjectType);
-			s.AddMember("m_name", rapidjson::Value(SanitizeUtf8(spec.Name).c_str(), a), a);
-			s.AddMember("m_team", spec.TeamID, a);
-			s.AddMember("m_observer_mode", spec.ObserverMode, a);
-			spectators.PushBack(s, a);
-		}
-		doc.AddMember("m_spectators", spectators, a);
 	}
 
 	// Task 19.3: Append per-map radar calibration params so the frontend

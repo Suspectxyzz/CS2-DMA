@@ -675,44 +675,4 @@ body > div {
 	}
 }
 
-/* ===== 观战列表面板 ===== */
-.spectator-panel {
-	position: fixed;
-	top: 20px;
-	right: 20px;
-	width: 180px;
-	background: rgba(0, 0, 0, 0.8);
-	border-radius: 8px;
-	padding: 8px;
-	color: #fff;
-	font-size: 12px;
-	z-index: 100;
-}
 
-.spectator-header {
-	font-weight: bold;
-	margin-bottom: 6px;
-	padding-bottom: 4px;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.spectator-list {
-	list-style: none;
-	padding: 0;
-	margin: 0;
-}
-
-.spectator-list li {
-	padding: 3px 6px;
-	margin: 2px 0;
-	border-radius: 4px;
-	background: rgba(255, 255, 255, 0.05);
-}
-
-.spectator-list li.T {
-	border-left: 3px solid #ffa701;
-}
-
-.spectator-list li.CT {
-	border-left: 3px solid #5ab8f4;
-}

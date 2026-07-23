@@ -1,4 +1,8 @@
-﻿{
-    "game_update_timestamp":  1783708700,
-    "game_update_date":  "2026-07-10"
+{
+    "software_version": "1.5.0",
+    "game_update_date": "Jul 20 2026",
+    "game_update_timestamp": 1784658783,
+    "patch_version": "1.41.7.2",
+    "client_version": 2000877,
+    "source_revision": 10837589
 }

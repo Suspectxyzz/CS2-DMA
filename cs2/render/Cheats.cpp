@@ -19,9 +19,18 @@
 #include "../utils/StageTimer.h"
 #include "../utils/VisibilityChecker.h"
 #include "WebRadar.h"
+#ifdef AIMBOT_ENABLED
+#include "FovCircle.h"
+#include "../aim/SprayControl.h"  // ExtractFovFromMatrix / CountsToPixels
+#include "../game/Game.h"         // gGame.View.Matrix
+#include "../license/LicenseClient.h"
+#include "../license/AntiTamper.h"
+#endif
 
-// g_dmaHealth is defined in Threads.cpp; DmaHealth.h does not export it.
-extern DmaHealth::DmaHealthTracker g_dmaHealth;
+// g_dmaHealth is now defined as inline in DmaHealth.h (header-only, shared across all TUs).
+
+// Forward declaration: defined in main.cpp
+extern bool InitializeDMAAndThreads();
 
 
 
@@ -44,6 +53,40 @@ void Cheats::Run()
 		MenuConfig::EspItemEnabledMask.set();
 		firstRun = false;
 	}
+#ifdef AIMBOT_ENABLED
+	if (LicenseClient::DrawActivationUI()) return;
+	// 激活成功后首次初始化 DMA 和线程
+	{
+		static bool s_dmaStarted = false;
+		if (!s_dmaStarted && LicenseClient::IsLicensed()) {
+			s_dmaStarted = true;
+			InitializeDMAAndThreads();
+		}
+	}
+	// 多点校验：周期性反调试 + 授权状态验证（每 ~10 秒）
+	{
+		static int s_antiTamperCnt = 0;
+		if (++s_antiTamperCnt >= 600) {
+			s_antiTamperCnt = 0;
+			if (!AntiTamper::PeriodicCheck())
+				globalVars::gameState.store(AppState::DMA_FAILED);
+		}
+	}
+	// 已授权时在右上角显示剩余天数
+	if (LicenseClient::IsLicensed()) {
+		int days = LicenseClient::GetRemainingDays();
+		char buf[64];
+		snprintf(buf, sizeof(buf), u8"授权剩余: %d天", days);
+		ImVec2 ts = ImGui::CalcTextSize(buf);
+		ImVec2 screen = ImGui::GetIO().DisplaySize;
+		ImU32 color = days <= 3 ? IM_COL32(255, 80, 80, 255) :
+		              days <= 7 ? IM_COL32(255, 200, 50, 255) :
+		              IM_COL32(100, 255, 100, 255);
+		ImDrawList* dl = ImGui::GetBackgroundDrawList();
+		dl->AddRectFilled({screen.x - ts.x - 16, 8}, {screen.x - 4, ts.y + 16}, IM_COL32(10, 10, 18, 200), 4.0f);
+		dl->AddText({screen.x - ts.x - 10, 12}, color, buf);
+	}
+#endif
 	try {
 		static std::chrono::time_point LastTimePoint = std::chrono::steady_clock::now();
 		auto CurTimePoint = std::chrono::steady_clock::now();
@@ -129,6 +172,16 @@ void Cheats::Run()
 			return;
 		}
 
+		// Phase 4: 自瞄 FOV 圆圈可视化 (屏幕中心, 背景层)
+		// playerFov 从 ViewMatrix 推导 (自动适配 4:3/16:9/拉伸)
+#ifdef AIMBOT_ENABLED
+		{
+			Aim::FovPair fov = Aim::ExtractFovFromMatrix(gGame.View.Matrix);
+			FovCircle::RenderFovCircles(fov.hFov);
+		}
+		FovCircle::RenderPredictedImpact();
+#endif
+
 		// Lock-free snapshot read (double-buffered, acquire on the index).
 		GameSnapshot snap = Cheats::GetSnapshot();
 		LOG_TRACE("Render", "Snapshot: entities={} projs={} map='{}'", snap.Entities.size(), snap.Projectiles.size(), snap.MapName);
@@ -148,7 +201,25 @@ void Cheats::Run()
 			memcpy(freshMatrix, snap.Matrix, sizeof(freshMatrix));
 		}
 
-		// Re-project all entities: world coords → screen coords with fresh matrix
+		// Triple fallback: live -> snapshot -> last good matrix (ref: KevqDMA draw.inl)
+		static float s_lastGoodDrawMatrix[4][4]{};
+		static bool s_lastGoodDrawMatrixValid = false;
+		auto isLikelyViewMatrix = [](const float m[4][4]) -> bool {
+			int nonZero = 0; float absSum = 0.f;
+			for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) {
+				float v = m[r][c]; if (!std::isfinite(v)) return false;
+				if (v != 0.f) nonZero++; absSum += std::abs(v);
+			}
+			return nonZero >= 6 && absSum > 1.0f;
+		};
+		if (isLikelyViewMatrix(freshMatrix)) {
+			memcpy(s_lastGoodDrawMatrix, freshMatrix, sizeof(freshMatrix));
+			s_lastGoodDrawMatrixValid = true;
+		} else if (s_lastGoodDrawMatrixValid) {
+			memcpy(freshMatrix, s_lastGoodDrawMatrix, sizeof(freshMatrix));
+		}
+
+		// Re-project all entities: world coords -> screen coords with fresh matrix
 		//
 		// ESP gap-closure stage 2: snapshot interpolation + velocity extrapolation.
 		// renderPos = lerp(PrevPos, Pos, QuinticEase(alpha)) + Velocity * extrapolationSec
@@ -176,7 +247,7 @@ void Cheats::Run()
 		}
 
 		for (auto& Entity : snap.Entities) {
-			if (Entity.Pawn.Health <= 0 || !Entity.Pawn.ScreenPosValid) continue;
+			if (!Entity.Pawn.ScreenPosValid) continue;
 
 			// Interpolated + extrapolated render position (falls back to Pos when off).
 			Vec3 renderPos = Entity.Pawn.Pos;
@@ -199,11 +270,21 @@ void Cheats::Run()
 			Entity.Pawn.ScreenPosValid = CView::WorldToScreen(freshMatrix, renderPos, footScreen);
 			Entity.Pawn.ScreenPos = footScreen;
 
+			// Apply the same interpolation offset to bone positions so that
+			// foot and head are from the same time basis. Without this, Get2DBox
+			// mixes interpolated foot with non-interpolated head, causing box
+			// height/position drift during movement.
+			Vec3 interpOffset = { renderPos.x - Entity.Pawn.Pos.x,
+			                      renderPos.y - Entity.Pawn.Pos.y,
+			                      renderPos.z - Entity.Pawn.Pos.z };
 			for (int j = 0; j < Entity.Pawn.BoneData.BonePosCount; j++) {
 				auto& bp = Entity.Pawn.BoneData.BonePosList[j];
 				if (!bp.IsVisible) continue; // already marked invalid by data thread
+				Vec3 interpBonePos = { bp.Pos.x + interpOffset.x,
+				                       bp.Pos.y + interpOffset.y,
+				                       bp.Pos.z + interpOffset.z };
 				Vec2 sp;
-				bp.IsVisible = CView::WorldToScreen(freshMatrix, bp.Pos, sp);
+				bp.IsVisible = CView::WorldToScreen(freshMatrix, interpBonePos, sp);
 				bp.ScreenPos = sp;
 			}
 		}
@@ -224,8 +305,6 @@ void Cheats::Run()
 		{
 			const CEntity& Entity = EntityListSnapshot[i];
 
-			if (Entity.Pawn.Health <= 0 || Entity.Pawn.Health > 100) continue;
-
 			if (MenuConfig::TeamCheck && Entity.Controller.TeamID == LocalPlayerSnapshot.Controller.TeamID)
 				continue;
 
@@ -233,13 +312,32 @@ void Cheats::Run()
 			if (!std::isfinite(Entity.Pawn.ScreenPos.x) || !std::isfinite(Entity.Pawn.ScreenPos.y)) continue;
 			if (!std::isfinite(Entity.Pawn.Pos.x) || !std::isfinite(Entity.Pawn.Pos.y) || !std::isfinite(Entity.Pawn.Pos.z)) continue;
 			if (Entity.Controller.Address == 0) continue;
-			if (Entity.GetBone().BonePosCount <= (int)BONEINDEX::head) continue;
+
+			// Bone availability: when bones are insufficient, skip bone-dependent
+			// ESP elements (skeleton, head dot, eye ray) but still draw box, health,
+			// name, distance etc. using a fallback box.
+			bool hasBones = Entity.GetBone().BonePosCount > (int)BONEINDEX::head;
 
 			ImVec4 Rect;
-			Rect = Render::GetBoxByType(Entity);
+			if (hasBones)
+				Rect = Render::GetBoxByType(Entity);
+			else
+				Rect = ImVec4{ 0, 0, 0, 0 };
 
-			if (Rect.z < 1.f || Rect.w < 1.f) continue;
-			if (!std::isfinite(Rect.x) || !std::isfinite(Rect.y) || !std::isfinite(Rect.z) || !std::isfinite(Rect.w)) continue;
+			// Fallback: if bone-based rect failed (head off-screen, too far, etc.),
+			// estimate a box from foot screen position and world distance.
+			if (Rect.z < 1.f || Rect.w < 1.f ||
+				!std::isfinite(Rect.x) || !std::isfinite(Rect.y) ||
+				!std::isfinite(Rect.z) || !std::isfinite(Rect.w)) {
+				float dx = Entity.Pawn.Pos.x - LocalPlayerSnapshot.Pawn.Pos.x;
+				float dy = Entity.Pawn.Pos.y - LocalPlayerSnapshot.Pawn.Pos.y;
+				float dz = Entity.Pawn.Pos.z - LocalPlayerSnapshot.Pawn.Pos.z;
+				float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+				float boxH = (distance > 1.f) ? std::clamp(3600.f / distance, 15.f, 400.f) : 80.f;
+				float boxW = boxH * 0.5f;
+				Rect = ImVec4(Entity.Pawn.ScreenPos.x - boxW * 0.5f,
+				              Entity.Pawn.ScreenPos.y - boxH, boxW, boxH);
+			}
 
 			bool inSafeZone = false;
 			if (szSkipMode) {
@@ -255,52 +353,64 @@ void Cheats::Run()
 				}
 			}
 
-			if (MenuConfig::ShowBoneESP && !(inSafeZone && MenuConfig::SafeZoneSkipBone))
-				Render::DrawBone(Entity, MenuConfig::BoneColor, MenuConfig::BoneThickness);
+			// Task 5-8/9: 可见性着色 —— 单一开关 VPKVisibilityCheck 控制
+			// - 开启且有 BVH：用 BVH 射线检测真实遮挡，所有 ESP 元素按可见性变色
+			//   * 骨骼 ESP：每段骨骼独立判断（visible 数组逐关节计算）
+			//   * 方框/头部圆点/视线/连线：整体用头部射线结果
+			// - 关闭或 BVH 不可用：所有元素使用原色
+			bool visEnabled = MenuConfig::VPKVisibilityCheck && g_visibilityChecker.IsEnabled() && hasBones;
+			bool isVisibleNow = true;       // 整人可见性（用于方框/头点/视线/连线）
+			bool boneVisible[CBone::NUM_BONES] = {};  // 每骨骼可见性（用于骨骼 ESP）
+			Vec3 fromEye{};
 
-			if (MenuConfig::ShowHeadDot && !(inSafeZone && MenuConfig::SafeZoneSkipHeadDot))
-				Render::DrawHeadDot(Entity, MenuConfig::HeadDotColor, MenuConfig::HeadDotSize);
+			if (visEnabled) {
+			// 本地眼睛位置: 优先 head 骨骼(真实眼睛), 回退 Pos+64(站立兜底).
+			// m_vecLastCameraSetupLocalOrigin 实测为相机 setup 本地原点(Z≈0), 不可用作眼睛位置.
+			fromEye = LocalPlayerSnapshot.Pawn.Pos;
+			fromEye.z += 64.f;
+			const CBone& lpBone = LocalPlayerSnapshot.Pawn.BoneData;
+			if (lpBone.BonePosCount > (int)BONEINDEX::head) {
+				const Vec3& headPos = lpBone.BonePosList[(int)BONEINDEX::head].Pos;
+				if (headPos.x != 0.f || headPos.y != 0.f || headPos.z != 0.f)
+					fromEye = headPos;
+			}
+				const CBone& bone = Entity.GetBone();
+				// 逐骨骼射线检测
+				for (int j = 0; j < bone.BonePosCount && j < CBone::NUM_BONES; j++) {
+					boneVisible[j] = g_visibilityChecker.IsVisible(fromEye, bone.BonePosList[j].Pos);
+				}
+				// 整人可见性 = 头部射线结果
+				if (bone.BonePosCount > (int)BONEINDEX::head) {
+					isVisibleNow = boneVisible[BONEINDEX::head];
+				}
+			}
 
-			if (MenuConfig::ShowEyeRay && !(inSafeZone && MenuConfig::SafeZoneSkipEyeRay))
-				Render::ShowLosLine(Entity, MenuConfig::EyeRayLength, MenuConfig::EyeRayColor, MenuConfig::EyeRayThickness, freshMatrix);
+			// 元素颜色：visEnabled 时按可见性切换；否则用原色
+			ImColor boxCol        = visEnabled ? (isVisibleNow ? MenuConfig::VisibleColor : MenuConfig::HiddenColor) : MenuConfig::BoxColor;
+			ImColor headDotCol    = visEnabled ? (isVisibleNow ? MenuConfig::VisibleColor : MenuConfig::HiddenColor) : MenuConfig::HeadDotColor;
+			ImColor eyeRayCol     = visEnabled ? (isVisibleNow ? MenuConfig::VisibleColor : MenuConfig::HiddenColor) : MenuConfig::EyeRayColor;
+			ImColor lineToEnemyCol= visEnabled ? (isVisibleNow ? MenuConfig::VisibleColor : MenuConfig::HiddenColor) : MenuConfig::LineToEnemyColor;
+
+			if (MenuConfig::ShowBoneESP && hasBones && !(inSafeZone && MenuConfig::SafeZoneSkipBone))
+				Render::DrawBone(Entity, MenuConfig::BoneColor, MenuConfig::BoneThickness,
+				                visEnabled ? boneVisible : nullptr,
+				                MenuConfig::VisibleColor, MenuConfig::HiddenColor);
+
+			if (MenuConfig::ShowHeadDot && hasBones && !(inSafeZone && MenuConfig::SafeZoneSkipHeadDot))
+				Render::DrawHeadDot(Entity, headDotCol, MenuConfig::HeadDotSize);
+
+			if (MenuConfig::ShowEyeRay && hasBones && !(inSafeZone && MenuConfig::SafeZoneSkipEyeRay))
+				Render::ShowLosLine(Entity, MenuConfig::EyeRayLength, eyeRayCol, MenuConfig::EyeRayThickness, freshMatrix);
 
 			if (MenuConfig::ShowLineToEnemy && !(inSafeZone && MenuConfig::SafeZoneSkipSnapline))
-				Render::LineToEnemyEx(Rect, MenuConfig::LineToEnemyColor, MenuConfig::LineToEnemyThickness, MenuConfig::LineToEnemyOrigin);
+				Render::LineToEnemyEx(Rect, lineToEnemyCol, MenuConfig::LineToEnemyThickness, MenuConfig::LineToEnemyOrigin);
 
 			if (MenuConfig::ShowBoxESP && !(inSafeZone && MenuConfig::SafeZoneSkipBox))
 			{
-				// Task 9: Visibility coloring — pick box color based on spotted mask
-				// and screen visibility. Falls back to BoxColor when disabled.
-				// Task 5-8: VPK 可见性检查开启时，用 BVH 射线检测真实遮挡替代近似逻辑
-				bool isVisibleNow;
-				if (MenuConfig::VPKVisibilityCheck && g_visibilityChecker.IsEnabled())
-				{
-					// 射线起点：本地玩家眼睛位置（CameraPos；为 0 时回退到脚部 + 眼睛高度）
-					Vec3 fromEye = LocalPlayerSnapshot.Pawn.CameraPos;
-					if (fromEye.x == 0.f && fromEye.y == 0.f && fromEye.z == 0.f)
-					{
-						fromEye = LocalPlayerSnapshot.Pawn.Pos;
-						fromEye.z += 64.f;
-					}
-					// 射线终点：敌人头部骨骼位置（进入此分支前已保证 BonePosCount > head）
-					const Vec3& toTarget = Entity.Pawn.BoneData.BonePosList[BONEINDEX::head].Pos;
-					isVisibleNow = g_visibilityChecker.IsVisible(fromEye, toTarget);
-				}
-				else
-				{
-					isVisibleNow = (Entity.Pawn.bSpottedByMask != 0) || Entity.Pawn.ScreenPosValid;
-				}
-				ImColor entityCol = MenuConfig::VisibilityColoring
-					? (isVisibleNow ? MenuConfig::VisibleColor : MenuConfig::HiddenColor)
-					: MenuConfig::BoxColor;
-
-				if (MenuConfig::BoxFilled)
-					Render::DrawBoxFill(Rect, entityCol, MenuConfig::BoxFillAlpha);
-
 				if (MenuConfig::BoxType == 2)
-					Render::DrawCornerBox(Rect, entityCol, MenuConfig::BoxThickness, MenuConfig::CornerLength);
+					Render::DrawCornerBox(Rect, boxCol, MenuConfig::BoxThickness, MenuConfig::CornerLength);
 				else
-					Gui.Rectangle({ Rect.x,Rect.y }, { Rect.z,Rect.w }, entityCol, MenuConfig::BoxThickness, MenuConfig::BoxRounding);
+					Gui.Rectangle({ Rect.x,Rect.y }, { Rect.z,Rect.w }, boxCol, MenuConfig::BoxThickness, MenuConfig::BoxRounding);
 			}
 
 			// Task 8: Player status flags — Blind/Scoped/Defusing/Kit/Money stacked
@@ -488,8 +598,7 @@ void Cheats::Run()
 			bool onEnemy = false;
 			if (MenuConfig::CrosshairOnEnemyColor) {
 				for (const auto& Entity : EntityListSnapshot) {
-					if (Entity.Pawn.Health <= 0 || Entity.Pawn.Health > 100) continue;
-					if (MenuConfig::TeamCheck && Entity.Controller.TeamID == LocalPlayerSnapshot.Controller.TeamID) continue;
+				if (MenuConfig::TeamCheck && Entity.Controller.TeamID == LocalPlayerSnapshot.Controller.TeamID) continue;
 					if (!Entity.Pawn.ScreenPosValid) continue;
 
 					ImVec4 eRect;
@@ -567,48 +676,6 @@ void Cheats::Run()
 				ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 0.6f, 0.0f, 1.0f)), hint);
 		}
 
-		// Spectator List overlay
-		if (MenuConfig::ShowSpectatorList && !snap.Spectators.empty()) {
-			ImDrawList* dl = ImGui::GetBackgroundDrawList();
-			ImVec2 screenSize = ImGui::GetIO().DisplaySize;
-
-			float posX = screenSize.x - 220.f;
-			float posY = 10.f;
-			float lineH = 18.f;
-			float padX = 10.f;
-			float padY = 6.f;
-
-			float bgHeight = padY * 2 + lineH * (1 + (float)snap.Spectators.size());
-			dl->AddRectFilled({ posX - padX, posY - padY }, { screenSize.x - 6.f, posY - padY + bgHeight },
-				IM_COL32(10, 10, 18, 210), 8.f);
-			dl->AddRect({ posX - padX, posY - padY }, { screenSize.x - 6.f, posY - padY + bgHeight },
-				IM_COL32(124, 92, 252, 80), 8.f, 15, 1.f);
-
-			dl->AddText({ posX, posY }, ImGui::ColorConvertFloat4ToU32(UITheme::TextAccent), "Spectators");
-			posY += lineH;
-
-			for (const auto& spec : snap.Spectators) {
-				ImColor nameCol = (spec.TeamID == LocalPlayerSnapshot.Controller.TeamID)
-					? ImColor(100, 200, 255, 255)
-					: ImColor(255, 100, 100, 255);
-
-				const char* modeStr = "";
-				if (spec.ObserverMode == 4) modeStr = "[Eye] ";
-				else if (spec.ObserverMode == 5) modeStr = "[Chase] ";
-				else if (spec.ObserverMode == 6) modeStr = "[Roam] ";
-
-				char text[128];
-				snprintf(text, sizeof(text), "%s%s", modeStr, spec.Name.c_str());
-				dl->AddText({ posX, posY }, nameCol, text);
-				posY += lineH;
-			}
-		}
-
-		// ESP Preview window (toggled from Visuals Tab or via ShowEspPreview)
-		if (MenuConfig::ShowEspPreview || Render::EspPreviewOpen) {
-			Render::RenderEspPreview();
-		}
-
 		// Performance Monitor overlay
 		if (MenuConfig::ShowPerfMonitor) {
 			ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -622,9 +689,9 @@ void Cheats::Run()
 			float fps = ImGui::GetIO().Framerate;
 			float frameTimeMs = 1000.f / (fps > 0.f ? fps : 1.f);
 
-			// Lines: FPS, Frame, Entities, Projectiles, Spectators, DMA Health
+			// Lines: FPS, Frame, Entities, Projectiles, DMA Health
 		// When ShowDebugStats: + Stage header + 2 stage lines + WebRadar header + 1 wr line
-		int lines = 6;
+		int lines = 5;
 		if (MenuConfig::ShowDebugStats) lines += 5;
 			float bgHeight = padY * 2 + lineH * lines;
 
@@ -659,11 +726,6 @@ void Cheats::Run()
 
 			snprintf(buf, sizeof(buf), "%d", (int)snap.Projectiles.size());
 			dl->AddText({ posX, posY }, labelCol, "Projectiles:");
-			dl->AddText({ posX + 80.f, posY }, valueCol, buf);
-			posY += lineH;
-
-			snprintf(buf, sizeof(buf), "%d", (int)snap.Spectators.size());
-			dl->AddText({ posX, posY }, labelCol, "Spectators:");
 			dl->AddText({ posX + 80.f, posY }, valueCol, buf);
 			posY += lineH;
 

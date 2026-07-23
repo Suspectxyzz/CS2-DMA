@@ -23,3 +23,8 @@ VOID WebRadarThread();
 
 // DMA admin: asynchronous VMMDLL_ConfigSet refresh processing (P3 Task 10)
 VOID DmaAdminThread();
+
+// Phase 4: 自瞄系统主循环 (200Hz, 同步 AimConfig -> 模块单例 -> Run)
+#ifdef AIMBOT_ENABLED
+VOID AimThread();
+#endif

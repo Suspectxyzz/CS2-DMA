@@ -397,20 +397,6 @@ function handleBackendMessage(raw) {
     }
     dispatchEvent("droppedWeapons", droppedWeaponsOut);
 
-    // 5. spectators 事件（观战列表）
-    // 后端仅在 Spectators 非空时序列化 m_spectators，这里始终派发
-    // （空数组时渲染器隐藏面板），与 projectiles 等事件行为一致。
-    var spectatorsIn = data.m_spectators || [];
-    var spectatorsOut = [];
-    for (var m = 0; m < spectatorsIn.length; m++) {
-      var sp = spectatorsIn[m];
-      spectatorsOut.push({
-        name: sp.m_name || "Unknown",
-        team: mapTeam(sp.m_team),
-        observerMode: sp.m_observer_mode || 0
-      });
-    }
-    dispatchEvent("spectators", spectatorsOut);
   } catch (e) {
     console.error("[WebRadar] handleBackendMessage error:", e.message, e.stack);
   }

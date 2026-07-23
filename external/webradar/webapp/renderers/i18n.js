@@ -82,9 +82,6 @@ const I18N = {
 		opt_left: "左侧",
 		opt_right: "右侧",
 
-		// 观战面板
-		spectator_header: "观战列表",
-
 		// 未知地图
 		unsupported_map: "不支持该地图",
 
@@ -169,8 +166,6 @@ const I18N = {
 		opt_scale: "Scale",
 		opt_left: "Left",
 		opt_right: "Right",
-
-		spectator_header: "Spectators",
 
 		unsupported_map: "Unsupported map",
 

@@ -1,4 +1,5 @@
 #include "GrenadeHelper.h"
+#include <algorithm>
 
 namespace GrenadeHelper
 {
@@ -696,6 +697,64 @@ namespace GrenadeHelper
         }
     }
 
+    // Draw aim crosshair with current style settings
+    void DrawAimCrosshair(ImDrawList* drawList, Vec2 aimScreen, float screenDistFromCenter)
+    {
+        ImColor aimColor(CrosshairColorR, CrosshairColorG, CrosshairColorB, CrosshairColorA);
+        ImColor outlineColor(0, 0, 0, 180);
+        float thickness = CrosshairThickness;
+
+        auto drawThickLine = [&](ImVec2 a, ImVec2 b) {
+            drawList->AddLine(a, b, outlineColor, thickness + 2.0f);
+            drawList->AddLine(a, b, aimColor, thickness);
+        };
+
+        switch ((AimCrosshairStyle)CrosshairStyle)
+        {
+            case RingCross:
+            {
+                drawList->AddCircle(ImVec2(aimScreen.x, aimScreen.y), CrosshairSize,
+                                    outlineColor, 32, thickness + 2.0f);
+                drawList->AddCircle(ImVec2(aimScreen.x, aimScreen.y), CrosshairSize,
+                                    aimColor, 32, thickness);
+                drawThickLine(ImVec2(aimScreen.x - CrosshairLen, aimScreen.y),
+                              ImVec2(aimScreen.x - CrosshairGap, aimScreen.y));
+                drawThickLine(ImVec2(aimScreen.x + CrosshairGap, aimScreen.y),
+                              ImVec2(aimScreen.x + CrosshairLen, aimScreen.y));
+                drawThickLine(ImVec2(aimScreen.x, aimScreen.y - CrosshairLen),
+                              ImVec2(aimScreen.x, aimScreen.y - CrosshairGap));
+                drawThickLine(ImVec2(aimScreen.x, aimScreen.y + CrosshairGap),
+                              ImVec2(aimScreen.x, aimScreen.y + CrosshairLen));
+                break;
+            }
+            case CrossOnly:
+            {
+                drawThickLine(ImVec2(aimScreen.x - CrosshairLen, aimScreen.y),
+                              ImVec2(aimScreen.x + CrosshairLen, aimScreen.y));
+                drawThickLine(ImVec2(aimScreen.x, aimScreen.y - CrosshairLen),
+                              ImVec2(aimScreen.x, aimScreen.y + CrosshairLen));
+                break;
+            }
+            case RingOnly:
+            {
+                drawList->AddCircle(ImVec2(aimScreen.x, aimScreen.y), CrosshairSize,
+                                    outlineColor, 32, thickness + 2.0f);
+                drawList->AddCircle(ImVec2(aimScreen.x, aimScreen.y), CrosshairSize,
+                                    aimColor, 32, thickness);
+                break;
+            }
+            case DotOnly:
+            {
+                float dotR = CrosshairThickness * 1.5f + 1.0f;
+                drawList->AddCircleFilled(ImVec2(aimScreen.x, aimScreen.y), dotR + 1.0f,
+                                          outlineColor, 12);
+                drawList->AddCircleFilled(ImVec2(aimScreen.x, aimScreen.y), dotR,
+                                          aimColor, 12);
+                break;
+            }
+        }
+    }
+
     // Render all throw positions
     void Render(const CEntity& LocalPlayer)
     {
@@ -719,56 +778,68 @@ namespace GrenadeHelper
 
         ImDrawList* drawList = ImGui::GetBackgroundDrawList();
 
-        // Find nearest throw position of the same type within AimIndicatorDistance
-        const ThrowPos* nearestThrow = nullptr;
-        float nearestDist = AimIndicatorDistance;
-        
+        // Collect all throw positions of the same type within AimIndicatorDistance, sorted by distance ascending
+        struct AimCandidate { const ThrowPos* t; float dist; };
+        std::vector<AimCandidate> aimCandidates;
         for (const auto& t : *CurrentThrows)
         {
             if (t.Type != currentGrenade)
                 continue;
-            
+
             float dist = GetDistance(LocalPlayer.Pawn.Pos, t.Position);
-            if (dist < nearestDist) {
-                nearestDist = dist;
-                nearestThrow = &t;
+            if (dist < AimIndicatorDistance) {
+                aimCandidates.push_back({ &t, dist });
             }
         }
-        
+        std::sort(aimCandidates.begin(), aimCandidates.end(),
+                  [](const AimCandidate& a, const AimCandidate& b){ return a.dist < b.dist; });
+
+        // Cap simultaneous aim crosshairs
+        if ((int)aimCandidates.size() > MaxSimultaneousAims)
+            aimCandidates.resize(MaxSimultaneousAims);
+
+        // If not showing all, keep only the nearest
+        if (!ShowAllAimInDistance && !aimCandidates.empty())
+            aimCandidates.resize(1);
+
+        const ThrowPos* nearestThrow = aimCandidates.empty() ? nullptr : aimCandidates.front().t;
+        float nearestDist = aimCandidates.empty() ? 0.0f : aimCandidates.front().dist;
+
         // Draw all throw positions of same grenade type (boxes/names)
         for (const auto& t : *CurrentThrows)
         {
             if (t.Type != currentGrenade)
                 continue;
-                
+
             DrawThrowPos(t, LocalPlayer, drawList);
         }
-        
-        // Draw aim target ONLY for nearest throw position within AimIndicatorDistance
-        if (nearestThrow && nearestDist < AimIndicatorDistance)
+
+        // Draw aim targets for all candidates within AimIndicatorDistance
+        if (!aimCandidates.empty())
         {
             // Display throw info at top of screen
             ImVec2 displaySize = ImGui::GetIO().DisplaySize;
 
-            // Get grenade type and style names
-            const char* grenadeTypeName = GetGrenadeTypeName(nearestThrow->Type);
-            const char* styleName = GetStyleName(nearestThrow->Style);
-            ImColor grenadeColor = GetGrenadeColor(nearestThrow->Type);
+            // Draw info text for each candidate at top center, stacked by distance (nearest first)
+            {
+                float fontSize = 32.0f;  // Larger font
+                float textY = 120.0f;    // 120 pixels from top
+                for (const auto& cand : aimCandidates)
+                {
+                    const char* grenadeTypeName = GetGrenadeTypeName(cand.t->Type);
+                    const char* styleName = GetStyleName(cand.t->Style);
+                    char infoText[256];
+                    sprintf_s(infoText, "[%s] %s - %s", grenadeTypeName, cand.t->Name.c_str(), styleName);
 
-            // Draw info text at top center with larger font
-            char infoText[256];
-            sprintf_s(infoText, "[%s] %s - %s", grenadeTypeName, nearestThrow->Name.c_str(), styleName);
+                    ImVec2 textSize = ImGui::GetFont()->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, infoText);
+                    float textX = (displaySize.x - textSize.x) / 2.0f;
+                    drawList->AddText(ImGui::GetFont(), fontSize, ImVec2(textX, textY),
+                                      ImColor(0, 255, 0, 240), infoText);
+                    textY += fontSize + 4.0f;  // line spacing
+                }
+            }
 
-            // Use larger font size
-            float fontSize = 32.0f;  // Larger font
-            ImVec2 textSize = ImGui::GetFont()->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, infoText);
-            float textX = (displaySize.x - textSize.x) / 2.0f;
-            float textY = 120.0f;  // Moved down from 50 to 120 pixels from top
-
-            // Draw text with larger font in green
-            drawList->AddText(ImGui::GetFont(), fontSize, ImVec2(textX, textY), ImColor(0, 255, 0, 240), infoText);
-            
-            // Calculate movement direction to throw position
+            // Calculate movement direction to throw position (based on nearest candidate)
             Vec3 playerPos = LocalPlayer.Pawn.Pos;
             Vec3 toTarget;
             toTarget.x = nearestThrow->Position.x - playerPos.x;
@@ -927,47 +998,22 @@ namespace GrenadeHelper
                 drawLabel(lang.dir_r.c_str(), 90.0f, ImColor(255, 255, 255, 200));
             }
             
-            // Project saved aim direction directly to screen (position-independent)
-            Vec3 aimDir = AngleToDirection(nearestThrow->Pitch, nearestThrow->Yaw);
-            Vec2 aimScreen;
-            if (DirectionToScreen(aimDir, aimScreen))
+            // Project saved aim direction directly to screen for each candidate
+            // Note: screenCenter already defined above (compass indicator section)
+            for (const auto& cand : aimCandidates)
             {
-                // Get screen center (player's crosshair position)
-                Vec2 screenCenter(displaySize.x / 2.0f, displaySize.y / 2.0f);
-                
+                Vec3 aimDir = AngleToDirection(cand.t->Pitch, cand.t->Yaw);
+                Vec2 aimScreen;
+                if (!DirectionToScreen(aimDir, aimScreen))
+                    continue;
+
                 // Calculate distance from screen center to aim point
-                float screenDist = sqrtf(powf(aimScreen.x - screenCenter.x, 2) + 
-                                        powf(aimScreen.y - screenCenter.y, 2));
-                
-                // Draw aim crosshair with ring + broken cross lines
-                float crossLen = 20.0f;
-                float crossGap = 4.0f;
-                float ringRadius = 24.0f;
-                float thickness = 2.0f;
-                ImColor aimColor(255, 0, 0, 240);
-                ImColor outlineColor(0, 0, 0, 180);
-                
-                // Outer ring
-                drawList->AddCircle(ImVec2(aimScreen.x, aimScreen.y), ringRadius,
-                                   outlineColor, 32, thickness + 2.0f);
-                drawList->AddCircle(ImVec2(aimScreen.x, aimScreen.y), ringRadius,
-                                   aimColor, 32, thickness);
-                
-                // Horizontal lines (with gap in center) + outline
-                auto drawThickLine = [&](ImVec2 a, ImVec2 b) {
-                    drawList->AddLine(a, b, outlineColor, thickness + 2.0f);
-                    drawList->AddLine(a, b, aimColor, thickness);
-                };
-                drawThickLine(ImVec2(aimScreen.x - crossLen, aimScreen.y),
-                              ImVec2(aimScreen.x - crossGap, aimScreen.y));
-                drawThickLine(ImVec2(aimScreen.x + crossGap, aimScreen.y),
-                              ImVec2(aimScreen.x + crossLen, aimScreen.y));
-                // Vertical lines (with gap in center)
-                drawThickLine(ImVec2(aimScreen.x, aimScreen.y - crossLen),
-                              ImVec2(aimScreen.x, aimScreen.y - crossGap));
-                drawThickLine(ImVec2(aimScreen.x, aimScreen.y + crossGap),
-                              ImVec2(aimScreen.x, aimScreen.y + crossLen));
-                
+                float screenDist = sqrtf(powf(aimScreen.x - screenCenter.x, 2) +
+                                         powf(aimScreen.y - screenCenter.y, 2));
+
+                // Draw aim crosshair (style configured by user)
+                DrawAimCrosshair(drawList, aimScreen, screenDist);
+
                 // Draw direction arrow only when aim point is far from crosshair
                 float arrowHideDistance = 60.0f;  // Hide arrow when within this distance
                 if (screenDist > arrowHideDistance)

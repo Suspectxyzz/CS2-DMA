@@ -9,9 +9,9 @@
 //    Failed    — sustained failure, requires reconnect
 //
 //  Transitions:
-//    Healthy  -> Degraded : 3 consecutive failures
-//    Degraded -> Healthy  : 10 consecutive successes
-//    Degraded -> Failed   : 20 consecutive failures
+//    Healthy  -> Degraded : 8 consecutive failures
+//    Degraded -> Healthy  : 15 consecutive successes
+//    Degraded -> Failed   : 40 consecutive failures
 //    Failed   -> Healthy  : NotifyReconnectSuccess() after reconnect
 // =====================================================================
 
@@ -35,8 +35,10 @@ namespace DmaHealth
         int64_t  totalFailures = 0;
         int64_t  totalSuccesses = 0;
         std::chrono::steady_clock::time_point degradedStartTime{};
+        std::chrono::steady_clock::time_point failedStartTime{};
         std::chrono::steady_clock::time_point lastRecoveryTime{};
         int64_t  lastDegradedDurationMs = 0;
+        int64_t  lastFailureDurationMs = 0;
     };
 
     class DmaHealthTracker
@@ -49,7 +51,7 @@ namespace DmaHealth
             m_Stats.consecutiveFailures = 0;
             m_Stats.totalSuccesses++;
 
-            if (m_State == DmaHealthState::Degraded && m_Stats.consecutiveSuccesses >= 10)
+            if (m_State == DmaHealthState::Degraded && m_Stats.consecutiveSuccesses >= 15)
             {
                 TransitionToLocked(DmaHealthState::Healthy);
             }
@@ -62,11 +64,11 @@ namespace DmaHealth
             m_Stats.consecutiveSuccesses = 0;
             m_Stats.totalFailures++;
 
-            if (m_State == DmaHealthState::Healthy && m_Stats.consecutiveFailures >= 3)
+            if (m_State == DmaHealthState::Healthy && m_Stats.consecutiveFailures >= 8)
             {
                 TransitionToLocked(DmaHealthState::Degraded);
             }
-            else if (m_State == DmaHealthState::Degraded && m_Stats.consecutiveFailures >= 20)
+            else if (m_State == DmaHealthState::Degraded && m_Stats.consecutiveFailures >= 40)
             {
                 TransitionToLocked(DmaHealthState::Failed);
             }
@@ -108,19 +110,34 @@ namespace DmaHealth
         {
             if (m_State == newState) return;
 
+            const auto now = std::chrono::steady_clock::now();
+
             // Leaving Degraded: record recovery time and duration
             if (m_State == DmaHealthState::Degraded)
             {
-                auto now = std::chrono::steady_clock::now();
                 m_Stats.lastRecoveryTime = now;
                 m_Stats.lastDegradedDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                     now - m_Stats.degradedStartTime).count();
             }
 
+            // Leaving Failed: record recovery time and failure duration
+            if (m_State == DmaHealthState::Failed)
+            {
+                m_Stats.lastRecoveryTime = now;
+                m_Stats.lastFailureDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now - m_Stats.failedStartTime).count();
+            }
+
             // Entering Degraded: record start time
             if (newState == DmaHealthState::Degraded)
             {
-                m_Stats.degradedStartTime = std::chrono::steady_clock::now();
+                m_Stats.degradedStartTime = now;
+            }
+
+            // Entering Failed: record start time
+            if (newState == DmaHealthState::Failed)
+            {
+                m_Stats.failedStartTime = now;
             }
 
             m_State = newState;
@@ -131,3 +148,6 @@ namespace DmaHealth
         DmaHealthStats          m_Stats{};
     };
 }
+
+// 全局实例（C++17 inline 变量，header-only，多 TU 共享一份）
+inline DmaHealth::DmaHealthTracker g_dmaHealth;

@@ -4,12 +4,25 @@
 #include "MenuConfig.h"
 #include "../config/ConfigSaver.h"
 #include "../config/Language.h"
+#ifdef AIMBOT_ENABLED
+#include "../config/AimConfig.h"
+#include "../aim/AimBot.h"
+#include "../aim/TriggerBot.h"
+#include "../aim/MagnetTriggerBot.h"
+#include "../aim/SprayControl.h"
+#include "../aim/RecoilControl.h"
+#include "../aim/InputManager.h"
+#include "../hw/HwManager.h"
+#include "../license/AntiTamper.h"
+#endif
 #include "../utils/Logger.h"
 #include "../utils/DmaHealth.h"
 #include "../utils/StageTimer.h"
 #include "intervals.h"
 #include "SceneReset.h"
 #include "WeaponLookup.h"
+
+#include "rapidjson/document.h"
 
 #include <winnt.h>
 #include <windows.h>
@@ -22,7 +35,7 @@
 #include <algorithm>
 
 // DMA health tracker (DMA health state machine)
-DmaHealth::DmaHealthTracker g_dmaHealth;
+// g_dmaHealth is now defined as inline in DmaHealth.h, shared across all TUs.
 
 // ----------------------------------------------------------------------------
 // 运行时 VT/IOMMU 拒绝识别（P3 Task 5）
@@ -227,18 +240,53 @@ static void PreciseSleepUs(int64_t us)
 		_mm_pause();
 }
 
-// ---------- Validation helpers ----------
+// ---------- Minimal validation helpers (direct-read mode) ----------
+// Only reject obvious garbage: NaN/Infinity, all-zero coords, null/misaligned pointers.
+// No range filtering (health>100, coord bounds etc.) — read what DMA gives, render as-is.
 
 static bool IsValidPos(const Vec3& pos)
 {
 	return std::isfinite(pos.x) && std::isfinite(pos.y) && std::isfinite(pos.z)
-		&& std::abs(pos.x) < 50000.f && std::abs(pos.y) < 50000.f && std::abs(pos.z) < 50000.f;
+		&& (std::abs(pos.x) + std::abs(pos.y) + std::abs(pos.z) > 1.0f);
 }
 
-static bool IsValidHealth(int hp)
+static bool IsValidHealth(int) { return true; } // no filtering
+
+// Unified game-pointer validation: rejects null, out-of-range, and misaligned values.
+static bool IsLikelyGamePointer(DWORD64 ptr)
 {
-	return hp > 0 && hp <= 100;
+	if (ptr < 0x10000ULL || ptr >= 0x00007FF000000000ULL)
+		return false;
+	return (ptr & 7ULL) == 0ULL; // 8-byte alignment
 }
+
+// === Stage health checker ===
+// 各数据读取阶段的独立健康检查，连续异常自动触发DMA刷新
+struct StageHealth {
+	int failStreak = 0;
+	int64_t lastRefreshUs = 0;
+	void reportFail(int64_t now, const char* name) {
+		if (++failStreak >= 3 && (lastRefreshUs == 0 || (now - lastRefreshUs) >= 500000)) {
+			LOG_WARNING("Data", "Stage '{}' anomaly (streak={}), refreshing DMA", name, failStreak);
+			RequestDmaRefresh(DmaRefreshTier::Full);
+			SceneReset::BumpSceneReset();
+			lastRefreshUs = now;
+			failStreak = 0;
+		}
+	}
+	void reportOk() { failStreak = 0; }
+};
+
+// === Session player registry ===
+// 单局玩家列表，每局开始时建立，用于精细化数据质量检查
+struct SessionPlayer {
+	DWORD64 controllerAddr = 0;
+	int failStreak = 0;
+	int goneStreak = 0;
+	bool isAlive = true;
+	int framesSinceAdded = 0;  // 加入session后的帧数，用于武器名称宽限期
+	bool hadWeapon = false;    // 是否曾经读到过武器名称
+};
 
 // =====================================================================
 //  DataThread 闁?optimized data pipeline
@@ -266,9 +314,6 @@ VOID DataThread()
 		CEntity entity;
 	};
 	constexpr int MAX_ENTITIES = 128;
-	std::vector<CachedEntity> entityCache;
-	entityCache.reserve(MAX_ENTITIES);
-
 	CEntity localPlayer;
 	DWORD64 localPawnAddrCached = 0;
 	float matrix[4][4]{};
@@ -287,86 +332,42 @@ VOID DataThread()
 	static ScatterBuf scatterBuf[MAX_ENTITIES];
 	ScatterBuf localBuf{};
 
-	// Per-slot core-field read failure tracking (P3 Task 8).
-	// Static so state persists across frames; DataThread is single-threaded.
-	std::unordered_map<DWORD64, int> s_coreReadFailStreak;
-	std::unordered_map<DWORD64, int64_t> s_coreReadFailSinceUs;
-	constexpr int CORE_READ_EVICT_THRESHOLD = 96;
-	std::unordered_map<DWORD64, int64_t> s_pawnStaleSinceUs;
-	constexpr int64_t PAWN_STALE_GRACE_US = 250000; // 250ms
-	std::unordered_map<DWORD64, int64_t> s_boneArrayStaleSinceUs;
-	constexpr int64_t BONE_ARRAY_STALE_GRACE_US = 250000; // 250ms
-
-	// Core stale hold: 250ms grace period for invalid core data (DMA jitter tolerance)
-	std::unordered_map<DWORD64, int64_t> s_coreStaleSinceUs;
-	constexpr int64_t CORE_STALE_HOLD_US = 250000;       // 250ms core stale hold
-	constexpr int64_t CORE_STALE_HOLD_AFTER_RESET_US = 1000000; // 1s core stale hold after scene reset
-	int64_t s_lastSceneResetUs = 0;                       // timestamp of last scene reset (Task 6)
-	// Zero pawn grace: 250ms grace period for transient pawn address == 0 (Task 5)
-	std::unordered_map<DWORD64, int64_t> s_zeroPawnSinceUs;
-	constexpr int64_t ZERO_PAWN_GRACE_US = 250000;        // 250ms zero pawn grace
-	// Hierarchy missing hold: 2.8s grace period for pawn address resolution failure
-	std::unordered_map<DWORD64, int64_t> s_hierarchyMissingSinceUs;
-	// Partial core detection: detect multi-player core data anomaly, trigger DMA refresh
-	int s_partialCoreStreak = 0;
-	int64_t s_partialCoreSinceUs = 0;
-	int s_partialCoreConfirmedStreak = 0;
-	// Zero controller detection: graded DMA refresh when all controllers are 0
-	int s_zeroControllerStreak = 0;
-	// Population watchdog: graded recovery when entityCache is empty
-	int64_t s_zeroPlayerSinceUs = 0;
-	bool s_popWatchProbeDone = false;
-	bool s_popWatchRepairDone = false;
-	bool s_popWatchFullDone = false;
-	// Scene reset flag: extends hierarchy missing hold to 4.2s
-	bool s_sceneResetRecently = false;
-	int64_t s_sceneResetAtUs = 0;
-	constexpr int64_t HIERARCHY_MISSING_HOLD_US = 2800000;       // 2.8s hierarchy missing hold
-	constexpr int64_t HIERARCHY_MISSING_HOLD_RESET_US = 4200000; // 4.2s after scene reset
-	// Controller missing hold: 500ms grace period for transient 0 controller address (DMA jitter)
-	std::unordered_map<int, int64_t> s_controllerMissingSinceUs;
-	DWORD64 s_lastControllerAddrBySlot[64] = {0};
-	constexpr int64_t CONTROLLER_MISSING_HOLD_US = 500000; // 500ms controller missing hold
-	constexpr int PARTIAL_CORE_STREAK_THRESHOLD = 60;          // 60 consecutive frames
-	constexpr int PARTIAL_CORE_STREAK_RESET_THRESHOLD = 24;    // 24 frames after scene reset
-	constexpr int64_t PARTIAL_CORE_TIME_US = 1200000;          // 1.2s
-	constexpr int64_t PARTIAL_CORE_TIME_RESET_US = 550000;     // 0.55s after scene reset
-	constexpr int CORE_MISSING_TOLERANCE = 1;                   // tolerance for sane core count
-	constexpr int64_t SCENE_RESET_RECENT_WINDOW_US = 5000000;    // 5s window for "recent" scene reset
-	// Death confirm: require 80ms of health<=0 before confirming death
-	std::unordered_map<DWORD64, int> s_deathConfirmCount;
-	constexpr int64_t DEATH_CONFIRM_US = 80000;           // 80ms death confirm
-	constexpr int DEATH_CONFIRM_THRESHOLD = 8;            // 8 frames (80ms / 10ms)
-
 	// Tiered update frequency 闁?microsecond intervals (P2)
 	auto nowUs = []() -> int64_t {
 		return std::chrono::duration_cast<std::chrono::microseconds>(
 			std::chrono::steady_clock::now().time_since_epoch()).count();
 	};
 
-	int64_t lastDiscoveryUs = 0;
 		int64_t lastControllerRefreshUs = 0;
 		int64_t lastWeaponUpdateUs = 0;
 		int64_t lastWrExtraUs = 0;
 		int64_t lastWrSlowUs = 0;
 		int64_t lastProjectileScanUs = 0;
+
+	static StageHealth s_matrixHealth;
+	static StageHealth s_playerDataHealth;
+	static std::vector<SessionPlayer> s_sessionPlayers;
+	static uint64_t s_sessionSerial = 0;
 		int64_t lastPeriodicRefreshUs = 0;
 		int64_t lastPlayerStatusAuxUs = 0;
 
 	int frameCounter = 0; // retained for logging only
 
-	// Consecutive read failure counter 闁?triggers tiered DMA refresh (P3 Task 9)
-	// 100闁愁偅澧緍obe, 300闁愁偅澹奺pair, 500闁愁偅澧痷ll (+ InitAddress + reset)
-	int consecutiveFailCount = 0;
-
-	// Stale data counter 闁?matrix all-zero means DMA cache may be out of date
-	int staleDataCount = 0;
-	constexpr int STALE_DATA_THRESHOLD = 2000; // ~2s of all-zero matrix 闁?refresh DMA cache
-
 	while (true)
 	{
+#ifdef AIMBOT_ENABLED
+		// 多点校验：每 200 次循环检查一次（~1秒@200Hz）
+		static int s_dataAntiTamper = 0;
+		if (++s_dataAntiTamper >= 200) {
+			s_dataAntiTamper = 0;
+			if (!AntiTamper::PeriodicCheck()) {
+				globalVars::gameState.store(AppState::DMA_FAILED);
+				continue;
+			}
+		}
+#endif
 		try {
-			PreciseSleepUs(1000);
+			PreciseSleepUs(5000); // 200Hz direct-read mode
 
 			if (globalVars::gameState.load() != AppState::RUNNING) {
 				Sleep(100);
@@ -379,6 +380,9 @@ VOID DataThread()
 				Sleep(1000);
 				continue;
 			}
+
+			std::vector<CachedEntity> entityCache;
+			entityCache.reserve(MAX_ENTITIES);
 
 			frameCounter++;
 
@@ -402,7 +406,10 @@ VOID DataThread()
 			                  MenuConfig::ShowBombTimer || MenuConfig::ShowWorldProjectileTimers ||
 			                  MenuConfig::ShowWorldItems || MenuConfig::ShowHealthText ||
 			                  MenuConfig::ShowArmorText;
-			bool needEntityPipeline = anyESPDraw || MenuConfig::ShowWebRadar || MenuConfig::ShowSpectatorList;
+			bool needEntityPipeline = anyESPDraw || MenuConfig::ShowWebRadar;
+#ifdef AIMBOT_ENABLED
+			needEntityPipeline = needEntityPipeline || AimConfig::AimBot().enabled || AimConfig::TriggerBot().enabled || AimConfig::Magnet().enabled;
+#endif
 			bool anyFeature = needEntityPipeline || MenuConfig::ShowProjectileESP || MenuConfig::ShowPerfMonitor;
 
 			LOG_TRACE("Data", "frame={} anyESP={} entityPipe={} anyFeat={}", frameCounter, anyESPDraw, needEntityPipeline, anyFeature);
@@ -417,98 +424,36 @@ VOID DataThread()
 			}
 
 			// Get2DBox uses head bone 闁?bones required for any ESP drawing
-			bool needBones = anyESPDraw;
+		// VPKVisibilityCheck 也需要本地 head 骨骼作为可见性射线起点
+		bool needBones = anyESPDraw || MenuConfig::VPKVisibilityCheck;
+#ifdef AIMBOT_ENABLED
+		needBones = needBones || AimConfig::AimBot().enabled || AimConfig::Magnet().enabled;
+#endif
 			bool needViewAngle = MenuConfig::ShowEyeRay || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled;
+#ifdef AIMBOT_ENABLED
+			needViewAngle = needViewAngle || AimConfig::AimBot().enabled || AimConfig::Magnet().enabled;
+#endif
 			bool needCameraPos = MenuConfig::ShowEyeRay || MenuConfig::VPKVisibilityCheck;
-			bool needWeapon = MenuConfig::ShowWeaponESP || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled || MenuConfig::ShowWeaponAmmo || MenuConfig::ShowWeaponIcon;
+#ifdef AIMBOT_ENABLED
+			needCameraPos = needCameraPos || AimConfig::AimBot().visualCheck || AimConfig::Magnet().visualCheck;
+#endif
+			bool needWeapon = MenuConfig::ShowWeaponESP || MenuConfig::ShowWebRadar || GrenadeHelper::Enabled || MenuConfig::ShowWeaponAmmo || MenuConfig::ShowWeaponIcon || MenuConfig::PlayerCountCheckEnabled;
 
 			// ------- 1. Read matrix -------
 			{
 				StageTimer timer(g_stageMatrixUs);
-		if (!ProcessMgr.ReadMemory(gGame.GetMatrixAddress(), matrix, 64)) {
-			LOG_TRACE("Data", "ReadMemory matrix FAILED (addr=0x{:X})", gGame.GetMatrixAddress());
-			consecutiveFailCount++;
-			if (consecutiveFailCount >= 500) {
-				LOG_WARNING("Data", "{} consecutive read failures, requesting Full DMA refresh", consecutiveFailCount);
-				RequestDmaRefresh(DmaRefreshTier::Full);
-				gGame.InitAddress();
-				SceneReset::BumpSceneReset();
-				consecutiveFailCount = 0;
-				entityCache.clear();
-				s_coreReadFailStreak.clear();
-				s_coreReadFailSinceUs.clear();
-				s_pawnStaleSinceUs.clear();
-				s_boneArrayStaleSinceUs.clear();
-				s_coreStaleSinceUs.clear();
-				s_deathConfirmCount.clear();
-				s_hierarchyMissingSinceUs.clear();
-				s_controllerMissingSinceUs.clear();
-				s_zeroPawnSinceUs.clear();
-				memset(s_lastControllerAddrBySlot, 0, sizeof(s_lastControllerAddrBySlot));
-				s_partialCoreStreak = 0;
-				s_partialCoreSinceUs = 0;
-				s_partialCoreConfirmedStreak = 0;
-				s_zeroControllerStreak = 0;
-				s_zeroPlayerSinceUs = 0;
-				s_popWatchProbeDone = false;
-				s_popWatchRepairDone = false;
-				s_popWatchFullDone = false;
-				s_sceneResetRecently = true;
-				s_sceneResetAtUs = now;
-				s_lastSceneResetUs = now;
-			} else if (consecutiveFailCount >= 300) {
-				RequestDmaRefresh(DmaRefreshTier::Repair);
-			} else if (consecutiveFailCount >= 100) {
-				RequestDmaRefresh(DmaRefreshTier::Probe);
+		ProcessMgr.ReadMemory(gGame.GetMatrixAddress(), matrix, 64);
+		memcpy(gGame.View.Matrix, matrix, 64);
 			}
-			g_dmaHealth.RecordFailure();
-			continue;
-		}
-		consecutiveFailCount = 0;
-		g_dmaHealth.RecordSuccess();
-		VtIommuGuard::RecordReadSuccess();
 
-			// Check for stale matrix (all zeros = not in game or DMA cache stale)
-			bool matrixAllZero = true;
-			for (int i = 0; i < 16; i++) {
-				if (((float*)matrix)[i] != 0.0f) { matrixAllZero = false; break; }
-			}
-			if (matrixAllZero) {
-			staleDataCount++;
-			if (staleDataCount >= STALE_DATA_THRESHOLD) {
-			LOG_WARNING("Data", "Matrix all-zero for {} frames, refreshing DMA cache", staleDataCount);
-			RequestDmaRefresh(DmaRefreshTier::Full);
-			gGame.UpdateEntityListEntry();
-			SceneReset::BumpSceneReset();
-			staleDataCount = 0;
-			entityCache.clear();
-			s_coreReadFailStreak.clear();
-			s_coreReadFailSinceUs.clear();
-			s_pawnStaleSinceUs.clear();
-			s_boneArrayStaleSinceUs.clear();
-			s_coreStaleSinceUs.clear();
-			s_deathConfirmCount.clear();
-			s_hierarchyMissingSinceUs.clear();
-			s_controllerMissingSinceUs.clear();
-			s_zeroPawnSinceUs.clear();
-			memset(s_lastControllerAddrBySlot, 0, sizeof(s_lastControllerAddrBySlot));
-			s_partialCoreStreak = 0;
-			s_partialCoreSinceUs = 0;
-			s_partialCoreConfirmedStreak = 0;
-			s_zeroControllerStreak = 0;
-			s_zeroPlayerSinceUs = 0;
-			s_popWatchProbeDone = false;
-			s_popWatchRepairDone = false;
-			s_popWatchFullDone = false;
-			s_sceneResetRecently = true;
-			s_sceneResetAtUs = now;
-			s_lastSceneResetUs = now;
-		}
-			continue;
-		}
-			staleDataCount = 0;
-
-			memcpy(gGame.View.Matrix, matrix, 64);
+			// Matrix health check
+			{
+				bool matrixValid = false;
+				for (int r = 0; r < 4 && !matrixValid; r++)
+					for (int c = 0; c < 4; c++)
+						if (std::isfinite(matrix[r][c]) && matrix[r][c] != 0.f) { matrixValid = true; break; }
+				if (matrixValid) s_matrixHealth.reportOk();
+				else s_matrixHealth.reportFail(now, "Matrix");
 			}
 
 			// ------- 2. Read local player addresses -------
@@ -517,46 +462,16 @@ VOID DataThread()
 			{
 				StageTimer timer(g_stageLocalUs);
 			if (!ProcessMgr.ReadMemory(gGame.GetLocalControllerAddress(), localControllerAddr)) {
-				LOG_TRACE("Data", "ReadMemory localController FAILED");
-				continue;
-			}
-			if (!ProcessMgr.ReadMemory(gGame.GetLocalPawnAddress(), localPawnAddr)) {
-				LOG_TRACE("Data", "ReadMemory localPawn FAILED");
-				continue;
-			}
+			continue;
+		}
+		if (localControllerAddr == 0) {
+			continue;
+		}
+		if (!ProcessMgr.ReadMemory(gGame.GetLocalPawnAddress(), localPawnAddr)) {
+			continue;
+		}
 
 			LOG_TRACE("Data", "Local: ctrl=0x{:X} pawn=0x{:X}", localControllerAddr, localPawnAddr);
-
-			// Detect match entry: pawn 0闁愁偅濮n-zero means player just entered a match
-	if (localPawnAddr != 0 && localPawnAddrCached == 0) {
-		LOG_INFO("Data", "Player entered match (pawn 0闁?x{:X}), refreshing DMA cache", localPawnAddr);
-		RequestDmaRefresh(DmaRefreshTier::Full);
-		gGame.UpdateEntityListEntry();
-		SceneReset::BumpSceneReset();
-		// Reset entity cache to discard stale menu/loading data so the next
-		// discovery frame rebuilds the player list from a clean state.
-		entityCache.clear();
-		s_coreReadFailStreak.clear();
-		s_coreReadFailSinceUs.clear();
-		s_pawnStaleSinceUs.clear();
-		s_boneArrayStaleSinceUs.clear();
-		s_coreStaleSinceUs.clear();
-		s_deathConfirmCount.clear();
-		s_hierarchyMissingSinceUs.clear();
-		s_controllerMissingSinceUs.clear();
-		s_zeroPawnSinceUs.clear();
-		memset(s_lastControllerAddrBySlot, 0, sizeof(s_lastControllerAddrBySlot));
-		s_partialCoreStreak = 0;
-		s_partialCoreSinceUs = 0;
-		s_partialCoreConfirmedStreak = 0;
-		s_zeroControllerStreak = 0;
-		s_zeroPlayerSinceUs = 0;
-		s_popWatchProbeDone = false;
-		s_popWatchRepairDone = false;
-		s_popWatchFullDone = false;
-		s_sceneResetRecently = true;
-		s_sceneResetAtUs = now;
-	}
 
 		// Local player: full controller read only on address change or periodic refresh
 		bool localChanged = (localPawnAddr != localPawnAddrCached);
@@ -589,23 +504,11 @@ VOID DataThread()
 			}
 
 			// ------- 3-7. Entity pipeline (skip when only projectile ESP is on) -------
-			if (needEntityPipeline) {
+		if (needEntityPipeline) {
 
-			bool isDiscoveryFrame = ((now - lastDiscoveryUs) >= intervals::kDiscoveryUs) || entityCache.empty();
-		if (isDiscoveryFrame) lastDiscoveryUs = now;
-
-			if (isDiscoveryFrame) {
+			{
 				StageTimer timer(g_stageEntitiesUs);
-				// Clear scene reset flag after successful discovery window
-				if (s_sceneResetRecently && now - s_sceneResetAtUs > SCENE_RESET_RECENT_WINDOW_US) {
-					s_sceneResetRecently = false;
-				}
 				LOG_TRACE("Data", "--- Discovery frame (cache_size={}) ---", entityCache.size());
-			// Refresh DMA cache only when cache is empty (just entered match)
-			// or when we detect stale data. Not every frame 闁?too expensive.
-			if (entityCache.empty()) {
-				RequestDmaRefresh(DmaRefreshTier::Full);
-			}
 
 				// Refresh EntityListEntry every discovery frame 闁?the pointer can change
 				// between SlowUpdateThread's 10s intervals (round restarts, player joins, etc.)
@@ -673,42 +576,22 @@ VOID DataThread()
 				for (int i = 0; i < scanCount; i++) {
 				DWORD64 entityAddr = entityAddresses[i];
 				if (entityAddr == 0) {
-					// Controller missing hold: retain old entity within 500ms grace
-					// period to tolerate transient 0 returns from DMA jitter.
-					DWORD64 lastAddr = s_lastControllerAddrBySlot[i];
-					if (lastAddr != 0) {
-						auto oldIt = oldCacheMap.find(lastAddr);
-						if (oldIt != oldCacheMap.end()) {
-							auto missingIt = s_controllerMissingSinceUs.find(i);
-							if (missingIt == s_controllerMissingSinceUs.end()) {
-								s_controllerMissingSinceUs[i] = now;
-								newCache.push_back(entityCache[oldIt->second]);
-								continue;
-							} else if (now - missingIt->second < CONTROLLER_MISSING_HOLD_US) {
-								newCache.push_back(entityCache[oldIt->second]);
-								continue;
-							} else {
-								s_controllerMissingSinceUs.erase(missingIt);
-								s_lastControllerAddrBySlot[i] = 0;
-							}
-						}
-					}
-					continue;
-				}
-				// Address present: clear missing state and update slot memory
-				s_controllerMissingSinceUs.erase(i);
-				s_lastControllerAddrBySlot[i] = entityAddr;
-				if (entityAddr == localControllerAddr) {
+				continue;
+			}
+			if (entityAddr == localControllerAddr) {
 					localPlayerIndex = i;
 					continue;
 				}
 
 				auto it = oldCacheMap.find(entityAddr);
-				if (it != oldCacheMap.end() && !controllerRefresh) {
+			if (it != oldCacheMap.end() && !controllerRefresh) {
+				// Skip evicted entities (pawnAddr==0): let them be rediscovered
+				// on the next refresh frame instead of keeping stale entries in cache.
+				if (entityCache[it->second].pawnAddr != 0)
 					newCache.push_back(entityCache[it->second]);
-				} else {
-					refreshSlots[refreshCount++] = i;
-				}
+			} else {
+				refreshSlots[refreshCount++] = i;
+			}
 			}
 
 				// Phase 1: Scatter-read controller fields (batched to avoid scatter page limit)
@@ -774,8 +657,13 @@ VOID DataThread()
 						for (int r = 0; r < refreshCount; r++) {
 							int i = refreshSlots[r];
 							// Resolve pawn for both alive AND dead players.
-							// Dead players still need pawn address for WebRadar position updates.
-							if (ctrlBuf[i].pawn == 0) continue;
+						// Dead players still need pawn address for WebRadar position updates.
+						if (ctrlBuf[i].pawn == 0) {
+							// Pawn handle reads 0 (DMA jitter): still add to aliveSlots
+							// so zero-pawn grace / hierarchy-missing hold can retain old cache.
+							aliveSlots[aliveCount++] = i;
+							continue;
+						}
 							aliveSlots[aliveCount++] = i;
 							ProcessMgr.AddScatterReadRequest(h, entityPawnListEntry + 0x10 + 8 * ((ctrlBuf[i].pawn & 0x7FFF) >> 9), &subListEntries[i], sizeof(DWORD64));
 						}
@@ -791,7 +679,7 @@ VOID DataThread()
 						if (h) {
 							for (int a = 0; a < aliveCount; a++) {
 								int i = aliveSlots[a];
-								if (subListEntries[i] == 0) continue;
+								if (subListEntries[i] == 0 || !IsLikelyGamePointer(subListEntries[i])) continue;
 								ProcessMgr.AddScatterReadRequest(h, subListEntries[i] + 0x70 * (ctrlBuf[i].pawn & 0x1FF), &pawnAddresses[i], sizeof(DWORD64));
 							}
 							ProcessMgr.ExecuteReadScatter(h);
@@ -808,7 +696,7 @@ VOID DataThread()
 						int bc = 0;
 						for (int a = 0; a < aliveCount; a++) {
 						int i = aliveSlots[a];
-						if (pawnAddresses[i] == 0) continue;
+						if (pawnAddresses[i] == 0 || !IsLikelyGamePointer(pawnAddresses[i])) continue;
 						if (ctrlBuf[i].isAlive != 1) continue;  // dead players don't need sceneNode
 						if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
 						ProcessMgr.AddScatterReadRequest(h, pawnAddresses[i] + Offset::GameSceneNode, &sceneNodes[i], sizeof(DWORD64));
@@ -823,7 +711,7 @@ VOID DataThread()
 						int bc = 0;
 						for (int a = 0; a < aliveCount; a++) {
 						int i = aliveSlots[a];
-						if (sceneNodes[i] == 0) continue;
+						if (sceneNodes[i] == 0 || !IsLikelyGamePointer(sceneNodes[i])) continue;
 						if (ctrlBuf[i].isAlive != 1) continue;  // dead players don't need boneArray
 						if (!h) { h = ProcessMgr.CreateScatterHandle(); if (!h) continue; bc = 0; }
 						ProcessMgr.AddScatterReadRequest(h, sceneNodes[i] + Offset::BoneArray, &boneArrays[i], sizeof(DWORD64));
@@ -835,112 +723,19 @@ VOID DataThread()
 					}
 
 					// Build CachedEntity from scatter results
-					for (int a = 0; a < aliveCount; a++) {
-						int i = aliveSlots[a];
-						DWORD64 addr = entityAddresses[i];
-						if (pawnAddresses[i] == 0) {
-						// Zero pawn grace: 250ms grace for transient pawn address == 0 (Task 5)
-						auto zeroIt = s_zeroPawnSinceUs.find(addr);
-						if (zeroIt == s_zeroPawnSinceUs.end()) {
-							s_zeroPawnSinceUs[addr] = now;
-							zeroIt = s_zeroPawnSinceUs.find(addr);
-						}
-						bool zeroPawnGraceActive = (now - zeroIt->second < ZERO_PAWN_GRACE_US);
-
-						// Hierarchy missing hold: retain old cache addresses within grace period
-						auto oldIt = oldCacheMap.find(addr);
-						if (oldIt != oldCacheMap.end()) {
-							const auto& old = entityCache[oldIt->second];
-							if (old.pawnAddr != 0) {
-								// Check grace period (skip hierarchy missing hold while zero pawn grace active)
-								if (!zeroPawnGraceActive) {
-									int64_t holdUs = s_sceneResetRecently ? HIERARCHY_MISSING_HOLD_RESET_US : HIERARCHY_MISSING_HOLD_US;
-									auto missingIt = s_hierarchyMissingSinceUs.find(addr);
-									if (missingIt == s_hierarchyMissingSinceUs.end()) {
-										// First failure: record timestamp, retain old cache
-										s_hierarchyMissingSinceUs[addr] = now;
-										// Fall through to build CachedEntity using old addresses
-									} else if (now - missingIt->second < holdUs) {
-										// Within grace period: retain old cache
-										// Fall through to build CachedEntity using old addresses
-									} else {
-										// Grace period expired: drop entity
-										s_hierarchyMissingSinceUs.erase(missingIt);
-										continue;
-									}
-								}
-
-									// Build CachedEntity using old addresses (fallback to old pawnAddr/sceneNodeAddr/boneArrayAddr)
-									CEntity ent;
-									ent.Controller.Address = entityAddresses[i];
-									ent.Controller.Health = ctrlBuf[i].health;
-									ent.Controller.Armor = ctrlBuf[i].armor;
-									ent.Controller.AliveStatus = ctrlBuf[i].isAlive;
-									ent.Controller.TeamID = ctrlBuf[i].teamID;
-									ent.Controller.Pawn = ctrlBuf[i].pawn;
-									if (memchr(ctrlBuf[i].name, 0, MAX_PATH) && strlen(ctrlBuf[i].name) > 0)
-										ent.Controller.PlayerName = ctrlBuf[i].name;
-									else
-										ent.Controller.PlayerName = "Name_None";
-
-									ent.Pawn.Address = old.pawnAddr;
-									ent.Pawn.BoneData.BoneArrayAddress = old.boneArrayAddr;
-
-									CachedEntity ce;
-									ce.controllerAddr = entityAddresses[i];
-									ce.pawnAddr = old.pawnAddr;
-									ce.sceneNodeAddr = old.sceneNodeAddr;
-									ce.boneArrayAddr = old.boneArrayAddr;
-									ce.entity = ent;
-
-									// Carry over WR extra data from previous cache
-									ce.entity.Controller.Money = old.entity.Controller.Money;
-									ce.entity.Controller.Color = old.entity.Controller.Color;
-									ce.entity.Pawn.HasHelmet = old.entity.Pawn.HasHelmet;
-									ce.entity.Pawn.HasDefuser = old.entity.Pawn.HasDefuser;
-									ce.entity.Pawn.ModelName = old.entity.Pawn.ModelName;
-									ce.entity.Pawn.WeaponName = old.entity.Pawn.WeaponName;
-									ce.entity.Pawn.WeaponList = old.entity.Pawn.WeaponList;
-									// Carry over last valid position/health for rendering during grace period
-									ce.entity.Pawn.Pos = old.entity.Pawn.Pos;
-									ce.entity.Pawn.PrevPos = old.entity.Pawn.PrevPos;
-									ce.entity.Pawn.Health = old.entity.Pawn.Health;
-									ce.entity.Pawn.ScreenPosValid = old.entity.Pawn.ScreenPosValid;
-
-									newCache.push_back(ce);
-									continue;
-								}
-							}
-							continue;
-					}
-					s_hierarchyMissingSinceUs.erase(addr);
-					s_zeroPawnSinceUs.erase(addr);  // pawn resolved: clear zero pawn grace (Task 5)
+				for (int a = 0; a < aliveCount; a++) {
+					int i = aliveSlots[a];
+					DWORD64 addr = entityAddresses[i];
+					if (pawnAddresses[i] == 0) {
+					continue;
+				}
 
 					DWORD64 effectiveBoneArray = boneArrays[i];
-					bool isDeadPlayer = (ctrlBuf[i].isAlive != 1);
-					if (effectiveBoneArray == 0 && !isDeadPlayer) {
-						// boneArray cache fallback (alive players only)
-						auto oldBoneIt = oldCacheMap.find(addr);
-						if (oldBoneIt != oldCacheMap.end()) {
-							DWORD64 oldBoneArr = entityCache[oldBoneIt->second].boneArrayAddr;
-							if (oldBoneArr != 0) {
-								auto staleIt = s_boneArrayStaleSinceUs.find(addr);
-								if (staleIt == s_boneArrayStaleSinceUs.end()) {
-									s_boneArrayStaleSinceUs[addr] = now;
-									effectiveBoneArray = oldBoneArr;
-								} else if (now - staleIt->second < BONE_ARRAY_STALE_GRACE_US) {
-									effectiveBoneArray = oldBoneArr;
-								} else {
-									LOG_DEBUG("Data", "boneArray stale > 250ms for 0x{:X}, dropping bones", addr);
-								}
-							}
-						}
-						if (effectiveBoneArray == 0)
-							continue;
-					} else if (effectiveBoneArray != 0) {
-						s_boneArrayStaleSinceUs.erase(addr);
-					}
-					// Dead players: effectiveBoneArray stays 0 (no bones needed)
+				bool isDeadPlayer = (ctrlBuf[i].isAlive != 1);
+				if (effectiveBoneArray != 0 && !IsLikelyGamePointer(effectiveBoneArray)) {
+					effectiveBoneArray = 0; // invalid pointer, treat as no bones
+				}
+				// Dead players: effectiveBoneArray stays 0 (no bones needed)
 
 						CEntity ent;
 						ent.Controller.Address = entityAddresses[i];
@@ -996,69 +791,74 @@ VOID DataThread()
 						newCacheAddrs[nc.controllerAddr] = true;
 
 					for (int r = 0; r < refreshCount; r++) {
-						int i = refreshSlots[r];
-						DWORD64 addr = entityAddresses[i];
-						if (newCacheAddrs.count(addr)) continue;
-						auto oldIt2 = oldCacheMap.find(addr);
-						if (oldIt2 != oldCacheMap.end()) {
-							CachedEntity copy = entityCache[oldIt2->second];
-							copy.entity.Pawn.Health = 0;
-							copy.entity.Controller.Health = 0;
-							newCache.push_back(copy);
-						}
+					int i = refreshSlots[r];
+					DWORD64 addr = entityAddresses[i];
+					if (newCacheAddrs.count(addr)) continue;
+					auto oldIt2 = oldCacheMap.find(addr);
+					if (oldIt2 != oldCacheMap.end()) {
+						CachedEntity copy = entityCache[oldIt2->second];
+						// Don't retain evicted entities (pawnAddr==0) — only retain
+						// genuinely dead players (pawnAddr!=0, isAlive==0) for WebRadar.
+						if (copy.pawnAddr == 0) continue;
+						copy.entity.Pawn.Health = 0;
+						copy.entity.Controller.Health = 0;
+						newCache.push_back(copy);
 					}
+				}
 				}
 
 				LOG_DEBUG("Data", "Discovery done: cache={} refresh={}", (int)newCache.size(), refreshCount);
 
-			// Zero controller detection: graded DMA refresh
-		{
-			int validControllers = 0;
-			for (int r = 0; r < refreshCount; r++) {
-				int i = refreshSlots[r];
-				// Valid controller = has non-zero data (not all-zero garbage).
-				// Dead players (isAlive=0 but pawn/teamID non-zero) are valid;
-				// only all-zero (isAlive=0, pawn=0, teamID=0) indicates DMA read failure.
-				if (!(ctrlBuf[i].isAlive == 0 && ctrlBuf[i].pawn == 0 && ctrlBuf[i].teamID == 0))
-					validControllers++;
-			}
+		entityCache = std::move(newCache);
 
-				if (validControllers == 0 && refreshCount > 0) {
-					s_zeroControllerStreak++;
-					if (s_zeroControllerStreak == 4) {
-						LOG_WARNING("Data", "Zero controllers for 4 frames, requesting Probe DMA refresh");
-						RequestDmaRefresh(DmaRefreshTier::Probe);
-					} else if (s_zeroControllerStreak == 16) {
-						LOG_WARNING("Data", "Zero controllers for 16 frames, requesting Repair DMA refresh");
-						RequestDmaRefresh(DmaRefreshTier::Repair);
-					} else if (s_zeroControllerStreak == 36) {
-						LOG_WARNING("Data", "Zero controllers for 36 frames, requesting Full DMA refresh");
+			// --- Player count health check ---
+			// Smart detection: if entity list has enough addresses but the
+			// final cache has fewer entities than expected, the DMA read
+			// pipeline lost data mid-stream (not players leaving). Trigger
+			// an automatic DMA refresh to recover.
+			if (MenuConfig::PlayerCountCheckEnabled) {
+				static int s_playerCountFailStreak = 0;
+				static int64_t s_lastPlayerCountRefreshUs = 0;
+
+				int addrCount = 0;
+				for (int i = 0; i < scanCount; i++) {
+					if (entityAddresses[i] != 0) addrCount++;
+				}
+				int validCount = (int)entityCache.size() + (localPlayerIndex >= 0 ? 1 : 0);
+				const int expected = MenuConfig::ExpectedPlayerCount;
+
+				if (addrCount >= expected && validCount < expected) {
+					s_playerCountFailStreak++;
+					int64_t now = nowUs();
+					if (s_playerCountFailStreak >= 3 &&
+						(s_lastPlayerCountRefreshUs == 0 || (now - s_lastPlayerCountRefreshUs) >= 500000)) {
+						LOG_WARNING("Data", "Player count anomaly: addrCount={} validCount={} expected={}, refreshing DMA cache",
+							addrCount, validCount, expected);
 						RequestDmaRefresh(DmaRefreshTier::Full);
+						SceneReset::BumpSceneReset();
+						s_lastPlayerCountRefreshUs = now;
+						s_playerCountFailStreak = 0;
 					}
 				} else {
-					s_zeroControllerStreak = 0;
+					s_playerCountFailStreak = 0;
 				}
 			}
-
-			entityCache = std::move(newCache);
 		}
 
 			// ------- 4. Scatter read dynamic fields (2-pass: refresh bone addresses every frame) -------
+			int count = (int)entityCache.size();
+			if (count > MAX_ENTITIES) count = MAX_ENTITIES;
 			{
 				StageTimer timer(g_stageScatterUs);
-				int count = (int)entityCache.size();
-				if (count > MAX_ENTITIES) count = MAX_ENTITIES;
 
 				// --- Pass 1: pos, health, viewAngle, cameraPos + fresh BoneArray pointer ---
 				// Pawn offsets span 3 pages: health@0x354(page0), pos@0x1588(page1), eyeAngles@0x3DD0(page3)
 				// Plus sceneNode BoneArray@0x1D0 = 4 unique pages per entity. Batch=2 闁?8 pages.
 				DWORD64 freshBoneArrays[MAX_ENTITIES]{};
+				DWORD64 freshLocalBoneArray = 0;
 				{
 					for (int i = 0; i < count; i++) {
 						DWORD64 addr = entityCache[i].controllerAddr;
-						auto staleIt = s_pawnStaleSinceUs.find(addr);
-						if (staleIt != s_pawnStaleSinceUs.end() && (now - staleIt->second) < PAWN_STALE_GRACE_US)
-							continue; // 閻庨€涚矙濡炬椽寮甸悢宄版暥濞ｅ洦绻勯弳鈧☉鎾筹攻椤愬ジ寮垫径瀣珡闁轰胶澧楀畵?
 						memset(&scatterBuf[i], 0, sizeof(ScatterBuf));
 					}
 					memset(&localBuf, 0, sizeof(ScatterBuf));
@@ -1069,9 +869,12 @@ VOID DataThread()
 					VMMDLL_SCATTER_HANDLE handle = ProcessMgr.CreateScatterHandle();
 					if (!handle) continue;
 					for (int i = batchStart; i < batchEnd; i++) {
-						auto& ce = entityCache[i];
-						auto& buf = scatterBuf[i];
-						DWORD64 pawn = ce.pawnAddr;
+					auto& ce = entityCache[i];
+					auto& buf = scatterBuf[i];
+					DWORD64 pawn = ce.pawnAddr;
+					// Skip evicted entities (pawnAddr==0): reading from address 0+offset
+					// produces garbage and poisons the scatter batch.
+					if (pawn == 0) { memset(&buf, 0, sizeof(ScatterBuf)); continue; }
 						// 位置从 GameSceneNode::m_vecAbsOrigin 读取（与骨骼数据同源），
 						// 避免 m_vOldOrigin 在玩家状态切换时卡住导致位置持续异常。
 						// sceneNode 为 0 时 fallback 到 pawn::m_vOldOrigin。
@@ -1092,69 +895,34 @@ VOID DataThread()
 
 					// Per-slot fault tolerance (P3 Task 8): on batch failure, retry each
 					// slot individually so a single bad pawn doesn't poison the batch.
-					if (batchOk) {
-						for (int i = batchStart; i < batchEnd; i++) {
-							s_coreReadFailStreak.erase(entityCache[i].controllerAddr);
-							s_pawnStaleSinceUs.erase(entityCache[i].controllerAddr);
+				if (!batchOk) {
+					for (int i = batchStart; i < batchEnd; i++) {
+					auto& ce = entityCache[i];
+					auto& buf = scatterBuf[i];
+					DWORD64 pawn = ce.pawnAddr;
+					// Skip evicted entities in per-slot retry as well.
+					if (pawn == 0) continue;
+					VMMDLL_SCATTER_HANDLE slotHandle = ProcessMgr.CreateScatterHandle();
+						if (!slotHandle) {
+							continue;
 						}
-					} else {
-						for (int i = batchStart; i < batchEnd; i++) {
-							auto& ce = entityCache[i];
-							auto& buf = scatterBuf[i];
-							DWORD64 pawn = ce.pawnAddr;
-							VMMDLL_SCATTER_HANDLE slotHandle = ProcessMgr.CreateScatterHandle();
-							if (!slotHandle) {
-								if (s_coreReadFailStreak.find(ce.controllerAddr) == s_coreReadFailStreak.end())
-									s_coreReadFailSinceUs[ce.controllerAddr] = now;
-								s_coreReadFailStreak[ce.controllerAddr]++;
-								if (s_pawnStaleSinceUs.find(ce.controllerAddr) == s_pawnStaleSinceUs.end())
-									s_pawnStaleSinceUs[ce.controllerAddr] = now;
-								continue;
-							}
-							DWORD64 posAddr = (ce.sceneNodeAddr != 0) ? ce.sceneNodeAddr + Offset::vecAbsOrigin : pawn + Offset::Pos;
-							ProcessMgr.AddScatterReadRequest(slotHandle, posAddr, &buf.pos, sizeof(Vec3));
-							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::CurrentHealth, &buf.health, sizeof(int));
-							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::PawnArmor, &buf.armor, sizeof(int));
-							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::flFlashDuration, &buf.flashDuration, sizeof(float));
-							if (needBones && ce.sceneNodeAddr != 0)
-								ProcessMgr.AddScatterReadRequest(slotHandle, ce.sceneNodeAddr + Offset::BoneArray, &freshBoneArrays[i], sizeof(DWORD64));
-							if (needViewAngle)
-								ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::angEyeAngles, &buf.viewAngle, sizeof(Vec2));
-							if (needCameraPos)
-								ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::vecLastClipCameraPos, &buf.cameraPos, sizeof(Vec3));
-							bool slotOk = ProcessMgr.ExecuteReadScatter(slotHandle);
-							VMMDLL_Scatter_CloseHandle(slotHandle);
-							if (slotOk) {
-								s_coreReadFailStreak.erase(ce.controllerAddr);
-								s_pawnStaleSinceUs.erase(ce.controllerAddr);
-							} else {
-								if (s_coreReadFailStreak.find(ce.controllerAddr) == s_coreReadFailStreak.end())
-									s_coreReadFailSinceUs[ce.controllerAddr] = now;
-								s_coreReadFailStreak[ce.controllerAddr]++;
-								if (s_pawnStaleSinceUs.find(ce.controllerAddr) == s_pawnStaleSinceUs.end())
-									s_pawnStaleSinceUs[ce.controllerAddr] = now;
-							}
-						}
+						DWORD64 posAddr = (ce.sceneNodeAddr != 0) ? ce.sceneNodeAddr + Offset::vecAbsOrigin : pawn + Offset::Pos;
+						ProcessMgr.AddScatterReadRequest(slotHandle, posAddr, &buf.pos, sizeof(Vec3));
+						ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::CurrentHealth, &buf.health, sizeof(int));
+						ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::PawnArmor, &buf.armor, sizeof(int));
+						ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::flFlashDuration, &buf.flashDuration, sizeof(float));
+						if (needBones && ce.sceneNodeAddr != 0)
+							ProcessMgr.AddScatterReadRequest(slotHandle, ce.sceneNodeAddr + Offset::BoneArray, &freshBoneArrays[i], sizeof(DWORD64));
+						if (needViewAngle)
+							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::angEyeAngles, &buf.viewAngle, sizeof(Vec2));
+						if (needCameraPos)
+							ProcessMgr.AddScatterReadRequest(slotHandle, pawn + Offset::vecLastClipCameraPos, &buf.cameraPos, sizeof(Vec3));
+						ProcessMgr.ExecuteReadScatter(slotHandle);
+						VMMDLL_Scatter_CloseHandle(slotHandle);
 					}
 				}
-
-				// Per-slot eviction: persistent failure 闁?drop pawn, rediscover next discovery frame
-				for (int i = 0; i < count; i++) {
-					DWORD64 addr = entityCache[i].controllerAddr;
-					auto failIt = s_coreReadFailStreak.find(addr);
-					if (failIt == s_coreReadFailStreak.end() || failIt->second < CORE_READ_EVICT_THRESHOLD)
-						continue;
-					auto staleIt = s_pawnStaleSinceUs.find(addr);
-					int64_t staleAge = (staleIt != s_pawnStaleSinceUs.end()) ? (now - staleIt->second) : 0;
-					if (staleAge < PAWN_STALE_GRACE_US)
-						continue; // 閻庨€涚矙濡炬椽寮甸悢宄版暥濞戞挸绉归埞宥夋焻?
-					LOG_WARNING("Data", "Evicting entity slot {} (pawn=0x{:X}) after {} core read failures (stale {}ms)",
-						i, entityCache[i].pawnAddr, failIt->second, staleAge / 1000);
-					entityCache[i].pawnAddr = 0;
-					s_coreReadFailStreak.erase(addr);
-					s_coreReadFailSinceUs.erase(addr);
-					s_pawnStaleSinceUs.erase(addr);
 				}
+
 
 					// Local player dynamic fields (1 page, separate to avoid skip when count==0)
 					{
@@ -1169,6 +937,10 @@ VOID DataThread()
 							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::CurrentHealth, &localBuf.health, sizeof(int));
 							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::PawnArmor, &localBuf.armor, sizeof(int));
 							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::flFlashDuration, &localBuf.flashDuration, sizeof(float));
+						if (needCameraPos)
+							ProcessMgr.AddScatterReadRequest(handle, lp + Offset::vecLastClipCameraPos, &localBuf.cameraPos, sizeof(Vec3));
+							if (needBones && localPlayer.Pawn.BoneData.SceneNodeAddress != 0)
+								ProcessMgr.AddScatterReadRequest(handle, localPlayer.Pawn.BoneData.SceneNodeAddress + Offset::BoneArray, &freshLocalBoneArray, sizeof(DWORD64));
 							if (needViewAngle) {
 								// Use global dwViewAngles for local player (matches reference KevqDMA).
 								// m_angEyeAngles on local pawn can be stale/wrong during spectator mode.
@@ -1186,11 +958,13 @@ VOID DataThread()
 
 				// Update bone array addresses from fresh reads
 				for (int i = 0; i < count; i++) {
-					if (freshBoneArrays[i] != 0) {
+					if (freshBoneArrays[i] != 0 && IsLikelyGamePointer(freshBoneArrays[i])) {
 						entityCache[i].boneArrayAddr = freshBoneArrays[i];
 						entityCache[i].entity.Pawn.BoneData.BoneArrayAddress = freshBoneArrays[i];
 					}
 				}
+				if (freshLocalBoneArray != 0 && IsLikelyGamePointer(freshLocalBoneArray))
+					localPlayer.Pawn.BoneData.BoneArrayAddress = freshLocalBoneArray;
 
 				// --- Pass 2: bone data from fresh addresses ---
 				// VMMDLL scatter silently drops reads when too many unique pages
@@ -1209,6 +983,15 @@ VOID DataThread()
 						ProcessMgr.ExecuteReadScatter(handle);
 						VMMDLL_Scatter_CloseHandle(handle);
 					}
+					// Local player bone data
+					if (localPlayer.Pawn.BoneData.BoneArrayAddress != 0) {
+						VMMDLL_SCATTER_HANDLE handle = ProcessMgr.CreateScatterHandle();
+						if (handle) {
+							ProcessMgr.AddScatterReadRequest(handle, localPlayer.Pawn.BoneData.BoneArrayAddress, localBuf.bones, CBone::NUM_BONES * sizeof(BoneJointData));
+							ProcessMgr.ExecuteReadScatter(handle);
+							VMMDLL_Scatter_CloseHandle(handle);
+						}
+					}
 				}
 
 				// ------- 5. Apply scatter results (world coords only) -------
@@ -1222,57 +1005,13 @@ VOID DataThread()
 				DWORD64 ctrlAddr = ce.controllerAddr;
 
 				if (!IsValidPos(buf.pos) || !IsValidHealth(buf.health)) {
-					// Core stale hold: 250ms grace (1s after scene reset) for invalid core data (Task 6)
-					int64_t coreStaleHoldUs = (s_lastSceneResetUs != 0 && now - s_lastSceneResetUs < CORE_STALE_HOLD_AFTER_RESET_US)
-						? CORE_STALE_HOLD_AFTER_RESET_US : CORE_STALE_HOLD_US;
-					auto it = s_coreStaleSinceUs.find(ctrlAddr);
-					if (it == s_coreStaleSinceUs.end()) {
-						// First failure: record timestamp, retain last valid data
-						s_coreStaleSinceUs[ctrlAddr] = now;
-						// Don't clear health/pos - retain last valid data for rendering
-					} else if (now - it->second < coreStaleHoldUs) {
-						// Within grace period: retain last valid data, continue rendering
-						// Don't clear health/pos
-					} else {
-						// Grace period expired: mark as dead/hidden
-						ce.entity.Pawn.Health = 0;
-						ce.entity.Pawn.ScreenPosValid = false;
-						s_coreStaleSinceUs.erase(it);
-						s_deathConfirmCount.erase(ctrlAddr);
+					ce.entity.Pawn.Health = 0;
+					ce.entity.Pawn.ScreenPosValid = false;
+			} else {
+				// Dead player protection: retain death position, skip update
+					if (ce.entity.Pawn.Health <= 0 && buf.health <= 0) {
+						continue;
 					}
-				} else {
-				// Core data valid: clear stale state
-				s_coreStaleSinceUs.erase(ctrlAddr);
-
-				// Dead player protection: if player is already dead and stays dead,
-				// retain death position for WebRadar. Don't update pos/health/bones.
-				// This prevents dead player position from drifting due to DMA read jitter
-				// or stale pawn data after death.
-				if (ce.entity.Pawn.Health <= 0 && buf.health <= 0) {
-					// Player is dead and stays dead: skip position/health update
-					continue;
-				}
-
-				// Death confirm: require 80ms of health<=0 before confirming death
-				if (buf.health <= 0 && ce.entity.Pawn.Health > 0) {
-						// Health dropped to 0: start/increment death confirm count
-						int& confirmCount = s_deathConfirmCount[ctrlAddr];
-						confirmCount++;
-						if (confirmCount >= DEATH_CONFIRM_THRESHOLD) {
-							// Confirmed dead
-							ce.entity.Pawn.PrevPos = ce.entity.Pawn.Pos;
-							ce.entity.Pawn.Health = 0;
-							ce.entity.Pawn.ScreenPosValid = false;
-							ce.entity.Pawn.BoneData.BonePosCount = 0;
-							s_deathConfirmCount.erase(ctrlAddr);
-						}
-						// During confirm period: retain last valid data (don't update health/pos)
-					} else {
-						// Normal: health > 0 or already dead
-						if (buf.health > 0) {
-							s_deathConfirmCount.erase(ctrlAddr);
-						}
-						// Apply normal data (existing logic)
 						ce.entity.Pawn.PrevPos = ce.entity.Pawn.Pos;
 						ce.entity.Pawn.Pos = buf.pos;
 						ce.entity.Pawn.Health = buf.health;
@@ -1295,58 +1034,188 @@ VOID DataThread()
 								ce.entity.Pawn.BoneData.BonePosList[j] = { bonePos, {0,0}, valid };
 								ce.entity.Pawn.BoneData.BonePosCount++;
 							}
+
+							// Per-slot bone data stale detection (ref: KevqDMA bone_reads.inl).
+							// Detects when bone address is valid but data is all-zero.
+							bool boneDataAllZero = true;
+							for (int j = 0; j < CBone::NUM_BONES; j++) {
+								const Vec3& bp = buf.bones[j].Pos;
+								if (std::abs(bp.x) > 0.5f || std::abs(bp.y) > 0.5f || std::abs(bp.z) > 0.5f) {
+									boneDataAllZero = false;
+									break;
+								}
+							}
+							if (boneDataAllZero) {
+									ce.entity.Pawn.BoneData.BonePosCount = 0; // clear stale bones
+								}
 						}
 					}
 				}
 			}
 
-			// Partial core detection: detect multi-player core data anomaly
-			// Note: health=0 is a valid death state, not a read failure.
-			// Only health<0 or health>100 indicates corrupt data.
-			{
-				int pawnCount = 0;
-				int saneCoreCount = 0;
-				for (int i = 0; i < count; i++) {
-					auto& ce = entityCache[i];
-					auto& buf = scatterBuf[i];
-					if (ce.pawnAddr == 0) continue;
-					pawnCount++;
-					if (IsValidPos(buf.pos) && buf.health >= 0 && buf.health <= 100)
-						saneCoreCount++;
-				}
-
-				if (pawnCount >= 2 && saneCoreCount + CORE_MISSING_TOLERANCE < pawnCount) {
-					// Partial core detected
-					if (s_partialCoreStreak == 0) {
-						s_partialCoreSinceUs = now;
-					}
-					s_partialCoreStreak++;
-
-					int streakThreshold = s_sceneResetRecently ? PARTIAL_CORE_STREAK_RESET_THRESHOLD : PARTIAL_CORE_STREAK_THRESHOLD;
-					int64_t timeThreshold = s_sceneResetRecently ? PARTIAL_CORE_TIME_RESET_US : PARTIAL_CORE_TIME_US;
-
-					if (s_partialCoreStreak >= streakThreshold && now - s_partialCoreSinceUs >= timeThreshold) {
-						LOG_WARNING("Data", "Partial core detected: {}/{} sane, requesting DMA Repair refresh (streak={})", saneCoreCount, pawnCount, s_partialCoreStreak);
-						RequestDmaRefresh(DmaRefreshTier::Repair);
-						s_partialCoreStreak = 0;
-						s_partialCoreConfirmedStreak = 0;
-					}
-				} else {
-					// All sane or single-player anomaly: reset
-					s_partialCoreStreak = 0;
-					s_partialCoreConfirmedStreak = 0;
-				}
-			}
-
-				// Apply local player scatter results
+			// Apply local player scatter results
 			if (IsValidPos(localBuf.pos)) {
 				localPlayer.Pawn.PrevPos = localPlayer.Pawn.Pos;
 				localPlayer.Pawn.Pos = localBuf.pos;
 				localPlayer.Pawn.Health = localBuf.health;
 				localPlayer.Pawn.Armor = (localBuf.armor >= 0 && localBuf.armor <= 100) ? localBuf.armor : 0;
-				localPlayer.Pawn.FlashDuration = localBuf.flashDuration;
-				if (needViewAngle)
+			localPlayer.Pawn.FlashDuration = localBuf.flashDuration;
+			if (needCameraPos)
+				localPlayer.Pawn.CameraPos = localBuf.cameraPos;
+			if (needViewAngle)
 				localPlayer.Pawn.ViewAngle = localBuf.viewAngle;
+				if (needBones) {
+					localPlayer.Pawn.BoneData.BonePosCount = 0;
+					for (int j = 0; j < CBone::NUM_BONES; j++) {
+						const Vec3& bonePos = localBuf.bones[j].Pos;
+						bool valid = std::isfinite(bonePos.x) && std::isfinite(bonePos.y) && std::isfinite(bonePos.z);
+						localPlayer.Pawn.BoneData.BonePosList[j] = { bonePos, {0,0}, valid };
+						localPlayer.Pawn.BoneData.BonePosCount++;
+					}
+					bool boneDataAllZero = true;
+					for (int j = 0; j < CBone::NUM_BONES; j++) {
+						const Vec3& bp = localBuf.bones[j].Pos;
+						if (std::abs(bp.x) > 0.5f || std::abs(bp.y) > 0.5f || std::abs(bp.z) > 0.5f) {
+							boneDataAllZero = false;
+							break;
+						}
+					}
+					if (boneDataAllZero)
+						localPlayer.Pawn.BoneData.BonePosCount = 0;
+				}
+			}
+
+			// --- Session player registry & per-player data quality check ---
+			// 单局玩家列表：每局开始时建立，对每个玩家（包括自己）进行精细化数据质量检查。
+			// 检查项：位置有效性、血量范围、骨骼数据完整性。
+			// 任意玩家持续异常时，自动触发DMA刷新。
+			{
+				uint64_t curSerial = SceneReset::CurrentSerial();
+				if (curSerial != s_sessionSerial) {
+					s_sessionSerial = curSerial;
+					s_sessionPlayers.clear();
+				}
+
+				// Add new players to session (including local player)
+				for (const auto& ce : entityCache) {
+					if (ce.controllerAddr == 0 || ce.pawnAddr == 0) continue;
+					bool found = false;
+					for (const auto& sp : s_sessionPlayers)
+						if (sp.controllerAddr == ce.controllerAddr) { found = true; break; }
+					if (!found)
+						s_sessionPlayers.push_back({ce.controllerAddr, 0, 0});
+				}
+				if (localControllerAddr != 0) {
+					bool found = false;
+					for (const auto& sp : s_sessionPlayers)
+						if (sp.controllerAddr == localControllerAddr) { found = true; break; }
+					if (!found)
+						s_sessionPlayers.push_back({localControllerAddr, 0, 0});
+				}
+
+				// Check each session player's data quality
+				int anomalyCount = 0;
+				for (auto& sp : s_sessionPlayers) {
+					sp.framesSinceAdded++;
+					// 本地玩家：从 localPlayer 变量检查
+					if (sp.controllerAddr == localControllerAddr) {
+						sp.goneStreak = 0;
+						sp.isAlive = (localPlayer.Pawn.Health > 0);
+						if (!sp.isAlive) {
+							sp.failStreak = 0; // 死亡/观战：正常状态
+						} else {
+							bool ok = IsValidPos(localPlayer.Pawn.Pos) &&
+							          localPlayer.Pawn.Health > 0 && localPlayer.Pawn.Health <= 100;
+							if (ok && needBones)
+								ok = localPlayer.Pawn.BoneData.BonePosCount > 0;
+							if (ok && needViewAngle)
+								ok = std::isfinite(localPlayer.Pawn.ViewAngle.x) && std::isfinite(localPlayer.Pawn.ViewAngle.y);
+							if (ok && sp.framesSinceAdded > 20) {
+							if (!localPlayer.Pawn.WeaponName.empty())
+								sp.hadWeapon = true;
+							if (sp.hadWeapon && localPlayer.Pawn.WeaponName.empty())
+								ok = false;
+						}
+							if (ok) sp.failStreak = 0;
+							else sp.failStreak++;
+						}
+						if (sp.failStreak >= 3) anomalyCount++;
+						continue;
+					}
+
+					// 其他玩家：从 entityCache 检查
+					const CEntity* ent = nullptr;
+					for (const auto& ce : entityCache)
+						if (ce.controllerAddr == sp.controllerAddr) { ent = &ce.entity; break; }
+
+					if (!ent) {
+						sp.goneStreak++;
+						if (sp.goneStreak > 10) continue;
+						sp.failStreak++;
+					} else {
+						sp.goneStreak = 0;
+						sp.isAlive = (ent->Pawn.Health > 0);
+						if (!sp.isAlive) {
+							sp.failStreak = 0; // 死亡：正常状态
+						} else {
+							bool ok = IsValidPos(ent->Pawn.Pos) &&
+							          ent->Pawn.Health > 0 && ent->Pawn.Health <= 100;
+							if (ok && needBones)
+								ok = ent->Pawn.BoneData.BonePosCount > 0;
+							if (ok && needViewAngle)
+								ok = std::isfinite(ent->Pawn.ViewAngle.x) && std::isfinite(ent->Pawn.ViewAngle.y);
+							if (ok && sp.framesSinceAdded > 20) {
+								if (!ent->Pawn.WeaponName.empty())
+									sp.hadWeapon = true;
+								if (sp.hadWeapon && ent->Pawn.WeaponName.empty())
+									ok = false;
+							}
+							if (ok) sp.failStreak = 0;
+							else sp.failStreak++;
+						}
+					}
+					if (sp.failStreak >= 3) anomalyCount++;
+				}
+
+				// Remove long-gone players (disconnected or left)
+				s_sessionPlayers.erase(
+					std::remove_if(s_sessionPlayers.begin(), s_sessionPlayers.end(),
+						[](const SessionPlayer& sp) { return sp.goneStreak > 10; }),
+					s_sessionPlayers.end());
+
+				// Trigger refresh if any session player has sustained anomalies
+				if (!s_sessionPlayers.empty()) {
+					if (anomalyCount >= 1) {
+						// 诊断日志：输出具体异常信息
+						for (const auto& sp : s_sessionPlayers) {
+							if (sp.failStreak < 3) continue;
+							if (sp.controllerAddr == localControllerAddr) {
+								LOG_WARNING("Data", "Anomaly [local] hp={} boneCount={} boneArray=0x{:X} weapon={} viewAngle=({},{}) needBones={} needViewAngle={}",
+									localPlayer.Pawn.Health, localPlayer.Pawn.BoneData.BonePosCount,
+									localPlayer.Pawn.BoneData.BoneArrayAddress,
+									localPlayer.Pawn.WeaponName.empty() ? "empty" : "ok",
+									localPlayer.Pawn.ViewAngle.x, localPlayer.Pawn.ViewAngle.y,
+									needBones, needViewAngle);
+							} else {
+								const CEntity* ent2 = nullptr;
+								for (const auto& ce : entityCache)
+									if (ce.controllerAddr == sp.controllerAddr) { ent2 = &ce.entity; break; }
+								if (ent2) {
+									LOG_WARNING("Data", "Anomaly [entity] hp={} pos=({},{},{}) boneCount={} boneArray=0x{:X} weapon={} viewAngle=({},{}) needBones={} needViewAngle={}",
+										ent2->Pawn.Health, ent2->Pawn.Pos.x, ent2->Pawn.Pos.y, ent2->Pawn.Pos.z,
+										ent2->Pawn.BoneData.BonePosCount, ent2->Pawn.BoneData.BoneArrayAddress,
+										ent2->Pawn.WeaponName.empty() ? "empty" : "ok",
+										ent2->Pawn.ViewAngle.x, ent2->Pawn.ViewAngle.y,
+										needBones, needViewAngle);
+								} else {
+									LOG_WARNING("Data", "Anomaly [missing] goneStreak={}", sp.goneStreak);
+								}
+							}
+						}
+						s_playerDataHealth.reportFail(now, "PlayerData");
+					} else
+						s_playerDataHealth.reportOk();
+				}
 			}
 
 			// ------- 5b. Extended tactical fields (scoped/defusing/velocity/ping, ~100ms) -------
@@ -1407,8 +1276,14 @@ VOID DataThread()
 						ce.entity.Pawn.Scoped = scopedBuf[i] != 0;
 					if (Offset::bIsDefusing)
 						ce.entity.Pawn.Defusing = defusingBuf[i] != 0;
-					if (Offset::vecVelocity)
-						ce.entity.Pawn.Velocity = velocityBuf[i];
+					if (Offset::vecVelocity) {
+					const Vec3& v = velocityBuf[i];
+					if (std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) &&
+						std::abs(v.x) < 5000.f && std::abs(v.y) < 5000.f && std::abs(v.z) < 5000.f)
+						ce.entity.Pawn.Velocity = v;
+					else
+						ce.entity.Pawn.Velocity = {0, 0, 0};
+				}
 					if (MenuConfig::ShowFootstepESP && Offset::fFlags)
 						ce.entity.Pawn.fFlags = fFlagsBuf[i];
 					if (MenuConfig::ShowFootstepESP && Offset::bIsWalking)
@@ -1428,15 +1303,19 @@ VOID DataThread()
 						localPlayer.Pawn.Scoped = localScoped != 0;
 					if (Offset::bIsDefusing)
 						localPlayer.Pawn.Defusing = localDefusing != 0;
-					if (Offset::vecVelocity)
+					if (Offset::vecVelocity) {
+					if (std::isfinite(localVelocity.x) && std::isfinite(localVelocity.y) && std::isfinite(localVelocity.z) &&
+						std::abs(localVelocity.x) < 5000.f && std::abs(localVelocity.y) < 5000.f && std::abs(localVelocity.z) < 5000.f)
 						localPlayer.Pawn.Velocity = localVelocity;
+					else
+						localPlayer.Pawn.Velocity = {0, 0, 0};
+				}
 					if (MenuConfig::ShowFootstepESP && Offset::fFlags)
 						localPlayer.Pawn.fFlags = localFFlags;
 					if (MenuConfig::ShowFootstepESP && Offset::bIsWalking)
 						localPlayer.Pawn.IsWalking = localWalking != 0;
 				}
 			}
-		}
 
 			// ------- 6. Weapon names (low frequency, only if feature needs it) -------
 		if (needWeapon) {
@@ -1464,10 +1343,13 @@ VOID DataThread()
 						wpnSlotCount++;
 					}
 				}
-					for (int i = 0; i < wpnSlotCount; i++)
-						*wpnNameOut[i] = "Weapon_None";
+					// Note: do NOT pre-clear WeaponName to "Weapon_None" here.
+				// Scatter-read chain occasionally fails (DMA transient error or
+				// ActiveWeapon handle == 0xFFFFFFFF right after weapon switch),
+				// which would flash ESP/radar to "Weapon_None". Keep last good
+				// value instead; only update when a name is successfully resolved.
 
-					if (wpnSlotCount > 0) {
+				if (wpnSlotCount > 0) {
 						constexpr int WPN_BATCH = 6;
 						DWORD64 wsPtrs[MAX_WPN_SLOTS]{};
 						DWORD activeHandles[MAX_WPN_SLOTS]{};
@@ -1882,24 +1764,42 @@ VOID DataThread()
 					ProcessMgr.ReadMemory<DWORD64>(clientBase + Offset::GameRules, gameRulesProxy);
 					if (gameRulesProxy && (gameRulesProxy >> 48) == 0) {
 						DWORD64 gameRulesPtr = 0;
-						ProcessMgr.ReadMemory<DWORD64>(gameRulesProxy + Offset::GameRulesProxy_m_pGameRules, gameRulesPtr);
-						if (gameRulesPtr && (gameRulesPtr >> 48) == 0) {
-							uint8_t freezePeriod = 0;
-							int32_t roundWinStatus = 0;
-							if (Offset::CSGameRules_m_bFreezePeriod)
-								ProcessMgr.ReadMemory<uint8_t>(gameRulesPtr + Offset::CSGameRules_m_bFreezePeriod, freezePeriod);
-							if (Offset::CSGameRules_m_iRoundWinStatus)
-								ProcessMgr.ReadMemory<int32_t>(gameRulesPtr + Offset::CSGameRules_m_iRoundWinStatus, roundWinStatus);
-
-							const char* phase = "live";
-							if (freezePeriod) phase = "freezetime";
-							else if (roundWinStatus != 0) phase = "over";
-
-							std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
-							int readIdx = Cheats::SnapshotReadIdx.load(std::memory_order_relaxed);
-							strncpy(Cheats::SnapshotBuf[readIdx].roundPhase, phase, 15);
-							Cheats::SnapshotBuf[readIdx].roundPhase[15] = '\0';
+					ProcessMgr.ReadMemory<DWORD64>(gameRulesProxy + Offset::GameRulesProxy_m_pGameRules, gameRulesPtr);
+					if (gameRulesPtr && (gameRulesPtr >> 48) == 0) {
+						// 2-frame confirmation (ref: KevqDMA): require same pointer across
+						// 2 consecutive reads before accepting, to filter DMA-jitter bad pointers.
+						static DWORD64 s_pendingGameRulesCandidate = 0;
+						static int s_gameRulesConfirmCount = 0;
+						bool confirmed = false;
+						if (gameRulesPtr != s_pendingGameRulesCandidate) {
+							s_pendingGameRulesCandidate = gameRulesPtr;
+							s_gameRulesConfirmCount = 1;
+						} else {
+							s_gameRulesConfirmCount++;
+							if (s_gameRulesConfirmCount >= 2) {
+								confirmed = true;
+								s_pendingGameRulesCandidate = 0;
+								s_gameRulesConfirmCount = 0;
+							}
 						}
+						if (confirmed) {
+						uint8_t freezePeriod = 0;
+						int32_t roundWinStatus = 0;
+						if (Offset::CSGameRules_m_bFreezePeriod)
+							ProcessMgr.ReadMemory<uint8_t>(gameRulesPtr + Offset::CSGameRules_m_bFreezePeriod, freezePeriod);
+						if (Offset::CSGameRules_m_iRoundWinStatus)
+							ProcessMgr.ReadMemory<int32_t>(gameRulesPtr + Offset::CSGameRules_m_iRoundWinStatus, roundWinStatus);
+
+						const char* phase = "live";
+						if (freezePeriod) phase = "freezetime";
+						else if (roundWinStatus != 0) phase = "over";
+
+						std::unique_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
+						int readIdx = Cheats::SnapshotReadIdx.load(std::memory_order_relaxed);
+						strncpy(Cheats::SnapshotBuf[readIdx].roundPhase, phase, 15);
+						Cheats::SnapshotBuf[readIdx].roundPhase[15] = '\0';
+						}
+					}
 					}
 				}
 
@@ -2178,63 +2078,6 @@ VOID DataThread()
 			}
 			} // end if (MenuConfig::ShowWebRadar) for slow data + model name
 
-			// Population watchdog: graded recovery when entityCache is empty
-			if (entityCache.empty()) {
-				if (s_zeroPlayerSinceUs == 0) {
-					s_zeroPlayerSinceUs = now;
-					s_popWatchProbeDone = false;
-					s_popWatchRepairDone = false;
-					s_popWatchFullDone = false;
-				}
-
-				int64_t zeroDur = now - s_zeroPlayerSinceUs;
-
-				if (zeroDur >= 2000000 && !s_popWatchFullDone) {
-					LOG_WARNING("Data", "Zero players for {}ms, requesting Full DMA refresh + recovery", zeroDur / 1000);
-					s_coreReadFailStreak.clear();
-					s_coreReadFailSinceUs.clear();
-					s_pawnStaleSinceUs.clear();
-					s_boneArrayStaleSinceUs.clear();
-					s_coreStaleSinceUs.clear();
-					s_deathConfirmCount.clear();
-					s_hierarchyMissingSinceUs.clear();
-					s_controllerMissingSinceUs.clear();
-					s_zeroPawnSinceUs.clear();
-					memset(s_lastControllerAddrBySlot, 0, sizeof(s_lastControllerAddrBySlot));
-					s_partialCoreStreak = 0;
-					s_partialCoreSinceUs = 0;
-					s_partialCoreConfirmedStreak = 0;
-					RequestDmaRefresh(DmaRefreshTier::Full);
-					s_popWatchFullDone = true;
-				} else if (zeroDur >= 800000 && !s_popWatchRepairDone) {
-					LOG_WARNING("Data", "Zero players for {}ms, requesting Repair DMA refresh", zeroDur / 1000);
-					s_coreReadFailStreak.clear();
-					s_coreReadFailSinceUs.clear();
-					s_pawnStaleSinceUs.clear();
-					s_boneArrayStaleSinceUs.clear();
-					s_coreStaleSinceUs.clear();
-					s_deathConfirmCount.clear();
-					s_hierarchyMissingSinceUs.clear();
-					s_controllerMissingSinceUs.clear();
-					s_zeroPawnSinceUs.clear();
-					memset(s_lastControllerAddrBySlot, 0, sizeof(s_lastControllerAddrBySlot));
-					s_partialCoreStreak = 0;
-					s_partialCoreSinceUs = 0;
-					s_partialCoreConfirmedStreak = 0;
-					RequestDmaRefresh(DmaRefreshTier::Repair);
-					s_popWatchRepairDone = true;
-				} else if (zeroDur >= 300000 && !s_popWatchProbeDone) {
-					LOG_WARNING("Data", "Zero players for {}ms, requesting Probe DMA refresh", zeroDur / 1000);
-					RequestDmaRefresh(DmaRefreshTier::Probe);
-					s_popWatchProbeDone = true;
-				}
-			} else {
-				s_zeroPlayerSinceUs = 0;
-				s_popWatchProbeDone = false;
-				s_popWatchRepairDone = false;
-				s_popWatchFullDone = false;
-			}
-
 			} else {
 				// Only projectile ESP on: read local player pos for distance calc, skip entity pipeline
 				entityCache.clear();
@@ -2257,25 +2100,26 @@ VOID DataThread()
 	static int s_worldIdleStreak = 0;
 
 	// P5 Task 15: Three-tier cache (skip DMA reads for unchanged entities)
-	static DWORD64 s_cachedProjEntityAddrs[960] = {};
-	static DWORD64 s_cachedProjSceneNodes[960] = {};
-	static Vec3 s_cachedProjPositions[960] = {};
-	static uint8_t s_cachedProjTypes[960] = {};
+	constexpr int PROJ_CACHE_SIZE = 960;
+	static DWORD64 s_cachedProjEntityAddrs[PROJ_CACHE_SIZE] = {};
+	static DWORD64 s_cachedProjSceneNodes[PROJ_CACHE_SIZE] = {};
+	static Vec3 s_cachedProjPositions[PROJ_CACHE_SIZE] = {};
+	static uint8_t s_cachedProjTypes[PROJ_CACHE_SIZE] = {};
 	// Task 6: cached thrower team (resolved from m_hThrower 闁?pawn 闁?m_iTeamNum)
-	static DWORD s_cachedProjThrowers[960] = {};
-	static int s_cachedProjTeams[960] = {};
+	static DWORD s_cachedProjThrowers[PROJ_CACHE_SIZE] = {};
+	static int s_cachedProjTeams[PROJ_CACHE_SIZE] = {};
 	// C_Inferno entity flag (distinguishes inferno from molotov_projectile,
 	// both share PROJ_MOLOTOV type but only inferno carries fire data).
-	static bool s_cachedProjIsInferno[960] = {};
+	static bool s_cachedProjIsInferno[PROJ_CACHE_SIZE] = {};
 	// Task 12/16: cached weapon item-id for dropped-weapon cache-hit reuse.
 	// Without this, weapons are only identified on cache-miss (first frame)
 	// and vanish on subsequent cache-hit frames because droppedWeaponCache
 	// is rebuilt from scratch each scan.
-	static uint16_t s_cachedWeaponItemIds[960] = {};
+	static uint16_t s_cachedWeaponItemIds[PROJ_CACHE_SIZE] = {};
 	// Cached owner handle for dropped-weapon filtering.
 	// m_hOwnerEntity == 0xFFFFFFFF means the weapon is dropped (no owner).
 	// When the handle points to a player, the weapon is still held and must be skipped.
-	static DWORD s_cachedWeaponOwnerHandles[960] = {};
+	static DWORD s_cachedWeaponOwnerHandles[PROJ_CACHE_SIZE] = {};
 	static uint64_t s_projCacheResetSerial = 0;
 
 	if (MenuConfig::ShowProjectileESP || MenuConfig::ShowWorldProjectileTimers || MenuConfig::ShowWorldItems || MenuConfig::ShowWebRadar) {
@@ -2332,6 +2176,7 @@ VOID DataThread()
 						constexpr int SCAN_START = 64;
 						constexpr int SCAN_END = 1024;
 						constexpr int SCAN_COUNT = SCAN_END - SCAN_START;
+						static_assert(SCAN_COUNT <= PROJ_CACHE_SIZE, "SCAN_COUNT exceeds PROJ_CACHE_SIZE: increase PROJ_CACHE_SIZE or narrow SCAN range");
 
 						// Read sub-list pointers for chunk 0 and chunk 1
 						DWORD64 chunkPtrs[2]{};
@@ -2999,54 +2844,7 @@ VOID DataThread()
 					}
 				}
 
-				// ------- 9b. Spectator detection -------
-				std::vector<SpectatorInfo> spectators;
-				if ((MenuConfig::ShowSpectatorList || MenuConfig::ShowWebRadar) && localPawnAddr != 0) {
-					DWORD localPawnHandle = 0;
-					// Get local pawn's entity handle (index lower 16 bits)
-					// The local pawn address is known; we need its handle for comparison
-					// m_hObserverTarget stores a CHandle 闁?lower 16 bits = entity index
-					for (const auto& ce : entityCache) {
-						if (ce.entity.Controller.AliveStatus != 1 && ce.pawnAddr != 0) {
-							// Dead player 闁?check if spectating
-							DWORD64 obsSvcAddr = 0;
-							if (!ProcessMgr.ReadMemory<DWORD64>(ce.pawnAddr + Offset::ObserverServices, obsSvcAddr))
-								continue;
-							if (obsSvcAddr == 0) continue;
-
-							int obsMode = 0;
-							DWORD obsTarget = 0;
-							if (!ProcessMgr.ReadMemory<int>(obsSvcAddr + Offset::ObserverMode, obsMode))
-								continue;
-							if (!ProcessMgr.ReadMemory<DWORD>(obsSvcAddr + Offset::ObserverTarget, obsTarget))
-								continue;
-
-							// obsMode >= 4 means spectating (IN_EYE=4, CHASE=5, ROAMING=6)
-							if (obsMode >= 4 && obsTarget != 0) {
-								// Resolve target pawn address from handle
-								DWORD targetIdx = obsTarget & 0x1FF;
-								DWORD64 targetListEntry = 0;
-								if (!ProcessMgr.ReadMemory<DWORD64>(gGame.GetEntityListEntry(), targetListEntry))
-									continue;
-								if (!ProcessMgr.ReadMemory<DWORD64>(targetListEntry + 0x10 + 8 * (targetIdx >> 9), targetListEntry))
-									continue;
-								DWORD64 targetPawnAddr = 0;
-								if (!ProcessMgr.ReadMemory<DWORD64>(targetListEntry + 0x70 * (targetIdx & 0x1FF), targetPawnAddr))
-									continue;
-
-								if (targetPawnAddr == localPawnAddr) {
-									SpectatorInfo si;
-									si.Name = ce.entity.Controller.PlayerName;
-									si.TeamID = ce.entity.Controller.TeamID;
-									si.ObserverMode = obsMode;
-									spectators.push_back(si);
-								}
-							}
-						}
-					}
-				}
-
-				LOG_TRACE("Data", "Publishing snapshot: entities={} projs={} localHP={} spectators={}", publishEntities.size(), projectileCache.size(), localPlayer.Pawn.Health, spectators.size());
+				LOG_TRACE("Data", "Publishing snapshot: entities={} projs={} localHP={}", publishEntities.size(), projectileCache.size(), localPlayer.Pawn.Health);
 
 			GameSnapshot newSnap;
 			memcpy(newSnap.Matrix, matrix, sizeof(matrix));
@@ -3056,15 +2854,16 @@ VOID DataThread()
 			newSnap.Projectiles = projectileCache;
 			// Task 12/16: publish dropped-weapon cache for world ESP rendering.
 			newSnap.DroppedWeapons = droppedWeaponCache;
-			newSnap.Spectators = std::move(spectators);
 		// WebRadar: local player's observer target for m_observed_idx.
 		newSnap.LocalObserverTarget = localObserverTarget;
 		// ESP gap-closure stage 2: stamp capture time for render-loop interpolation.
 		newSnap.CaptureTimeUs = now;
 
 			// Preserve low-frequency fields this publish path does not refresh:
-			//   MapName 闁?written by SlowUpdateThread (~10s)
-			//   Bomb    闁?written by the WebRadar-extra block above (~50ms)
+			//   MapName -> written by SlowUpdateThread (~10s)
+			//   Bomb    -> written by the WebRadar-extra block above (~50ms)
+			//   Money/HasDefuser/HasHelmet/Color -> carried over from previous
+			//   snapshot to prevent flicker after DMA refresh resets entity cache.
 			// A shared_lock keeps the read exclusive against the in-place writers.
 			{
 				std::shared_lock<std::shared_mutex> lock(Cheats::SnapshotMutex);
@@ -3072,6 +2871,20 @@ VOID DataThread()
 				memcpy(newSnap.MapName, cur.MapName, sizeof(newSnap.MapName));
 				newSnap.Bomb = cur.Bomb;
 				memcpy(newSnap.roundPhase, cur.roundPhase, sizeof(newSnap.roundPhase));
+				for (auto& ne : newSnap.Entities) {
+					for (const auto& oe : cur.Entities) {
+						if (ne.Controller.Address != oe.Controller.Address) continue;
+						if (ne.Controller.Money == 0 && oe.Controller.Money > 0)
+							ne.Controller.Money = oe.Controller.Money;
+						if (!ne.Pawn.HasDefuser && oe.Pawn.HasDefuser)
+							ne.Pawn.HasDefuser = oe.Pawn.HasDefuser;
+						if (!ne.Pawn.HasHelmet && oe.Pawn.HasHelmet)
+							ne.Pawn.HasHelmet = oe.Pawn.HasHelmet;
+						if (ne.Controller.Color < 0 && oe.Controller.Color >= 0)
+							ne.Controller.Color = oe.Controller.Color;
+						break;
+					}
+				}
 			}
 
 			Cheats::PublishSnapshot(newSnap);
@@ -3204,7 +3017,6 @@ VOID KeysCheckThread()
 				case MenuConfig::HOTKEY_TOGGLE_SNAPLINE:      MenuConfig::ShowLineToEnemy = !MenuConfig::ShowLineToEnemy; break;
 				case MenuConfig::HOTKEY_TOGGLE_BOMB_ESP:      MenuConfig::ShowBombESP = !MenuConfig::ShowBombESP; break;
 				case MenuConfig::HOTKEY_TOGGLE_PROJECTILE_ESP: MenuConfig::ShowProjectileESP = !MenuConfig::ShowProjectileESP; break;
-				case MenuConfig::HOTKEY_TOGGLE_SPECTATOR_LIST: MenuConfig::ShowSpectatorList = !MenuConfig::ShowSpectatorList; break;
 				case MenuConfig::HOTKEY_TOGGLE_TEAM_CHECK:    MenuConfig::TeamCheck = !MenuConfig::TeamCheck; break;
 				case MenuConfig::HOTKEY_TOGGLE_WEB_RADAR:     MenuConfig::ShowWebRadar = !MenuConfig::ShowWebRadar; break;
 				case MenuConfig::HOTKEY_TOGGLE_SAFE_ZONE:     MenuConfig::SafeZoneEnabled = !MenuConfig::SafeZoneEnabled; break;
@@ -3213,6 +3025,13 @@ VOID KeysCheckThread()
 					ProcessMgr.Detach();
 					globalVars::gameState.store(AppState::SEARCHING_GAME);
 					break;
+#ifdef AIMBOT_ENABLED
+				// Phase 4: 自瞄热键为状态查询型 (aim 模块用各自 config.hotkey 经
+				// GetAsyncKeyState 自行判定), 此处仅占位避免 fallthrough, 不做 toggle。
+				case MenuConfig::HOTKEY_AIMBOT:             break;
+				case MenuConfig::HOTKEY_TRIGGERBOT:         break;
+				case MenuConfig::HOTKEY_MAGNET_TRIGGERBOT:  break;
+#endif
 				}
 				MyConfigSaver::MarkDirty();
 			}
@@ -3246,20 +3065,229 @@ VOID DmaAdminThread()
 			g_pendingRefreshFlags.store(0, std::memory_order_release);
 
 			// Execute the highest tier requested
+			bool shouldBumpSceneReset = false;
 			if (flags & 0x4) { // Full
 				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_ALL, 1);
+				shouldBumpSceneReset = true;
 			} else if (flags & 0x2) { // Repair
 				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_MEM_PARTIAL, 1);
 				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_MEDIUM, 1);
-			} else if (flags & 0x1) { // Probe
+				shouldBumpSceneReset = true;
+			} else if (flags & 0x1) { // Probe - lightweight TLB refresh, no scene reset
 				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_FAST, 1);
 				VMMDLL_ConfigSet(ProcessMgr.HANDLE, VMMDLL_OPT_REFRESH_FREQ_TLB_PARTIAL, 1);
 			}
 
-			SceneReset::BumpSceneReset();
+			// Only bump scene reset for Repair/Full (address-invalidating refreshes).
+			// Probe is a lightweight TLB refresh that doesn't invalidate addresses,
+			// so entity cache should be preserved.
+			if (shouldBumpSceneReset)
+				SceneReset::BumpSceneReset();
 		}
 		catch (...) {
 			// Silently swallow 闁?keep the loop alive
 		}
 	}
 }
+
+// =====================================================================
+//  AimThread 闁?Phase 4 自瞄系统主循环 (200Hz)
+//
+//  职责:
+//    1. DMA 健康检查 (Failed 时跳过)
+//    2. 硬件配置应用 (type 变更或 hwReapplyRequested 时重建 rapidjson + ApplyConfig)
+//    3. 同步 AimConfig -> 各 aim 模块单例的 public 配置字段
+//    4. 调用 AimBot / TriggerBot / MagnetTriggerBot 的 Run()
+//
+//  数据来源: Cheats::GetSnapshot() (双缓冲, 与渲染线程共享)
+//  DMA 只读: 所有鼠标动作经 Hw::HwManager::Get() 下发
+// =====================================================================
+
+#ifdef AIMBOT_ENABLED
+namespace {
+
+// 将 AimConfig::Hardware() 转为 rapidjson::Value 并应用 (HwManager API 要求)
+void ApplyHwConfig() {
+	auto& hw = AimConfig::Hardware();
+	rapidjson::Document doc;
+	doc.SetObject();
+	auto& alloc = doc.GetAllocator();
+	doc.AddMember("type", rapidjson::Value(hw.type.c_str(), alloc), alloc);
+	doc.AddMember("ip", rapidjson::Value(hw.net.ip.c_str(), alloc), alloc);
+	doc.AddMember("port", hw.net.port, alloc);
+	doc.AddMember("uuid", rapidjson::Value(hw.net.uuid.c_str(), alloc), alloc);
+	// BPro / Makcu 共用 comPort/baudRate 字段, 按当前类型选取对应值
+	const std::string& comPort = (hw.type == "makcu") ? hw.makcu.comPort : hw.bpro.comPort;
+	int baudRate = (hw.type == "makcu") ? hw.makcu.baudRate : hw.bpro.baudRate;
+	doc.AddMember("comPort", rapidjson::Value(comPort.c_str(), alloc), alloc);
+	doc.AddMember("baudRate", baudRate, alloc);
+	Hw::HwManager::Get().ApplyConfig(doc);
+}
+
+// 将 AimConfig 全局字段同步到各 aim 模块单例的 public 配置字段
+// (模块不 #include AimConfig.h, 保持解耦; AimThread 负责推送)
+void SyncAimConfig() {
+	// 全局配置 (teamCheck/predictionTimeMs/ignoreOnShot)
+	auto& g = AimConfig::Global();
+
+	// AimBot
+	auto& ac = AimConfig::AimBot();
+	auto& aim = Aim::AimBot::Get();
+	aim.enabled           = ac.enabled;
+	aim.hotkey            = ac.hotkey;
+	aim.fov               = ac.fov;
+	aim.smooth            = ac.smooth;
+	aim.bone              = ac.bone;
+	aim.visualCheck       = ac.visualCheck;
+	aim.boneFallback      = ac.boneFallback;
+	aim.teamCheck         = g.teamCheck;
+	aim.ignoreOnShot      = g.ignoreOnShot;
+	aim.targetSwitchDelay = ac.targetSwitchDelay;
+	aim.predictionTimeMs  = g.predictionTimeMs;
+	for (int i = 0; i < 6; i++) {
+		aim.perWeapon[i].fov    = ac.perWeapon[i].fov;
+		aim.perWeapon[i].smooth = ac.perWeapon[i].smooth;
+		aim.perWeapon[i].bone   = ac.perWeapon[i].bone;
+	}
+
+	// 后坐力补偿: SprayControl 或 RCS (根据 mode 二选一)
+	auto& spray = Aim::SprayControl::Get();
+	auto& rcs   = Aim::RecoilControl::Get();
+	if (g.spray.mode == 1) {
+		// RCS 模式: 启用 RCS, 禁用 SprayControl
+		rcs.config.enabled     = g.spray.enabled;
+		rcs.config.scale       = g.spray.strength;
+		rcs.config.sensitivity = g.spray.sensitivity;
+		spray.config.enabled   = false;
+		spray.config.strength  = g.spray.strength;
+	} else {
+		// SprayControl 模式: 启用 SprayControl, 禁用 RCS
+		spray.config.enabled     = g.spray.enabled;
+		spray.config.strength    = g.spray.strength;
+		spray.config.sensitivity = g.spray.sensitivity;
+		rcs.config.enabled       = false;
+	}
+
+	// TriggerBot
+	auto& tc = AimConfig::TriggerBot();
+	auto& trig = Aim::TriggerBot::Get();
+	trig.config.enabled      = tc.enabled;
+	trig.config.hotkey       = tc.hotkey;
+	trig.config.mode         = tc.mode;
+	trig.config.delay        = tc.delay;
+	trig.config.delayJitter  = tc.delayJitter;
+	trig.config.holdMs       = tc.holdMs;
+	trig.config.teamCheck    = g.teamCheck;
+	trig.config.ignoreOnShot = g.ignoreOnShot;
+
+	// Magnet
+	auto& mc = AimConfig::Magnet();
+	auto& mag = Aim::MagnetTriggerBot::Get();
+	mag.config.enabled            = mc.enabled;
+	mag.config.hotkey             = mc.hotkey;
+	mag.config.fov                = mc.fov;
+	mag.config.smooth             = mc.smooth;
+	mag.config.bone               = mc.bone;
+	mag.config.visualCheck        = mc.visualCheck;
+	mag.config.boneFallback       = mc.boneFallback;
+	mag.config.targetSwitchDelay  = mc.targetSwitchDelay;
+	mag.config.teamCheck          = g.teamCheck;
+	mag.config.ignoreOnShot       = g.ignoreOnShot;
+	mag.config.predictionTimeMs   = g.predictionTimeMs;
+	for (int i = 0; i < 6; i++) {
+		mag.config.perWeapon[i].fov    = mc.perWeapon[i].fov;
+		mag.config.perWeapon[i].smooth = mc.perWeapon[i].smooth;
+		mag.config.perWeapon[i].bone   = mc.perWeapon[i].bone;
+	}
+}
+
+} // namespace
+
+VOID AimThread()
+{
+	static std::string lastHwType = "none";
+	bool firstHwApply = true;
+
+	while (true) {
+#ifdef AIMBOT_ENABLED
+		// 多点校验：每 200 次循环检查一次（~1秒@200Hz）
+		static int s_aimAntiTamper = 0;
+		if (++s_aimAntiTamper >= 200) {
+			s_aimAntiTamper = 0;
+			if (!AntiTamper::PeriodicCheck())
+				return;
+		}
+#endif
+		try {
+			Sleep(5);  // 200Hz
+
+			if (globalVars::gameState.load() == AppState::EXITING)
+				return;
+
+			// DMA 健康检查: Failed 时跳过本帧 (避免无效读取)
+			if (g_dmaHealth.GetState() == DmaHealth::DmaHealthState::Failed)
+				continue;
+
+			// 硬件配置应用: type 变更或 UI 请求重连时触发
+			{
+				auto& hw = AimConfig::Hardware();
+				bool typeChanged = (hw.type != lastHwType);
+				bool reapply = AimConfig::hwReapplyRequested.exchange(false);
+				if (firstHwApply || typeChanged || reapply) {
+					ApplyHwConfig();
+					lastHwType = hw.type;
+					firstHwApply = false;
+				}
+			}
+
+			// 仅在游戏运行时执行自瞄逻辑
+			if (globalVars::gameState.load() != AppState::RUNNING)
+				continue;
+
+			// 同步配置 -> 模块单例
+			SyncAimConfig();
+
+			// 统一查询按键状态 (左键串口查询一次, 各模块只读 atomic)
+			Aim::InputManager::Get().Update();
+
+			// 获取快照 (双缓冲, 复制保证一致)
+			GameSnapshot snap = Cheats::GetSnapshot();
+			const CEntity& local = snap.LocalPlayer;
+
+			// 本地玩家无效时跳过 (aim 模块内部也会判断, 此处提前减少无谓工作)
+			if (local.Pawn.Address == 0 || local.Pawn.Health <= 0)
+				continue;
+
+			// 调用模块 (各模块只计算 pending, 不直接下发):
+			//   1. SprayControl 更新状态 (压枪回放由独立线程计算 pending)
+			//   2. RecoilControl 计算 pending
+			//   3. AimBot 计算自瞄移动量存 pending
+			//   4. TriggerBot 自动开火 (按键操作, 非移动)
+			//   5. MagnetTriggerBot 计算磁力移动量存 pending
+			Aim::SprayControl::Get().UpdateState(local);
+			Aim::RecoilControl::Get().Run(local);
+			Aim::AimBot::Get().Run(local, snap.Entities);
+			Aim::TriggerBot::Get().Run(local);
+			Aim::MagnetTriggerBot::Get().Run(local, snap.Entities);
+
+			// 统一收集所有 pending, 合并后一次 MoveRelative 下发
+			int aimX = 0, aimY = 0;
+			Aim::AimBot::Get().GetAndClearPending(aimX, aimY);
+			int magnetX = 0, magnetY = 0;
+			Aim::MagnetTriggerBot::Get().GetAndClearPending(magnetX, magnetY);
+			int sprayX = 0, sprayY = 0;
+			Aim::SprayControl::Get().GetAndClearPending(sprayX, sprayY);
+			int totalX = aimX + magnetX + sprayX;
+			int totalY = aimY + magnetY + sprayY;
+			if (totalX != 0 || totalY != 0) {
+				Hw::HwManager::Get().MoveRelative(totalX, totalY);
+			}
+		}
+		catch (const std::exception& e) {
+			LOG_ERROR("Aim", "AimThread exception: {}", e.what());
+		} catch (...) {
+			LOG_ERROR("Aim", "AimThread unknown exception");
+		}
+	}
+}
+#endif

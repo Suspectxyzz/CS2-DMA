@@ -68,14 +68,6 @@ struct DroppedWeapon
 	DWORD64 EntityAddr = 0;      // for dedup across frames
 };
 
-// Spectator info: player who is spectating (observer)
-struct SpectatorInfo
-{
-	std::string Name;
-	int TeamID = 0;        // team of the spectator
-	int ObserverMode = 0;  // OBS_MODE_IN_EYE=4, OBS_MODE_CHASE=5, etc.
-};
-
 // Performance stats for the perf monitor overlay
 struct PerfStats
 {
@@ -83,7 +75,6 @@ struct PerfStats
 	float FrameTimeMs = 0.f;
 	int EntityCount = 0;
 	int ProjectileCount = 0;
-	int SpectatorCount = 0;
 	float DataThreadHz = 0.f;
 };
 
@@ -101,7 +92,6 @@ struct GameSnapshot
 	DWORD LocalObserverTarget = 0;
 	BombData Bomb;
 	std::vector<GrenadeProjectile> Projectiles;
-	std::vector<SpectatorInfo> Spectators;
 	// ESP gap-closure stage 3b: dropped weapons on the ground (Task 12/16).
 	std::vector<DroppedWeapon> DroppedWeapons;
 	// ESP gap-closure stage 2: capture timestamp (microseconds since steady_clock epoch)

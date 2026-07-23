@@ -13,6 +13,9 @@
 class CGame
 {
 private:
+	// EntityList 2-frame confirmation state (ref: KevqDMA)
+	static DWORD64 s_pendingEntityListCandidate;
+	static int s_entityListConfirmCount;
 	struct
 	{
 		DWORD64 ClientDLL;

@@ -160,5 +160,4 @@
 "/renderers/projectiles.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\projectiles.js"
 "/renderers/rttMonitor.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\rttMonitor.js"
 "/renderers/smokes.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\smokes.js"
-"/renderers/spectators.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\spectators.js"
 "/renderers/teamPanel.js" RCDATA "..\\..\\..\\external\\webradar\\webapp\\renderers\\teamPanel.js"

@@ -8,12 +8,16 @@
 #include "../utils/Logger.h"
 #include "../game/map_registry.h"
 #include "../render/Cheats.h"
+#include "../OS-ImGui/OS-ImGui_Base.h"
 #include <shellapi.h>
 #include <thread>
 #include <chrono>
 #include "../game/OffsetUpdater.h"
 #include "../game/Offsets.h"
 #include "qrcodegen.h"
+#ifdef AIMBOT_ENABLED
+#include "AimTab.h"
+#endif
 #include <atomic>
 
 // Offset update state (for GUI-triggered offset refetch)
@@ -206,12 +210,6 @@ static void DrawTab_Visuals() {
 				ImGui::SetNextItemWidth(150);
 				ImGui::SliderFloat(lang.visuals_cornersize.c_str(), &MenuConfig::CornerLength, 0.1f, 0.5f, "%.1f px");
 			}
-			Gui.MyCheckBox((lang.visuals_filled + "##box").c_str(), &MenuConfig::BoxFilled);
-			if (MenuConfig::BoxFilled) {
-				ImGui::SameLine(0, 16);
-				ImGui::SetNextItemWidth(120);
-				ImGui::SliderFloat(lang.visuals_fillalpha.c_str(), &MenuConfig::BoxFillAlpha, 0.01f, 0.5f, "%.0f");
-			}
 		}
 	}
 
@@ -305,7 +303,7 @@ static void DrawTab_Visuals() {
 		}
 	}
 
-	// ======== Info & Text (Task 17: removed WeaponESP, added Spectator List) ========
+	// ======== Info & Text ========
 	if (ImGui::CollapsingHeader(lang.header_info.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		// --- Text Outline (applies to all ESP text) ---
 		Gui.MyCheckBox(lang.visuals_text_outline.c_str(), &MenuConfig::TextOutlineEnabled);
@@ -332,8 +330,6 @@ static void DrawTab_Visuals() {
 			ImGui::SliderFloat((lang.visuals_distance_size + "##dist").c_str(), &MenuConfig::DistanceFontSize, 8.f, 24.f, "%.0f px");
 		}
 
-		// --- Spectator List (moved from its own section - Task 17) ---
-		Gui.MyCheckBox(lang.visuals_spectatorlist.c_str(), &MenuConfig::ShowSpectatorList);
 	}
 
 	if (ImGui::CollapsingHeader(lang.header_snapline.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -533,17 +529,15 @@ static void DrawTab_Visuals() {
 		}
 	}
 
-	// ======== Visibility Coloring (Task 17: independent section from Advanced ESP) ========
+	// ======== Visibility Coloring (Task 5-8/9: unified single switch) ========
 	if (ImGui::CollapsingHeader(lang.visuals_visibility.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-		Gui.MyCheckBox(lang.visuals_visibility.c_str(), &MenuConfig::VisibilityColoring);
-		tip("Color by visibility (different color for enemies behind walls)", "根据可见性着色（墙后敌人用不同颜色）");
-		if (MenuConfig::VisibilityColoring) {
+		// VPK 可见性检查（单一开关：开启时用 BVH 射线检测真实遮挡 + 变色）
+		Gui.MyCheckBox(lang.visuals_vpk_visibility.c_str(), &MenuConfig::VPKVisibilityCheck);
+		tip("Use map geometry ray-cast for real occlusion detection. Per-bone coloring when enabled; original colors when disabled or no map data.", "开启时用地图几何射线检测真实遮挡，按每段骨骼独立变色；关闭或无地图数据时使用原色");
+		if (MenuConfig::VPKVisibilityCheck) {
 			ImGui::ColorEdit4(lang.visuals_visible_color.c_str(), reinterpret_cast<float*>(&MenuConfig::VisibleColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::ColorEdit4(lang.visuals_hidden_color.c_str(), reinterpret_cast<float*>(&MenuConfig::HiddenColor), ImGuiColorEditFlags_NoInputs);
 		}
-		// VPK 可见性检查（Task 5-8: 基于地图几何 BVH 射线检测真实遮挡）
-		Gui.MyCheckBox(lang.visuals_vpk_visibility.c_str(), &MenuConfig::VPKVisibilityCheck);
-		tip("Use map geometry ray-cast for real occlusion detection (requires map data files in data/maps/)", "使用地图几何射线检测真实遮挡（需要在 data/maps/ 放置地图数据文件）");
 	}
 
 	// ======== Sound ESP (Task 17: independent section from Advanced ESP) ========
@@ -566,13 +560,6 @@ static void DrawTab_Visuals() {
 		}
 	}
 
-	// ======== ESP Preview (Task: preview window toggle) ========
-	ImGui::Spacing();
-	if (ImGui::Button("ESP Preview")) {
-		Render::EspPreviewOpen = !Render::EspPreviewOpen;
-	}
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Open a preview window showing current ESP settings");
 }
 
 // ============================================================================
@@ -887,6 +874,7 @@ static void DrawTab_Settings() {
 	if (ImGui::CollapsingHeader(lang.header_general.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
 		ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
+		ImGui::Text("Tearing: %s (HR: 0x%08X)", OSImGui::g_Device.g_AllowTearing ? "ON" : "OFF", (unsigned int)OSImGui::g_Device.g_TearingHR);
 		Gui.MyCheckBox(lang.settings_vsync.c_str(), &MenuConfig::VSync);
 		if (!MenuConfig::VSync) {
 			ImGui::SetNextItemWidth(200);
@@ -900,8 +888,6 @@ static void DrawTab_Settings() {
 	if (ImGui::CollapsingHeader(lang.header_render_quality.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		Gui.MyCheckBox(lang.visuals_interpolation.c_str(), &MenuConfig::InterpolationEnabled);
 		tip("Player position interpolation smoothing", "玩家位置插值平滑");
-		Gui.MyCheckBox(lang.visuals_bone_reliability.c_str(), &MenuConfig::BoneReliabilityEnabled);
-		tip("Bone data reliability check", "骨骼数据可靠性检查");
 	}
 
 	if (ImGui::CollapsingHeader(lang.header_display.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1048,6 +1034,22 @@ static void DrawTab_Settings() {
 				Logger::SetDebugMode(MenuConfig::DebugLog);
 		}
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", lang.settings_debuglog_tip.c_str());
+
+		// --- Player count health check ---
+		ImGui::Spacing();
+		ImGui::Separator();
+		if (ImGui::CollapsingHeader(lang.header_player_health.c_str())) {
+			Gui.MyCheckBox(lang.settings_player_count_check.c_str(), &MenuConfig::PlayerCountCheckEnabled);
+			tip("Auto-detect DMA read failures that cause players to disappear",
+				"自动检测DMA读取异常导致玩家消失");
+			if (MenuConfig::PlayerCountCheckEnabled) {
+				ImGui::Indent();
+				ImGui::SetNextItemWidth(120);
+				ImGui::SliderInt(lang.settings_expected_player_count.c_str(), &MenuConfig::ExpectedPlayerCount, 2, 64, "%d");
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", lang.settings_expected_player_count_tip.c_str());
+				ImGui::Unindent();
+			}
+		}
 
 		// --- Offset refetch section ---
 		ImGui::Spacing();
@@ -1344,10 +1346,49 @@ static void DrawTab_Grenade() {
 			Gui.MyCheckBox(lang.grenade_showline.c_str(), &GrenadeHelper::ShowLine);
 
 			ImGui::Spacing();
+		ImGui::SetNextItemWidth(200);
+		ImGui::SliderFloat(lang.grenade_maxdistance.c_str(), &GrenadeHelper::MaxDistance, 100.0f, 1000.0f, "%.0f");
+		ImGui::SetNextItemWidth(200);
+		ImGui::SliderFloat(lang.grenade_boxsize.c_str(), &GrenadeHelper::BoxSize, 4.0f, 20.0f, "%.0f");
+
+		// Aim crosshair settings
+		if (ImGui::CollapsingHeader(lang.grenade_aim_header.c_str())) {
+			Gui.MyCheckBox(lang.grenade_aim_showall.c_str(), &GrenadeHelper::ShowAllAimInDistance);
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", lang.grenade_aim_showall_tip.c_str());
+
 			ImGui::SetNextItemWidth(200);
-			ImGui::SliderFloat(lang.grenade_maxdistance.c_str(), &GrenadeHelper::MaxDistance, 100.0f, 1000.0f, "%.0f");
+			ImGui::SliderFloat(lang.grenade_aim_indicatordist.c_str(),
+			                   &GrenadeHelper::AimIndicatorDistance, 20.0f, 500.0f, "%.0f");
+
+			ImGui::SetNextItemWidth(150);
+			ImGui::Combo(lang.grenade_aim_style.c_str(), &GrenadeHelper::CrosshairStyle,
+			             lang.grenade_aim_styleselect, IM_ARRAYSIZE(lang.grenade_aim_styleselect));
+
+			float col[4] = {
+				GrenadeHelper::CrosshairColorR,
+				GrenadeHelper::CrosshairColorG,
+				GrenadeHelper::CrosshairColorB,
+				GrenadeHelper::CrosshairColorA
+			};
 			ImGui::SetNextItemWidth(200);
-			ImGui::SliderFloat(lang.grenade_boxsize.c_str(), &GrenadeHelper::BoxSize, 4.0f, 20.0f, "%.0f");
+			if (ImGui::ColorEdit4(lang.grenade_aim_color.c_str(), col)) {
+				GrenadeHelper::CrosshairColorR = col[0];
+				GrenadeHelper::CrosshairColorG = col[1];
+				GrenadeHelper::CrosshairColorB = col[2];
+				GrenadeHelper::CrosshairColorA = col[3];
+			}
+
+			ImGui::SetNextItemWidth(200);
+			ImGui::SliderFloat(lang.grenade_aim_size.c_str(),   &GrenadeHelper::CrosshairSize, 8.0f, 60.0f, "%.0f");
+			ImGui::SetNextItemWidth(200);
+			ImGui::SliderFloat(lang.grenade_aim_len.c_str(),    &GrenadeHelper::CrosshairLen, 4.0f, 40.0f, "%.0f");
+			ImGui::SetNextItemWidth(200);
+			ImGui::SliderFloat(lang.grenade_aim_gap.c_str(),    &GrenadeHelper::CrosshairGap, 0.0f, 20.0f, "%.0f");
+			ImGui::SetNextItemWidth(200);
+			ImGui::SliderFloat(lang.grenade_aim_thick.c_str(),  &GrenadeHelper::CrosshairThickness, 1.0f, 6.0f, "%.1f");
+			ImGui::SetNextItemWidth(200);
+			ImGui::SliderInt(lang.grenade_aim_maxcount.c_str(), &GrenadeHelper::MaxSimultaneousAims, 1, 10);
+		}
 		}
 
 		ImGui::Spacing();
@@ -1702,8 +1743,11 @@ void Cheats::Menu()
 			if (NavButton(lang.tab_radar.c_str(), active_tab == 1, btnW)) active_tab = 1;
 
 			ImGui::TextColored(UITheme::TextDisabled, "  TOOLS");
-			if (NavButton(lang.tab_grenade.c_str(), active_tab == 4, btnW)) active_tab = 4;
-			if (NavButton(lang.tab_hotkeys.c_str(), active_tab == 5, btnW)) active_tab = 5;
+		if (NavButton(lang.tab_grenade.c_str(), active_tab == 4, btnW)) active_tab = 4;
+		if (NavButton(lang.tab_hotkeys.c_str(), active_tab == 5, btnW)) active_tab = 5;
+#ifdef AIMBOT_ENABLED
+		if (NavButton(lang.tab_aimbot.c_str(), active_tab == 7, btnW)) active_tab = 7;
+#endif
 
 			ImGui::TextColored(UITheme::TextDisabled, "  SYSTEM");
 			if (NavButton(lang.tab_settings.c_str(), active_tab == 2, btnW)) active_tab = 2;
@@ -1755,8 +1799,11 @@ void Cheats::Menu()
 			case 3: DrawTab_Config(); break;
 			case 4: DrawTab_Grenade(); break;
 			case 5: DrawTab_Hotkeys(); break;
-			case 6: DrawTab_Contact(); break;
-			default: break;
+		case 6: DrawTab_Contact(); break;
+#ifdef AIMBOT_ENABLED
+		case 7: AimTab::DrawTab_Aimbot(); break;
+#endif
+		default: break;
 			}
 			ImGui::PopStyleVar();
 

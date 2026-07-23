@@ -22,6 +22,10 @@ public:
 	int Color = -1;
 	DWORD Pawn = 0;
 	std::string PlayerName;
+	// P1 fix: cache resolved Pawn address keyed by Pawn handle.
+	// Pawn handle is stable while player is alive; changes only on respawn.
+	DWORD m_cachedPawnHandle = 0;
+	DWORD64 m_cachedPawnAddress = 0;
 public:
 	bool GetTeamID();
 	bool GetHealth();
@@ -43,7 +47,10 @@ public:
 	Vec3 CameraPos;
 	std::string WeaponName;
 	DWORD ShotsFired;
+#ifdef AIMBOT_ENABLED
 	Vec2 AimPunchAngle;
+	C_UTL_VECTOR AimPunchCache;
+#endif
 	int Health;
 	int Armor = 0;
 	float FlashDuration = 0.f;
@@ -63,6 +70,12 @@ public:
 	uint64_t SoundUntilMs = 0;
 	Vec3 Velocity;
 	Vec3 PrevPos;          // previous frame position (snapshot interpolation)
+
+	// Resolve AimPunchCache (C_UTL_VECTOR) via m_pAimPunchServices -> m_aimPunchCache.
+	// Multi-level pointer dereference style, see PlayerController::GetPlayerPawnAddress.
+#ifdef AIMBOT_ENABLED
+	bool GetAimPunchCache();
+#endif
 };
 
 class CEntity

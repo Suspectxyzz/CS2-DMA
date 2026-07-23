@@ -7,6 +7,9 @@
 #include "../game/MenuConfig.h"
 #include "../render/GrenadeHelper.h"
 #include "../utils/Logger.h"
+#ifdef AIMBOT_ENABLED
+#include "AimConfig.h"
+#endif
 
 namespace MyConfigSaver {
 
@@ -37,8 +40,6 @@ namespace MyConfigSaver {
         configFile << "Frames " << MenuConfig::MaxFrameRate << std::endl;
         configFile << "BoxThickness " << MenuConfig::BoxThickness << std::endl;
         configFile << "BoxRounding " << MenuConfig::BoxRounding << std::endl;
-        configFile << "BoxFilled " << MenuConfig::BoxFilled << std::endl;
-        configFile << "BoxFillAlpha " << MenuConfig::BoxFillAlpha << std::endl;
         configFile << "CornerLength " << MenuConfig::CornerLength << std::endl;
         configFile << "BoneThickness " << MenuConfig::BoneThickness << std::endl;
         configFile << "ShowHeadDot " << MenuConfig::ShowHeadDot << std::endl;
@@ -102,10 +103,10 @@ namespace MyConfigSaver {
         configFile << "BombCarrierColor " << MenuConfig::BombCarrierColor.Value.x << " " << MenuConfig::BombCarrierColor.Value.y << " " << MenuConfig::BombCarrierColor.Value.z << " " << MenuConfig::BombCarrierColor.Value.w << std::endl;
         configFile << "BombDroppedColor " << MenuConfig::BombDroppedColor.Value.x << " " << MenuConfig::BombDroppedColor.Value.y << " " << MenuConfig::BombDroppedColor.Value.z << " " << MenuConfig::BombDroppedColor.Value.w << std::endl;
         configFile << "BombDefusingColor " << MenuConfig::BombDefusingColor.Value.x << " " << MenuConfig::BombDefusingColor.Value.y << " " << MenuConfig::BombDefusingColor.Value.z << " " << MenuConfig::BombDefusingColor.Value.w << std::endl;
-        configFile << "ShowSpectatorList " << MenuConfig::ShowSpectatorList << std::endl;
         configFile << "ShowPerfMonitor " << MenuConfig::ShowPerfMonitor << std::endl;
-        configFile << "ShowEspPreview " << MenuConfig::ShowEspPreview << std::endl;
         configFile << "ShowDebugStats " << MenuConfig::ShowDebugStats << std::endl;
+        configFile << "PlayerCountCheckEnabled " << MenuConfig::PlayerCountCheckEnabled << std::endl;
+        configFile << "ExpectedPlayerCount " << MenuConfig::ExpectedPlayerCount << std::endl;
         configFile << "WebRadarAutoReload " << MenuConfig::WebRadarAutoReload << std::endl;
         configFile << "ShowProjectileESP " << MenuConfig::ShowProjectileESP << std::endl;
         configFile << "ShowProjectileRange " << MenuConfig::ShowProjectileRange << std::endl;
@@ -126,12 +127,10 @@ namespace MyConfigSaver {
         configFile << "FlagMoneyEnabled " << MenuConfig::FlagMoneyEnabled << std::endl;
         configFile << "FlagMoneyColor " << MenuConfig::FlagMoneyColor.Value.x << " " << MenuConfig::FlagMoneyColor.Value.y << " " << MenuConfig::FlagMoneyColor.Value.z << " " << MenuConfig::FlagMoneyColor.Value.w << std::endl;
         configFile << "FlagFontSize " << MenuConfig::FlagFontSize << std::endl;
-        // Task 9: Visibility Coloring
-        configFile << "VisibilityColoring " << MenuConfig::VisibilityColoring << std::endl;
+        // Task 5-8/9: VPK Visibility Check (unified single switch)
+        configFile << "VPKVisibilityCheck " << MenuConfig::VPKVisibilityCheck << std::endl;
         configFile << "VisibleColor " << MenuConfig::VisibleColor.Value.x << " " << MenuConfig::VisibleColor.Value.y << " " << MenuConfig::VisibleColor.Value.z << " " << MenuConfig::VisibleColor.Value.w << std::endl;
         configFile << "HiddenColor " << MenuConfig::HiddenColor.Value.x << " " << MenuConfig::HiddenColor.Value.y << " " << MenuConfig::HiddenColor.Value.z << " " << MenuConfig::HiddenColor.Value.w << std::endl;
-        // Task 5-8: VPK Visibility Check
-        configFile << "VPKVisibilityCheck " << MenuConfig::VPKVisibilityCheck << std::endl;
         // Task 10: Sound ESP
         configFile << "ShowSoundESP " << MenuConfig::ShowSoundESP << std::endl;
         configFile << "SoundESPColor " << MenuConfig::SoundESPColor.Value.x << " " << MenuConfig::SoundESPColor.Value.y << " " << MenuConfig::SoundESPColor.Value.z << " " << MenuConfig::SoundESPColor.Value.w << std::endl;
@@ -174,12 +173,107 @@ namespace MyConfigSaver {
         configFile << "BarLabelFontSize " << MenuConfig::BarLabelFontSize << std::endl;
         // Stage 2: Render Quality
         configFile << "InterpolationEnabled " << MenuConfig::InterpolationEnabled << std::endl;
-        configFile << "BoneReliabilityEnabled " << MenuConfig::BoneReliabilityEnabled << std::endl;
 
         // Hotkey bindings
         for (int i = 0; i < MenuConfig::HOTKEY_COUNT; i++) {
             configFile << "Hotkey_" << i << " " << MenuConfig::Hotkeys[i].vkCode << std::endl;
         }
+
+        // === GrenadeHelper ===
+        configFile << "GH_Enabled " << GrenadeHelper::Enabled << std::endl;
+        configFile << "GH_MaxDistance " << GrenadeHelper::MaxDistance << std::endl;
+        configFile << "GH_AimIndicatorDistance " << GrenadeHelper::AimIndicatorDistance << std::endl;
+        configFile << "GH_ShowName " << GrenadeHelper::ShowName << std::endl;
+        configFile << "GH_ShowLine " << GrenadeHelper::ShowLine << std::endl;
+        configFile << "GH_ShowBox " << GrenadeHelper::ShowBox << std::endl;
+        configFile << "GH_BoxSize " << GrenadeHelper::BoxSize << std::endl;
+        configFile << "GH_RecordHotKey " << GrenadeHelper::RecordHotKey << std::endl;
+        configFile << "GH_AutoSave " << GrenadeHelper::AutoSave << std::endl;
+        configFile << "GH_DefaultGrenadeType " << GrenadeHelper::DefaultGrenadeType << std::endl;
+        configFile << "GH_DefaultThrowStyle " << GrenadeHelper::DefaultThrowStyle << std::endl;
+        configFile << "GH_CrosshairStyle " << GrenadeHelper::CrosshairStyle << std::endl;
+        configFile << "GH_CrosshairColor " << GrenadeHelper::CrosshairColorR << ' '
+                   << GrenadeHelper::CrosshairColorG << ' '
+                   << GrenadeHelper::CrosshairColorB << ' '
+                   << GrenadeHelper::CrosshairColorA << std::endl;
+        configFile << "GH_CrosshairSize " << GrenadeHelper::CrosshairSize << std::endl;
+        configFile << "GH_CrosshairLen " << GrenadeHelper::CrosshairLen << std::endl;
+        configFile << "GH_CrosshairGap " << GrenadeHelper::CrosshairGap << std::endl;
+        configFile << "GH_CrosshairThickness " << GrenadeHelper::CrosshairThickness << std::endl;
+        configFile << "GH_ShowAllAimInDistance " << GrenadeHelper::ShowAllAimInDistance << std::endl;
+        configFile << "GH_MaxSimultaneousAims " << GrenadeHelper::MaxSimultaneousAims << std::endl;
+
+#ifdef AIMBOT_ENABLED
+        // === Phase 4: AimConfig (自瞄系统配置) ===
+        {
+            auto& g = AimConfig::Global();
+            configFile << "Global_TeamCheck " << g.teamCheck << std::endl;
+            configFile << "Global_IgnoreOnShot " << g.ignoreOnShot << std::endl;
+            configFile << "Global_PredictionTimeMs " << g.predictionTimeMs << std::endl;
+            configFile << "Aim_Spray_Enabled " << g.spray.enabled << std::endl;
+            configFile << "Aim_Spray_Mode " << g.spray.mode << std::endl;
+            configFile << "Aim_Spray_Strength " << g.spray.strength << std::endl;
+            configFile << "Aim_Spray_Dpi " << g.spray.dpi << std::endl;
+            configFile << "Aim_Spray_Sensitivity " << g.spray.sensitivity << std::endl;
+            configFile << "Aim_Spray_ShowPredictedImpact " << g.spray.showPredictedImpact << std::endl;
+        }
+        {
+            auto& a = AimConfig::AimBot();
+            configFile << "Aim_Enabled " << a.enabled << std::endl;
+            configFile << "Aim_Hotkey " << a.hotkey << std::endl;
+            configFile << "Aim_Fov " << a.fov << std::endl;
+            configFile << "Aim_Smooth " << a.smooth << std::endl;
+            configFile << "Aim_Bone " << (int)a.bone << std::endl;
+            configFile << "Aim_VisualCheck " << a.visualCheck << std::endl;
+            configFile << "Aim_BoneFallback " << a.boneFallback << std::endl;
+            configFile << "Aim_TargetSwitchDelay " << a.targetSwitchDelay << std::endl;
+            configFile << "Aim_FovCircle_Enabled " << a.fovCircle.enabled << std::endl;
+            configFile << "Aim_FovCircle_Color " << a.fovCircle.color.Value.x << " " << a.fovCircle.color.Value.y << " " << a.fovCircle.color.Value.z << " " << a.fovCircle.color.Value.w << std::endl;
+            for (int i = 0; i < 6; i++) {
+                configFile << "Aim_Weapon" << i << "_Fov " << a.perWeapon[i].fov << std::endl;
+                configFile << "Aim_Weapon" << i << "_Smooth " << a.perWeapon[i].smooth << std::endl;
+                configFile << "Aim_Weapon" << i << "_Bone " << (int)a.perWeapon[i].bone << std::endl;
+            }
+        }
+        {
+            auto& t = AimConfig::TriggerBot();
+            configFile << "Trigger_Enabled " << t.enabled << std::endl;
+            configFile << "Trigger_Hotkey " << t.hotkey << std::endl;
+            configFile << "Trigger_Mode " << t.mode << std::endl;
+            configFile << "Trigger_Delay " << t.delay << std::endl;
+            configFile << "Trigger_DelayJitter " << t.delayJitter << std::endl;
+            configFile << "Trigger_HoldMs " << t.holdMs << std::endl;
+        }
+        {
+            auto& m = AimConfig::Magnet();
+            configFile << "Magnet_Enabled " << m.enabled << std::endl;
+            configFile << "Magnet_Hotkey " << m.hotkey << std::endl;
+            configFile << "Magnet_Fov " << m.fov << std::endl;
+            configFile << "Magnet_Smooth " << m.smooth << std::endl;
+            configFile << "Magnet_Bone " << (int)m.bone << std::endl;
+            configFile << "Magnet_VisualCheck " << m.visualCheck << std::endl;
+            configFile << "Magnet_BoneFallback " << m.boneFallback << std::endl;
+            configFile << "Magnet_TargetSwitchDelay " << m.targetSwitchDelay << std::endl;
+            configFile << "Magnet_FovCircle_Enabled " << m.fovCircle.enabled << std::endl;
+            configFile << "Magnet_FovCircle_Color " << m.fovCircle.color.Value.x << " " << m.fovCircle.color.Value.y << " " << m.fovCircle.color.Value.z << " " << m.fovCircle.color.Value.w << std::endl;
+            for (int i = 0; i < 6; i++) {
+                configFile << "Magnet_Weapon" << i << "_Fov " << m.perWeapon[i].fov << std::endl;
+                configFile << "Magnet_Weapon" << i << "_Smooth " << m.perWeapon[i].smooth << std::endl;
+                configFile << "Magnet_Weapon" << i << "_Bone " << (int)m.perWeapon[i].bone << std::endl;
+            }
+        }
+        {
+            auto& h = AimConfig::Hardware();
+            configFile << "Hw_Type " << h.type << std::endl;
+            configFile << "Hw_Net_Ip " << h.net.ip << std::endl;
+            configFile << "Hw_Net_Port " << h.net.port << std::endl;
+            configFile << "Hw_Net_Uuid " << h.net.uuid << std::endl;
+            configFile << "Hw_BPro_ComPort " << h.bpro.comPort << std::endl;
+            configFile << "Hw_BPro_BaudRate " << h.bpro.baudRate << std::endl;
+            configFile << "Hw_Makcu_ComPort " << h.makcu.comPort << std::endl;
+            configFile << "Hw_Makcu_BaudRate " << h.makcu.baudRate << std::endl;
+        }
+#endif
 
         configFile.close();
     }
@@ -218,8 +312,6 @@ namespace MyConfigSaver {
                 if (key == "Frames") iss >> MenuConfig::MaxFrameRate;
                 if (key == "BoxThickness") iss >> MenuConfig::BoxThickness;
                 if (key == "BoxRounding") iss >> MenuConfig::BoxRounding;
-                if (key == "BoxFilled") iss >> MenuConfig::BoxFilled;
-                if (key == "BoxFillAlpha") iss >> MenuConfig::BoxFillAlpha;
                 if (key == "CornerLength") iss >> MenuConfig::CornerLength;
                 if (key == "BoneThickness") iss >> MenuConfig::BoneThickness;
                 if (key == "ShowHeadDot") iss >> MenuConfig::ShowHeadDot;
@@ -283,10 +375,10 @@ namespace MyConfigSaver {
                 if (key == "BombCarrierColor") iss >> MenuConfig::BombCarrierColor.Value.x >> MenuConfig::BombCarrierColor.Value.y >> MenuConfig::BombCarrierColor.Value.z >> MenuConfig::BombCarrierColor.Value.w;
                 if (key == "BombDroppedColor") iss >> MenuConfig::BombDroppedColor.Value.x >> MenuConfig::BombDroppedColor.Value.y >> MenuConfig::BombDroppedColor.Value.z >> MenuConfig::BombDroppedColor.Value.w;
                 if (key == "BombDefusingColor") iss >> MenuConfig::BombDefusingColor.Value.x >> MenuConfig::BombDefusingColor.Value.y >> MenuConfig::BombDefusingColor.Value.z >> MenuConfig::BombDefusingColor.Value.w;
-                if (key == "ShowSpectatorList") iss >> MenuConfig::ShowSpectatorList;
                 if (key == "ShowPerfMonitor") iss >> MenuConfig::ShowPerfMonitor;
-                if (key == "ShowEspPreview") iss >> MenuConfig::ShowEspPreview;
                 if (key == "ShowDebugStats") iss >> MenuConfig::ShowDebugStats;
+                if (key == "PlayerCountCheckEnabled") iss >> MenuConfig::PlayerCountCheckEnabled;
+                if (key == "ExpectedPlayerCount") iss >> MenuConfig::ExpectedPlayerCount;
                 if (key == "WebRadarAutoReload") iss >> MenuConfig::WebRadarAutoReload;
                 if (key == "ShowProjectileESP") iss >> MenuConfig::ShowProjectileESP;
                 if (key == "ShowProjectileRange") iss >> MenuConfig::ShowProjectileRange;
@@ -312,12 +404,10 @@ namespace MyConfigSaver {
                 if (key == "FlagMoneyEnabled") iss >> MenuConfig::FlagMoneyEnabled;
                 if (key == "FlagMoneyColor") iss >> MenuConfig::FlagMoneyColor.Value.x >> MenuConfig::FlagMoneyColor.Value.y >> MenuConfig::FlagMoneyColor.Value.z >> MenuConfig::FlagMoneyColor.Value.w;
                 if (key == "FlagFontSize") iss >> MenuConfig::FlagFontSize;
-                // Task 9: Visibility Coloring
-                if (key == "VisibilityColoring") iss >> MenuConfig::VisibilityColoring;
+                // Task 5-8/9: VPK Visibility Check (unified single switch)
+                if (key == "VPKVisibilityCheck") iss >> MenuConfig::VPKVisibilityCheck;
                 if (key == "VisibleColor") iss >> MenuConfig::VisibleColor.Value.x >> MenuConfig::VisibleColor.Value.y >> MenuConfig::VisibleColor.Value.z >> MenuConfig::VisibleColor.Value.w;
                 if (key == "HiddenColor") iss >> MenuConfig::HiddenColor.Value.x >> MenuConfig::HiddenColor.Value.y >> MenuConfig::HiddenColor.Value.z >> MenuConfig::HiddenColor.Value.w;
-                // Task 5-8: VPK Visibility Check
-                if (key == "VPKVisibilityCheck") iss >> MenuConfig::VPKVisibilityCheck;
                 // Task 10: Sound ESP
                 if (key == "ShowSoundESP") iss >> MenuConfig::ShowSoundESP;
                 if (key == "SoundESPColor") iss >> MenuConfig::SoundESPColor.Value.x >> MenuConfig::SoundESPColor.Value.y >> MenuConfig::SoundESPColor.Value.z >> MenuConfig::SoundESPColor.Value.w;
@@ -360,7 +450,6 @@ namespace MyConfigSaver {
                 if (key == "BarLabelFontSize") iss >> MenuConfig::BarLabelFontSize;
                 // Stage 2: Render Quality
                 if (key == "InterpolationEnabled") iss >> MenuConfig::InterpolationEnabled;
-                if (key == "BoneReliabilityEnabled") iss >> MenuConfig::BoneReliabilityEnabled;
                 else if (key.substr(0, 7) == "Hotkey_" && key.size() > 7) {
                     int idx = std::atoi(key.substr(7).c_str());
                     if (idx >= 0 && idx < MenuConfig::HOTKEY_COUNT) {
@@ -369,6 +458,101 @@ namespace MyConfigSaver {
                             strcpy_s(MenuConfig::Hotkeys[idx].keyName, GrenadeHelper::GetKeyName(MenuConfig::Hotkeys[idx].vkCode));
                     }
                 }
+
+                // === GrenadeHelper ===
+                if (key == "GH_Enabled") iss >> GrenadeHelper::Enabled;
+                if (key == "GH_MaxDistance") iss >> GrenadeHelper::MaxDistance;
+                if (key == "GH_AimIndicatorDistance") iss >> GrenadeHelper::AimIndicatorDistance;
+                if (key == "GH_ShowName") iss >> GrenadeHelper::ShowName;
+                if (key == "GH_ShowLine") iss >> GrenadeHelper::ShowLine;
+                if (key == "GH_ShowBox") iss >> GrenadeHelper::ShowBox;
+                if (key == "GH_BoxSize") iss >> GrenadeHelper::BoxSize;
+                if (key == "GH_RecordHotKey") {
+                    iss >> GrenadeHelper::RecordHotKey;
+                    strcpy_s(GrenadeHelper::RecordHotKeyName, GrenadeHelper::GetKeyName(GrenadeHelper::RecordHotKey));
+                }
+                if (key == "GH_AutoSave") iss >> GrenadeHelper::AutoSave;
+                if (key == "GH_DefaultGrenadeType") iss >> GrenadeHelper::DefaultGrenadeType;
+                if (key == "GH_DefaultThrowStyle") iss >> GrenadeHelper::DefaultThrowStyle;
+                if (key == "GH_CrosshairStyle") iss >> GrenadeHelper::CrosshairStyle;
+                if (key == "GH_CrosshairColor") iss >> GrenadeHelper::CrosshairColorR
+                                                    >> GrenadeHelper::CrosshairColorG
+                                                    >> GrenadeHelper::CrosshairColorB
+                                                    >> GrenadeHelper::CrosshairColorA;
+                if (key == "GH_CrosshairSize") iss >> GrenadeHelper::CrosshairSize;
+                if (key == "GH_CrosshairLen") iss >> GrenadeHelper::CrosshairLen;
+                if (key == "GH_CrosshairGap") iss >> GrenadeHelper::CrosshairGap;
+                if (key == "GH_CrosshairThickness") iss >> GrenadeHelper::CrosshairThickness;
+                if (key == "GH_ShowAllAimInDistance") iss >> GrenadeHelper::ShowAllAimInDistance;
+                if (key == "GH_MaxSimultaneousAims") iss >> GrenadeHelper::MaxSimultaneousAims;
+
+#ifdef AIMBOT_ENABLED
+                // === Phase 4: AimConfig (自瞄系统配置) ===
+                // 独立 if (非 else-if) 避免 MSVC C1061 嵌套层级限制, 每个 key 唯一故安全。
+                // 全局配置 (向后兼容: 旧键名 Aim_TeamCheck/Aim_IgnoreOnShot/Aim_PredictionTimeMs/Trigger_TeamCheck 也接受)
+                if (key == "Global_TeamCheck") iss >> AimConfig::Global().teamCheck;
+                if (key == "Global_IgnoreOnShot") iss >> AimConfig::Global().ignoreOnShot;
+                if (key == "Global_PredictionTimeMs") iss >> AimConfig::Global().predictionTimeMs;
+                if (key == "Aim_TeamCheck") iss >> AimConfig::Global().teamCheck;
+                if (key == "Aim_IgnoreOnShot") iss >> AimConfig::Global().ignoreOnShot;
+                if (key == "Aim_PredictionTimeMs") iss >> AimConfig::Global().predictionTimeMs;
+                if (key == "Trigger_TeamCheck") iss >> AimConfig::Global().teamCheck;
+                // AimBot
+                if (key == "Aim_Enabled") iss >> AimConfig::AimBot().enabled;
+                if (key == "Aim_Hotkey") iss >> AimConfig::AimBot().hotkey;
+                if (key == "Aim_Fov") iss >> AimConfig::AimBot().fov;
+                if (key == "Aim_Smooth") iss >> AimConfig::AimBot().smooth;
+                if (key == "Aim_Bone") { int b=0; iss >> b; AimConfig::AimBot().bone = (Aim::BoneTarget)b; }
+                if (key == "Aim_VisualCheck") iss >> AimConfig::AimBot().visualCheck;
+                if (key == "Aim_BoneFallback") iss >> AimConfig::AimBot().boneFallback;
+                if (key == "Aim_TargetSwitchDelay") { unsigned v=0; iss >> v; AimConfig::AimBot().targetSwitchDelay = v; }
+                if (key == "Aim_Spray_Enabled") iss >> AimConfig::Global().spray.enabled;
+                if (key == "Aim_Spray_Mode") iss >> AimConfig::Global().spray.mode;
+                if (key == "Aim_Spray_Strength") iss >> AimConfig::Global().spray.strength;
+                if (key == "Aim_Spray_Dpi") iss >> AimConfig::Global().spray.dpi;
+                if (key == "Aim_Spray_Sensitivity") iss >> AimConfig::Global().spray.sensitivity;
+                if (key == "Aim_Spray_ShowPredictedImpact") iss >> AimConfig::Global().spray.showPredictedImpact;
+                if (key == "Aim_FovCircle_Enabled") iss >> AimConfig::AimBot().fovCircle.enabled;
+                if (key == "Aim_FovCircle_Color") iss >> AimConfig::AimBot().fovCircle.color.Value.x >> AimConfig::AimBot().fovCircle.color.Value.y >> AimConfig::AimBot().fovCircle.color.Value.z >> AimConfig::AimBot().fovCircle.color.Value.w;
+                if (key.size() > 12 && key.substr(0,11) == "Aim_Weapon" && key[11] >= '0' && key[11] <= '5') {
+                    int idx = key[11] - '0';
+                    if (key.substr(12) == "_Fov")    iss >> AimConfig::AimBot().perWeapon[idx].fov;
+                    if (key.substr(12) == "_Smooth") iss >> AimConfig::AimBot().perWeapon[idx].smooth;
+                    if (key.substr(12) == "_Bone")   { int b=0; iss >> b; AimConfig::AimBot().perWeapon[idx].bone = (Aim::BoneTarget)b; }
+                }
+                // TriggerBot
+                if (key == "Trigger_Enabled") iss >> AimConfig::TriggerBot().enabled;
+                if (key == "Trigger_Hotkey") iss >> AimConfig::TriggerBot().hotkey;
+                if (key == "Trigger_Mode") iss >> AimConfig::TriggerBot().mode;
+                if (key == "Trigger_Delay") iss >> AimConfig::TriggerBot().delay;
+                if (key == "Trigger_DelayJitter") iss >> AimConfig::TriggerBot().delayJitter;
+                if (key == "Trigger_HoldMs") iss >> AimConfig::TriggerBot().holdMs;
+                // Magnet
+                if (key == "Magnet_Enabled") iss >> AimConfig::Magnet().enabled;
+                if (key == "Magnet_Hotkey") iss >> AimConfig::Magnet().hotkey;
+                if (key == "Magnet_Fov") iss >> AimConfig::Magnet().fov;
+                if (key == "Magnet_Smooth") iss >> AimConfig::Magnet().smooth;
+                if (key == "Magnet_Bone") { int b=0; iss >> b; AimConfig::Magnet().bone = (Aim::BoneTarget)b; }
+                if (key == "Magnet_VisualCheck") iss >> AimConfig::Magnet().visualCheck;
+                if (key == "Magnet_BoneFallback") iss >> AimConfig::Magnet().boneFallback;
+                if (key == "Magnet_TargetSwitchDelay") { unsigned v=0; iss >> v; AimConfig::Magnet().targetSwitchDelay = v; }
+                if (key == "Magnet_FovCircle_Enabled") iss >> AimConfig::Magnet().fovCircle.enabled;
+                if (key == "Magnet_FovCircle_Color") iss >> AimConfig::Magnet().fovCircle.color.Value.x >> AimConfig::Magnet().fovCircle.color.Value.y >> AimConfig::Magnet().fovCircle.color.Value.z >> AimConfig::Magnet().fovCircle.color.Value.w;
+                if (key.size() > 14 && key.substr(0,13) == "Magnet_Weapon" && key[13] >= '0' && key[13] <= '5') {
+                    int idx = key[13] - '0';
+                    if (key.substr(14) == "_Fov")    iss >> AimConfig::Magnet().perWeapon[idx].fov;
+                    if (key.substr(14) == "_Smooth") iss >> AimConfig::Magnet().perWeapon[idx].smooth;
+                    if (key.substr(14) == "_Bone")   { int b=0; iss >> b; AimConfig::Magnet().perWeapon[idx].bone = (Aim::BoneTarget)b; }
+                }
+                if (key == "Hw_Type") iss >> AimConfig::Hardware().type;
+                if (key == "Hw_Net_Ip") iss >> AimConfig::Hardware().net.ip;
+                if (key == "Hw_Net_Port") iss >> AimConfig::Hardware().net.port;
+                if (key == "Hw_Net_Uuid") iss >> AimConfig::Hardware().net.uuid;
+                if (key == "Hw_BPro_ComPort") iss >> AimConfig::Hardware().bpro.comPort;
+                if (key == "Hw_BPro_BaudRate") iss >> AimConfig::Hardware().bpro.baudRate;
+                if (key == "Hw_Makcu_ComPort") iss >> AimConfig::Hardware().makcu.comPort;
+                if (key == "Hw_Makcu_BaudRate") iss >> AimConfig::Hardware().makcu.baudRate;
+#endif
             }
         }
 

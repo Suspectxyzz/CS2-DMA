@@ -182,9 +182,23 @@ goto gen_version
 
 :gen_version
 :: Generate version.json from dumper info.json
+:: Fields aligned with C++ Offset::GenerateVersionFromInfo (Offsets.cpp):
+::   software_version  - preserved from existing version.json (fallback "1.4.5")
+::   game_update_date  - steam.inf VersionDate, or dumper date if fetch fails
+::   game_update_timestamp - from info.json timestamp
+::   patch_version / client_version / source_revision - from steam.inf
 if not exist "%outputDir%\info.json" goto show_info
 echo [*] Generating version.json from info.json...
-powershell -NoProfile -Command "$info = Get-Content '%outputDir%\info.json' | ConvertFrom-Json; $ts = [DateTimeOffset]::Parse($info.timestamp).ToUnixTimeSeconds(); $date = $info.timestamp.Substring(0,10); @{game_update_date=$date; game_update_timestamp=$ts} | ConvertTo-Json | Set-Content '%rootDir%\data\version.json' -Encoding UTF8"
+powershell -NoProfile -Command ^
+  "$info = Get-Content '%outputDir%\info.json' -Raw | ConvertFrom-Json;" ^
+  "$ts = [DateTimeOffset]::Parse($info.timestamp).ToUnixTimeSeconds();" ^
+  "$date = $info.timestamp.Substring(0,10);" ^
+  "$existing = $null;" ^
+  "if (Test-Path '%rootDir%\data\version.json') { try { $existing = Get-Content '%rootDir%\data\version.json' -Raw | ConvertFrom-Json } catch {} };" ^
+  "$swVer = if ($existing -and $existing.software_version) { $existing.software_version } else { '1.4.5' };" ^
+  "$patchVer=''; $gameDate=$date; $clientVer=0; $sourceRev=0;" ^
+  "try { $si = (Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/SteamTracking/GameTracking-CS2/master/game/csgo/steam.inf' -UseBasicParsing -TimeoutSec 10).Content; $kv=@{}; foreach($l in ($si -split [char]10)) { $i=$l.IndexOf('='); if($i -gt 0) { $kv[$l.Substring(0,$i).Trim()] = $l.Substring($i+1).Trim() } }; if($kv.ContainsKey('PatchVersion')) { $patchVer=$kv['PatchVersion'] }; if($kv.ContainsKey('VersionDate')) { $gameDate=$kv['VersionDate'] }; if($kv.ContainsKey('ClientVersion')) { try { $clientVer=[int]$kv['ClientVersion'] } catch {} }; if($kv.ContainsKey('SourceRevision')) { try { $sourceRev=[int]$kv['SourceRevision'] } catch {} } } catch {};" ^
+  "[ordered]@{software_version=$swVer; game_update_date=$gameDate; game_update_timestamp=$ts; patch_version=$patchVer; client_version=$clientVer; source_revision=$sourceRev} | ConvertTo-Json | Set-Content '%rootDir%\data\version.json' -Encoding UTF8"
 if errorlevel 1 (
     echo [!] Failed to generate version.json
 ) else (

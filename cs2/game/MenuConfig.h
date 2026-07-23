@@ -99,8 +99,6 @@ namespace MenuConfig
 	// ======== Box Customization ========
 	inline float BoxThickness = 1.3f;
 	inline float BoxRounding = 0.f;
-	inline bool  BoxFilled = false;
-	inline float BoxFillAlpha = 0.15f;
 	// BoxType 2 = Corner Box
 	inline float CornerLength = 0.25f; // fraction of edge length
 
@@ -149,8 +147,6 @@ namespace MenuConfig
 	// ======== ESP Render Quality (stage 2) ========
 	// Snapshot interpolation + velocity extrapolation for player positions.
 	inline bool  InterpolationEnabled = true;
-	// Bone reliability check + 150ms persistence to suppress flicker.
-	inline bool  BoneReliabilityEnabled = true;
 
 	// ======== Safe Zone (Crosshair Cutout) ========
 	inline bool  SafeZoneEnabled = false;
@@ -183,14 +179,10 @@ namespace MenuConfig
 	inline char  MenuHotKeyName[32] = "F8";
 	inline bool  IsListeningForMenuKey = false;
 
-	// ======== Spectator List ========
-	inline bool  ShowSpectatorList = false;
-
 	// ======== Performance Monitor ========
 	inline bool  ShowPerfMonitor = false;
 
-	// ======== ESP Preview / Debug Stats ========
-	inline bool  ShowEspPreview = false;       // ESP Preview 预览窗口开关
+	// ======== Debug Stats ========
 	inline bool  ShowDebugStats = false;       // 详细调试统计 overlay 开关
 
 	// ======== ESP gap-closure stage 3a: Player Flags (Task 8) ========
@@ -207,15 +199,14 @@ namespace MenuConfig
 	inline ImColor FlagMoneyColor = ImColor(100, 255, 100, 255);
 	inline float   FlagFontSize = 12.f;
 
-	// ======== ESP gap-closure stage 3a: Visibility Coloring (Task 9) ========
-	inline bool    VisibilityColoring = false;
+	// ======== VPK 可见性检查（Task 5-8/9: 基于地图几何 BVH 射线检测）========
+	// 单一开关：开启时用真实遮挡射线检测，并按可见性对 ESP 元素变色
+	//   - 骨骼 ESP：每段骨骼独立判断（可见→VisibleColor，被墙挡→HiddenColor）
+	//   - 方框/头部圆点/视线/连线：整体用头部射线结果变色
+	// 关闭或当前地图无几何数据（IsEnabled=false）时所有元素使用原色
+	inline bool    VPKVisibilityCheck = false;
 	inline ImColor VisibleColor = ImColor(0, 255, 0, 255);
 	inline ImColor HiddenColor = ImColor(255, 0, 0, 255);
-
-	// ======== VPK 可见性检查（Task 5-8: 基于地图几何 BVH 射线检测）========
-	// 开启时用真实遮挡（射线检测）替代 VisibilityColoring 的距离/角度近似
-	// 关闭或当前地图无几何数据时回退到原逻辑
-	inline bool    VPKVisibilityCheck = false;
 
 	// ======== ESP gap-closure stage 3a: Sound ESP (Task 10) ========
 	inline bool    ShowSoundESP = false;
@@ -298,12 +289,17 @@ namespace MenuConfig
 		HOTKEY_TOGGLE_SNAPLINE,
 		HOTKEY_TOGGLE_BOMB_ESP,
 		HOTKEY_TOGGLE_PROJECTILE_ESP,
-		HOTKEY_TOGGLE_SPECTATOR_LIST,
 		HOTKEY_TOGGLE_TEAM_CHECK,
 		HOTKEY_TOGGLE_WEB_RADAR,
 		HOTKEY_TOGGLE_SAFE_ZONE,
 		HOTKEY_TOGGLE_CROSSHAIR,
 		HOTKEY_RELOAD_GAME,
+		// Phase 4: 自瞄系统热键槽 (状态查询型, 非 toggle; aim 模块用各自 config.hotkey 判定)
+#ifdef AIMBOT_ENABLED
+		HOTKEY_AIMBOT,
+		HOTKEY_TRIGGERBOT,
+		HOTKEY_MAGNET_TRIGGERBOT,
+#endif
 		HOTKEY_COUNT
 	};
 
@@ -313,6 +309,11 @@ namespace MenuConfig
 		bool isListening = false;
 		bool wasPressed = false;
 	};
+
+	// ======== Player Count Health Check ========
+	// 检测读取到的玩家数是否低于预期，自动触发DMA修复
+	inline bool PlayerCountCheckEnabled = true;   // 默认开启
+	inline int ExpectedPlayerCount = 10;           // 默认10人 (5v5竞技模式)
 
 	inline HotkeyBinding Hotkeys[HOTKEY_COUNT];
 

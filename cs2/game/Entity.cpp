@@ -71,6 +71,10 @@ bool PlayerController::GetArmor()
 
 DWORD64 PlayerController::GetPlayerPawnAddress()
 {
+	// P1 fix: reuse cached address when Pawn handle unchanged (stable while alive)
+	if (m_cachedPawnAddress != 0 && this->Pawn == m_cachedPawnHandle)
+		return m_cachedPawnAddress;
+
 	DWORD64 EntityPawnListEntry = 0;
 	DWORD64 EntityPawnAddress = 0;
 
@@ -85,6 +89,10 @@ DWORD64 PlayerController::GetPlayerPawnAddress()
 
 	if (!ProcessMgr.ReadMemory<DWORD64>(EntityPawnListEntry + 0x70 * (Pawn & 0x1FF), EntityPawnAddress))
 		return 0;
+
+	// Cache successful resolution
+	m_cachedPawnHandle = this->Pawn;
+	m_cachedPawnAddress = EntityPawnAddress;
 
 	return EntityPawnAddress;
 }
@@ -102,6 +110,31 @@ bool CEntity::InitPawnAddress(const DWORD64& PlayerPawnAddress)
 
 	return true;
 }
+
+// Resolve AimPunchCache (CUtlVector<QAngle>) for the pawn.
+// Multi-level pointer dereference, mirrors PlayerController::GetPlayerPawnAddress style:
+//   pawn.Address + m_pAimPunchServices -> AimPunchServices
+//   AimPunchServices + m_aimPunchCache -> C_UTL_VECTOR (Data + Count)
+#ifdef AIMBOT_ENABLED
+bool PlayerPawn::GetAimPunchCache()
+{
+	if (this->Address == 0)
+		return false;
+
+	DWORD64 aimPunchServices = 0;
+	if (!ProcessMgr.ReadMemory<DWORD64>(this->Address + Offset::AimPunchServices, aimPunchServices))
+		return false;
+	if (aimPunchServices == 0)
+		return false;
+
+	C_UTL_VECTOR cache{};
+	if (!ProcessMgr.ReadMemory<C_UTL_VECTOR>(aimPunchServices + Offset::aimPunchCache, cache))
+		return false;
+
+	this->AimPunchCache = cache;
+	return true;
+}
+#endif
 
 bool CEntity::IsAlive() const
 {

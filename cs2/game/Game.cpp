@@ -1,6 +1,10 @@
 #include "Game.h"
 #include "../utils/Logger.h"
 
+// EntityList 2-frame confirmation state (ref: KevqDMA)
+DWORD64 CGame::s_pendingEntityListCandidate = 0;
+int CGame::s_entityListConfirmCount = 0;
+
 bool CGame::InitAddress()
 {
 	LOG_INFO("Game", "InitAddress: resolving client.dll & engine2.dll...");
@@ -95,8 +99,30 @@ bool CGame::UpdateEntityListEntry()
 		return false;
 	}
 
+	// 2-frame confirmation (ref: KevqDMA): reject transient bad pointers by
+	// requiring the same value across 2 consecutive calls before accepting.
+	if (EntityListEntry != s_pendingEntityListCandidate) {
+		s_pendingEntityListCandidate = EntityListEntry;
+		s_entityListConfirmCount = 1;
+		LOG_TRACE("Game", "UpdateEntityListEntry: new candidate 0x{:X}, awaiting confirmation", EntityListEntry);
+		return this->Address.EntityListEntry != 0;
+	}
+	s_entityListConfirmCount++;
+	if (s_entityListConfirmCount < 2) {
+		LOG_TRACE("Game", "UpdateEntityListEntry: candidate 0x{:X} confirm count {}", EntityListEntry, s_entityListConfirmCount);
+		return this->Address.EntityListEntry != 0;
+	}
+
+	// Confirmation passed
+	DWORD64 oldEntry = this->Address.EntityListEntry;
 	this->Address.EntityListEntry = EntityListEntry;
-	LOG_TRACE("Game", "UpdateEntityListEntry: 0x{:X}", EntityListEntry);
+	s_pendingEntityListCandidate = 0;
+	s_entityListConfirmCount = 0;
+	if (oldEntry != 0 && oldEntry != EntityListEntry) {
+		LOG_INFO("Game", "UpdateEntityListEntry: confirmed change 0x{:X} -> 0x{:X}", oldEntry, EntityListEntry);
+	} else {
+		LOG_TRACE("Game", "UpdateEntityListEntry: confirmed 0x{:X}", EntityListEntry);
+	}
 
 	return this->Address.EntityListEntry != 0;
 }

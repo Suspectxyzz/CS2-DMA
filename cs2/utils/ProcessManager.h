@@ -25,6 +25,8 @@
 
 #include "Logger.h"
 
+#include "DmaHealth.h"
+
 #include <iostream>
 
 #include <Windows.h>
@@ -792,6 +794,8 @@ public:
 
 				VMMDLL_Scatter_Clear(handle, ProcessID, NULL);
 
+				g_dmaHealth.RecordSuccess();
+
 				return true;
 
 			}
@@ -801,6 +805,8 @@ public:
 		}
 
 		VMMDLL_Scatter_Clear(handle, ProcessID, NULL);
+
+		g_dmaHealth.RecordFailure();
 
 		return false;
 

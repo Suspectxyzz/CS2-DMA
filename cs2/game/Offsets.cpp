@@ -29,12 +29,33 @@ static std::string TrimSpace(const std::string& s) {
 	return s.substr(start, end - start + 1);
 }
 
-// Fetch steam.inf from SteamTracking repo (used by GenerateVersionFromInfo)
-// Note: uses default proxy; main.cpp's CheckGameVersion path uses downloadUrl which supports system proxy.
-static std::string FetchSteamInf() {
+// Read system proxy from registry (aligned with main.cpp's ReadSystemProxyFromRegistry)
+static std::wstring GetSystemProxy() {
+	HKEY hKey;
+	if (RegOpenKeyExW(HKEY_CURRENT_USER,
+		L"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
+		0, KEY_READ, &hKey) != ERROR_SUCCESS)
+		return L"";
+
+	std::wstring proxy;
+	DWORD proxyEnabled = 0;
+	DWORD size = sizeof(proxyEnabled);
+	if (RegQueryValueExW(hKey, L"ProxyEnable", NULL, NULL, (LPBYTE)&proxyEnabled, &size) == ERROR_SUCCESS && proxyEnabled) {
+		wchar_t proxyServer[512] = {};
+		DWORD proxySize = sizeof(proxyServer);
+		if (RegQueryValueExW(hKey, L"ProxyServer", NULL, NULL, (LPBYTE)proxyServer, &proxySize) == ERROR_SUCCESS && proxyServer[0]) {
+			proxy = proxyServer;
+		}
+	}
+	RegCloseKey(hKey);
+	return proxy;
+}
+
+// Helper: fetch steam.inf with specific proxy settings
+static std::string FetchSteamInfWithProxy(DWORD accessType, const wchar_t* proxyName) {
 	std::string result;
-	HINTERNET hSession = WinHttpOpen(L"CS2-DMA/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-		WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+	HINTERNET hSession = WinHttpOpen(L"CS2-DMA/1.0", accessType,
+		proxyName, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (!hSession) return result;
 
 	HINTERNET hConnect = WinHttpConnect(hSession, L"raw.githubusercontent.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
@@ -68,6 +89,20 @@ static std::string FetchSteamInf() {
 	WinHttpCloseHandle(hConnect);
 	WinHttpCloseHandle(hSession);
 	return result;
+}
+
+// Fetch steam.inf from SteamTracking repo (supports system proxy like main.cpp's downloadUrl)
+static std::string FetchSteamInf() {
+	std::wstring proxy = GetSystemProxy();
+
+	// If system proxy is configured, try it first (skip slow direct-attempt fallback)
+	if (!proxy.empty()) {
+		auto result = FetchSteamInfWithProxy(WINHTTP_ACCESS_TYPE_NAMED_PROXY, proxy.c_str());
+		if (!result.empty()) return result;
+	}
+
+	// Fallback: default (IE/WinInet proxy settings)
+	return FetchSteamInfWithProxy(WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME);
 }
 
 bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
@@ -173,13 +208,18 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			const auto& fields = classes["C_CSPlayerPawn"]["fields"];
 			Offset::angEyeAngles = SafeGetUint64(fields, "m_angEyeAngles");
 			Offset::iShotsFired = SafeGetUint64(fields, "m_iShotsFired");
+#ifdef AIMBOT_ENABLED
 			Offset::AimPunchServices = SafeGetUint64(fields, "m_pAimPunchServices");
+#endif
 			Offset::PawnArmor = SafeGetUint64(fields, "m_ArmorValue");
 			Offset::bIsScoped = SafeGetUint64(fields, "m_bIsScoped");
 			Offset::bIsDefusing = SafeGetUint64(fields, "m_bIsDefusing");
 			Offset::bIsWalking = SafeGetUint64(fields, "m_bIsWalking");
-			LOG_DEBUG("Offsets", "C_CSPlayerPawn: EyeAngles=0x{:X} PawnArmor=0x{:X} Scoped=0x{:X} Defusing=0x{:X} Walking=0x{:X}",
-				Offset::angEyeAngles, Offset::PawnArmor, Offset::bIsScoped, Offset::bIsDefusing, Offset::bIsWalking);
+#ifdef AIMBOT_ENABLED
+			Offset::iIDEntIndex = SafeGetUint64(fields, "m_iIDEntIndex");
+			LOG_DEBUG("Offsets", "C_CSPlayerPawn: EyeAngles=0x{:X} PawnArmor=0x{:X} Scoped=0x{:X} Defusing=0x{:X} Walking=0x{:X} iIDEntIndex=0x{:X}",
+				Offset::angEyeAngles, Offset::PawnArmor, Offset::bIsScoped, Offset::bIsDefusing, Offset::bIsWalking, Offset::iIDEntIndex);
+#endif
 
 			// Calculate bSpottedByMask
 			uint64_t m_entitySpottedState = SafeGetUint64(fields, "m_entitySpottedState");
@@ -277,11 +317,14 @@ bool Offset::UpdateOffsets(std::string offsetdata, std::string clientdata)
 			Offset::GrenadeThrower = SafeGetUint64(fields, "m_hThrower");
 		}
 
+#ifdef AIMBOT_ENABLED
 		// CCSPlayer_AimPunchServices
 		if (classes.HasMember("CCSPlayer_AimPunchServices") && classes["CCSPlayer_AimPunchServices"].HasMember("fields")) {
 			const auto& fields = classes["CCSPlayer_AimPunchServices"]["fields"];
 			Offset::AimPunchAngleOffset = SafeGetUint64(fields, "m_predictableBaseAngle");
+			Offset::aimPunchCache = SafeGetUint64(fields, "m_aimPunchCache");
 		}
+#endif
 
 		// C_BaseCSGrenadeProjectile
 		if (classes.HasMember("C_BaseCSGrenadeProjectile") && classes["C_BaseCSGrenadeProjectile"].HasMember("fields")) {

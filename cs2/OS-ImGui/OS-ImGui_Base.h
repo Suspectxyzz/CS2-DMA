@@ -28,6 +28,8 @@ namespace OSImGui
 		ID3D11DeviceContext* g_pd3dDeviceContext = nullptr;
 		IDXGISwapChain* g_pSwapChain = nullptr;
 		ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
+		bool g_AllowTearing = false;
+		HRESULT g_TearingHR = S_OK;
 #ifdef _CONSOLE
 		bool CreateDeviceD3D(HWND hWnd);
 		void CleanupDeviceD3D();
@@ -36,7 +38,7 @@ namespace OSImGui
 #endif
 	};
 
-	static D3DDevice g_Device;
+	inline D3DDevice g_Device;
 
 	enum WindowType
 	{

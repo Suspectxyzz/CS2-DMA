@@ -5,6 +5,36 @@
 #define DXGI_SWAP_EFFECT_FLIP_DISCARD ((DXGI_SWAP_EFFECT)4)
 #endif
 
+// Tearing support (Windows 10 2004+)
+// 注意: SwapChain flag 和 Present flag 是不同枚举,值不同!
+//   DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING = 0x800 (2048)
+//   DXGI_PRESENT_ALLOW_TEARING         = 0x200 (512)
+#ifndef DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
+#define DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING 0x800
+#endif
+#ifndef DXGI_PRESENT_ALLOW_TEARING
+#define DXGI_PRESENT_ALLOW_TEARING 0x200
+#endif
+
+// IDXGIFactory2 IID: {50c83a1c-e072-4c48-8370-863ae4524f5a}
+static const IID IID_MyDXGIFactory2 =
+{ 0x50c83a1c, 0xe072, 0x4c48, { 0x83, 0x70, 0x86, 0x3a, 0xe4, 0x52, 0x4f, 0x5a } };
+
+// DXGI_SWAP_CHAIN_DESC1 等价结构体（项目旧 SDK 无此定义）
+struct MySwapChainDesc1 {
+    UINT Width;
+    UINT Height;
+    UINT Format;
+    BOOL Stereo;
+    DXGI_SAMPLE_DESC SampleDesc;
+    UINT BufferUsage;
+    UINT BufferCount;
+    int Scaling;
+    int SwapEffect;
+    int AlphaMode;
+    UINT Flags;
+};
+
 /****************************************************
 * Copyright (C)	: Liv
 * @file			: OS-ImGui_External.cpp
@@ -18,37 +48,52 @@
 namespace OSImGui
 {
 #ifdef _CONSOLE
+    // vtable 索引说明（IDXGIFactory2 继承链）:
+    // IUnknown:     [0]QI [1]AddRef [2]Release
+    // IDXGIObject:  [3]SetPrivateData [4]SetPrivateDataInterface [5]GetPrivateData [6]GetParent
+    // IDXGIFactory: [7]EnumAdapters [8]MakeWindowAssociation [9]GetWindowAssociation [10]CreateSwapChain [11]CreateSoftwareAdapter
+    // IDXGIFactory1:[12]EnumAdapters1 [13]IsCurrent
+    // IDXGIFactory2:[14]IsWindowedStereoEnabled [15]CreateSwapChainForHwnd ...
     bool D3DDevice::CreateDeviceD3D(HWND hWnd)
     {
+        // 直接尝试带 ALLOW_TEARING flag 创建 swap chain
+        // DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING = 0x800
+        g_AllowTearing = true;
+
         DXGI_SWAP_CHAIN_DESC sd;
         ZeroMemory(&sd, sizeof(sd));
         sd.BufferCount = 2;
-        sd.BufferDesc.Width = 0;
-        sd.BufferDesc.Height = 0;
         sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        sd.BufferDesc.RefreshRate.Numerator = 0;
         sd.BufferDesc.RefreshRate.Denominator = 1;
-        sd.Flags = 0;
         sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         sd.OutputWindow = hWnd;
         sd.SampleDesc.Count = 1;
-        sd.SampleDesc.Quality = 0;
         sd.Windowed = TRUE;
         sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
         UINT createDeviceFlags = 0;
         D3D_FEATURE_LEVEL featureLevel;
         const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
         HRESULT res = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
-        if (res == DXGI_ERROR_UNSUPPORTED) // Try high-performance WARP software driver if hardware is not available.
+        g_TearingHR = res;
+        if (res == DXGI_ERROR_UNSUPPORTED)
             res = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_WARP, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
+        // 如果带 ALLOW_TEARING flag 创建失败，回退到不带 flag 重试
+        if (res != S_OK) {
+            sd.Flags = 0;
+            g_AllowTearing = false;
+            res = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
+            if (res == DXGI_ERROR_UNSUPPORTED)
+                res = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_WARP, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
+        }
         if (res != S_OK)
             return false;
 
-        IDXGIDevice1* pDxgiDevice = nullptr;
-        if (SUCCEEDED(g_pd3dDevice->QueryInterface(__uuidof(IDXGIDevice1), (void**)&pDxgiDevice))) {
-            pDxgiDevice->SetMaximumFrameLatency(1);
-            pDxgiDevice->Release();
+        IDXGIDevice1* pDxgiDevice1 = nullptr;
+        if (SUCCEEDED(g_pd3dDevice->QueryInterface(__uuidof(IDXGIDevice1), (void**)&pDxgiDevice1))) {
+            pDxgiDevice1->SetMaximumFrameLatency(1);
+            pDxgiDevice1->Release();
         }
 
         CreateRenderTarget();
@@ -198,7 +243,15 @@ namespace OSImGui
             g_Device.g_pd3dDeviceContext->ClearRenderTargetView(g_Device.g_mainRenderTargetView, clear_color_with_alpha);
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-            g_Device.g_pSwapChain->Present(MenuConfig::VSync ? 1 : 0, 0);
+            // VSync 开启: Present(1,0) 锁刷新率
+            // VSync 关闭: Present(0, ALLOW_TEARING) 突破 DWM 刷新率限制（需系统支持）
+            //             不支持 tearing 时退化为 Present(0, 0)
+            if (MenuConfig::VSync) {
+                g_Device.g_pSwapChain->Present(1, 0);
+            } else {
+                UINT presentFlags = g_Device.g_AllowTearing ? DXGI_PRESENT_ALLOW_TEARING : 0;
+                g_Device.g_pSwapChain->Present(0, presentFlags);
+            }
 
             if (!MenuConfig::VSync && MenuConfig::MaxFrameRate > 0) {
                 auto elapsed = Clock::now() - frameStart;
@@ -361,7 +414,8 @@ namespace OSImGui
             if (g_Device.g_pd3dDevice != NULL && wParam != SIZE_MINIMIZED)
             {
                 g_Device.CleanupRenderTarget();
-                g_Device.g_pSwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);
+                UINT flags = g_Device.g_AllowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+                g_Device.g_pSwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, flags);
                 g_Device.CreateRenderTarget();
             }
             return 0;

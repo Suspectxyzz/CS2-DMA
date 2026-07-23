@@ -10,6 +10,83 @@ public:
 	std::string tab_grenade;
 	std::string tab_hotkeys;
 	std::string tab_contact;
+	std::string tab_aimbot;
+
+	// ======== AimTab UI 文本 ========
+	std::string aim_global;             // 全局配置
+	std::string aim_hw_config;          // 硬件配置
+	std::string aim_hw_type;            // 设备类型
+	std::string aim_hw_test;            // 测试连接/重连
+	std::string aim_hw_connected;       // 已连接
+	std::string aim_hw_not_connected;   // 未连接
+	std::string aim_hw_ip;              // IP 地址
+	std::string aim_hw_port;            // 端口
+	std::string aim_hw_uuid;            // UUID / MAC
+	std::string aim_hw_comport;         // COM 端口
+	std::string aim_hw_baudrate;        // 波特率
+	std::string aim_aimbot;             // AimBot 区块标题
+	std::string aim_enable_aimbot;      // 启用 AimBot
+	std::string aim_hotkey;             // 热键
+	std::string aim_fov;                // FOV
+	std::string aim_smooth;             // 平滑
+	std::string aim_bone;               // 骨骼
+	std::string aim_visual_check;       // 可见性检查
+	std::string aim_bone_fallback;      // 部位降级 (漏打)
+	std::string aim_team_check;         // 队伍检查
+	std::string aim_ignore_on_shot;     // 开火时忽略
+	std::string aim_spray;              // 自动压枪
+	std::string aim_enable_spray;       // 启用自动压枪
+	std::string aim_spray_strength;     // 压枪强度
+	std::string aim_spray_strength_tip; // 压枪强度提示 (推荐值 = 1.0 / 游戏灵敏度)
+	std::string aim_spray_dpi;          // 鼠标 DPI
+	std::string aim_spray_sensitivity;  // 游戏灵敏度
+	std::string aim_spray_auto_calc;    // 自动计算强度
+	std::string aim_spray_recommended;  // 推荐值
+	std::string aim_spray_show_impact;  // 预估落点可视化
+	std::string aim_autoshot;           // 自动开火
+	std::string aim_enable_autoshot;    // 启用自动开火
+	std::string aim_autoshot_threshold; // 准星阈值
+	std::string aim_fov_circle;         // FOV 圆圈
+	std::string aim_show_fov_circle;    // 显示 FOV 圆圈
+	std::string aim_fov_circle_color;   // 圆圈颜色
+	std::string aim_target_switch_delay;// 目标切换延迟
+	std::string aim_prediction_time;    // 速度预测时间
+	std::string aim_per_weapon;         // 按武器类型细分
+	std::string aim_weapon_rifles;      // 步枪
+	std::string aim_weapon_pistols;     // 手枪
+	std::string aim_weapon_snipers;     // 狙击枪
+	std::string aim_weapon_shotguns;    // 霰弹枪
+	std::string aim_weapon_smg;         // 冲锋枪
+	std::string aim_weapon_machinegun;  // 机枪
+	std::string aim_per_weapon_fov;     // 武器 FOV
+	std::string aim_per_weapon_smooth;  // 武器平滑
+	std::string aim_triggerbot;         // TriggerBot 区块标题
+	std::string aim_enable_triggerbot;  // 启用 TriggerBot
+	std::string aim_hotkey_triggerbot;  // TriggerBot 热键
+	std::string aim_mode;               // 模式
+	std::string aim_mode_always;        // 始终
+	std::string aim_mode_onkey;         // 按键
+	std::string aim_delay;              // 延迟
+	std::string aim_jitter;             // 抖动
+	std::string aim_hold_ms;            // 按住时长
+	std::string aim_force_fire;         // 强制开火
+	std::string aim_magnet;             // 磁力自瞄
+	std::string aim_enable_magnet;      // 启用磁力自瞄
+	std::string aim_hotkey_auto;        // 热键 (0 = 自动)
+	std::string aim_magnet_fov;         // 磁力 FOV
+	std::string aim_magnet_smooth;      // 磁力平滑
+	std::string aim_magnet_delay;       // 磁力延迟
+	std::string aim_magnet_force_fire;  // 磁力强制开火
+	std::string aim_mutex_disabled_hint;  // 互斥自动关闭提示
+	std::string aim_magnet_visual_check;   // 磁力可见性检查
+	std::string aim_magnet_bone_fallback;  // 磁力部位降级
+	std::string aim_magnet_switch_delay;   // 磁力目标切换延迟
+	std::string aim_triggerbot_team_check; // TriggerBot 队伍检查
+	std::string aim_presets;              // 预设
+	std::string aim_preset_safe;          // 安全预设
+	std::string aim_preset_competitive;   // 竞技预设
+	std::string aim_preset_stealth;       // 隐蔽预设
+	std::string aim_warning_high_risk;    // 高风险警示
 
 	std::string visuals_showbox;
 	std::string visuals_boxcolor;
@@ -29,7 +106,6 @@ public:
 	std::string utilities_teamcheck;
 	std::string utilities_closehack;
 	std::string utilities_reloadhack;
-	std::string utilities_language;
 	std::string utilities_help;
 
 	std::string config_newconfig;
@@ -52,9 +128,7 @@ public:
 	std::string grenade_showname;
 	std::string grenade_showbox;
 	std::string grenade_showline;
-	std::string grenade_autoaim;
 	std::string grenade_maxdistance;
-	std::string grenade_triggerdistance;
 	std::string grenade_boxsize;
 	std::string grenade_currentmap;
 	std::string grenade_availablethrows;
@@ -63,6 +137,20 @@ public:
 	std::string grenade_smoke;
 	std::string grenade_he;
 	std::string grenade_molotov;
+
+	// Aim crosshair
+	std::string grenade_aim_header;
+	std::string grenade_aim_showall;
+	std::string grenade_aim_showall_tip;
+	std::string grenade_aim_indicatordist;
+	std::string grenade_aim_style;
+	std::string grenade_aim_color;
+	std::string grenade_aim_size;
+	std::string grenade_aim_len;
+	std::string grenade_aim_gap;
+	std::string grenade_aim_thick;
+	std::string grenade_aim_maxcount;
+	const char* grenade_aim_styleselect[4];
 
 	// Grenade Recording
 	std::string grenade_record_hotkey;
@@ -103,19 +191,13 @@ public:
 	std::string visuals_bombdropped;
 
 	// Visuals Extra
-	std::string visuals_thickness;
 	std::string visuals_rounding;
 	std::string visuals_cornersize;
-	std::string visuals_filled;
-	std::string visuals_fillalpha;
 	std::string visuals_headdot;
 	std::string visuals_dotsize;
 	std::string visuals_length;
-	std::string visuals_barwidth;
 	std::string visuals_armorbar;
-	std::string visuals_size;
 	std::string visuals_origin;
-	std::string visuals_width;
 
 	const char* armorbar_typeselect[2];
 	const char* snapline_originselect[3];
@@ -139,8 +221,7 @@ public:
 	std::string safezone_skip_headdot;
 	std::string safezone_skip_distance;
 
-	// Spectator List & Perf Monitor
-	std::string visuals_spectatorlist;
+	// Perf Monitor
 	std::string settings_perfmonitor;
 
 	// Menu Hotkey
@@ -149,6 +230,13 @@ public:
 	// Debug
 	std::string settings_debuglog;
 	std::string settings_debuglog_tip;
+
+	// Player Count Health Check
+	std::string header_player_health;
+	std::string settings_player_count_check;
+	std::string settings_player_count_check_tip;
+	std::string settings_expected_player_count;
+	std::string settings_expected_player_count_tip;
 
 	// Settings
 	std::string settings_vsync;
@@ -262,7 +350,6 @@ public:
 	std::string webradar_local_access;
 	std::string webradar_clients;
 	std::string webradar_copy_url;
-	std::string webradar_copied;
 	std::string webradar_not_running;
 	std::string webradar_password_enable;
 	std::string webradar_password;
@@ -277,7 +364,7 @@ public:
 	std::string hotkey_header_esp;
 	std::string hotkey_header_features;
 	std::string hotkey_header_actions;
-	const char* hotkey_action_labels[16];
+	const char* hotkey_action_labels[18];
 
 	// Crosshair Overlay
 	std::string header_crosshair;
@@ -308,7 +395,6 @@ public:
 	std::string visuals_footstep_esp;
 	std::string visuals_footstep_color;
 	std::string visuals_bomb_timer;
-	std::string visuals_world_esp;
 	std::string visuals_world_timers;
 	std::string visuals_world_smoke_timer;
 	std::string visuals_world_inferno_timer;
@@ -337,7 +423,6 @@ public:
 	std::string visuals_armor_text;
 	std::string visuals_bar_label_fontsize;
 	std::string visuals_interpolation;
-	std::string visuals_bone_reliability;
 
 	// Task 18: independent color labels (no longer reuse generic labels)
 	std::string visuals_headdot_color;
@@ -383,6 +468,83 @@ public:
 		this->tab_grenade = "Grenade";
 		this->tab_hotkeys = "Hotkeys";
 		this->tab_contact = "Contact";
+#ifdef AIMBOT_ENABLED
+		this->tab_aimbot = "AimBot";
+		this->aim_global = "Global Settings";
+		this->aim_hw_config = "Hardware Configuration";
+		this->aim_hw_type = "Device Type";
+		this->aim_hw_test = "Test Connection / Reconnect";
+		this->aim_hw_connected = "Connected";
+		this->aim_hw_not_connected = "Not connected";
+		this->aim_hw_ip = "IP Address";
+		this->aim_hw_port = "Port";
+		this->aim_hw_uuid = "UUID / MAC";
+		this->aim_hw_comport = "COM Port";
+		this->aim_hw_baudrate = "Baud Rate";
+		this->aim_aimbot = "AimBot";
+		this->aim_enable_aimbot = "Enable AimBot";
+		this->aim_hotkey = "Hotkey";
+		this->aim_fov = "FOV";
+		this->aim_smooth = "Smooth";
+		this->aim_bone = "Bone";
+		this->aim_visual_check = "Visual Check";
+		this->aim_bone_fallback = "Bone Fallback";
+		this->aim_team_check = "Team Check";
+		this->aim_ignore_on_shot = "Ignore On Shot";
+		this->aim_spray = "Spray Control";
+		this->aim_enable_spray = "Enable Spray Control";
+		this->aim_spray_strength = "Strength";
+		this->aim_spray_strength_tip = "Recommended: 1.0 / your game sensitivity. When enabled, aimbot stays active while firing (spray+aim overlay).";
+		this->aim_spray_dpi = "Mouse DPI";
+		this->aim_spray_sensitivity = "Game Sensitivity";
+		this->aim_spray_auto_calc = "Auto Calculate";
+		this->aim_spray_recommended = "Recommended";
+		this->aim_spray_show_impact = "Show Predicted Impact";
+		this->aim_autoshot = "AutoShot";
+		this->aim_enable_autoshot = "Enable AutoShot";
+		this->aim_autoshot_threshold = "Pixel Threshold";
+		this->aim_fov_circle = "FOV Circle";
+		this->aim_show_fov_circle = "Show FOV Circle";
+		this->aim_fov_circle_color = "Circle Color";
+		this->aim_target_switch_delay = "Target Switch Delay (ms)";
+		this->aim_prediction_time = "Prediction Time (ms)";
+		this->aim_per_weapon = "Per-Weapon Settings";
+		this->aim_weapon_rifles = "Rifles";
+		this->aim_weapon_pistols = "Pistols";
+		this->aim_weapon_snipers = "Snipers";
+		this->aim_weapon_shotguns = "Shotguns";
+		this->aim_weapon_smg = "SMG";
+		this->aim_weapon_machinegun = "MachineGun";
+		this->aim_per_weapon_fov = "FOV";
+		this->aim_per_weapon_smooth = "Smooth";
+		this->aim_triggerbot = "TriggerBot";
+		this->aim_enable_triggerbot = "Enable TriggerBot";
+		this->aim_hotkey_triggerbot = "TriggerBot Hotkey";
+		this->aim_mode = "Mode";
+		this->aim_mode_always = "Always";
+		this->aim_mode_onkey = "On Key";
+		this->aim_delay = "Delay (ms)";
+		this->aim_jitter = "Delay Jitter (ms)";
+		this->aim_hold_ms = "Hold (ms)";
+		this->aim_force_fire = "Force Fire";
+		this->aim_magnet = "Magnet TriggerBot";
+		this->aim_enable_magnet = "Enable Magnet";
+		this->aim_hotkey_auto = "Hotkey (0 = Auto)";
+		this->aim_magnet_fov = "Magnet FOV";
+		this->aim_magnet_smooth = "Magnet Smooth";
+		this->aim_magnet_delay = "Magnet Delay (ms)";
+		this->aim_magnet_force_fire = "Magnet Force Fire";
+		this->aim_mutex_disabled_hint = "Auto-disabled: conflicts with active feature";
+		this->aim_magnet_visual_check = "Magnet Visual Check";
+		this->aim_magnet_bone_fallback = "Magnet Bone Fallback";
+		this->aim_magnet_switch_delay = "Magnet Switch Delay (ms)";
+		this->aim_triggerbot_team_check = "TriggerBot Team Check";
+		this->aim_presets = "Presets";
+		this->aim_preset_safe = "Safe";
+		this->aim_preset_competitive = "Competitive";
+		this->aim_preset_stealth = "Stealth";
+		this->aim_warning_high_risk = "High ban risk!";
+#endif
 
 		this->visuals_showbox = "Show Box";
 		this->visuals_boxcolor = "Box Color";
@@ -402,7 +564,6 @@ public:
 		this->utilities_teamcheck = "Hide Teammates";
 		this->utilities_closehack = "Close Software";
 		this->utilities_reloadhack = "Reconnect";
-		this->utilities_language = "Select Language";
 		this->utilities_help = "Help";
 
 		this->config_newconfig = "Config Name";
@@ -423,9 +584,7 @@ public:
 		this->grenade_showname = "Show Name";
 		this->grenade_showbox = "Show Box";
 		this->grenade_showline = "Show Line";
-		this->grenade_autoaim = "Auto Aim";
 		this->grenade_maxdistance = "Max Distance";
-		this->grenade_triggerdistance = "Trigger Distance";
 		this->grenade_boxsize = "Box Size";
 		this->grenade_currentmap = "Current Map";
 		this->grenade_availablethrows = "Available Throws";
@@ -434,6 +593,20 @@ public:
 		this->grenade_smoke = "Smoke";
 		this->grenade_he = "HE";
 		this->grenade_molotov = "Molotov";
+
+		// Aim crosshair
+		this->grenade_aim_header = "Aim Crosshair";
+		this->grenade_aim_showall = "Show all aim crosshairs in range";
+		this->grenade_aim_showall_tip = "When enabled, all throw positions within trigger distance show their crosshairs; when disabled, only the nearest one is shown";
+		this->grenade_aim_indicatordist = "Aim Trigger Distance";
+		this->grenade_aim_style = "Crosshair Style";
+		this->grenade_aim_color = "Crosshair Color";
+		this->grenade_aim_size = "Crosshair Size";
+		this->grenade_aim_len = "Crosshair Length";
+		this->grenade_aim_gap = "Center Gap";
+		this->grenade_aim_thick = "Line Thickness";
+		this->grenade_aim_maxcount = "Max Simultaneous";
+		this->grenade_aim_styleselect[0] = "Ring+Cross"; this->grenade_aim_styleselect[1] = "Cross Only"; this->grenade_aim_styleselect[2] = "Ring Only"; this->grenade_aim_styleselect[3] = "Dot Only";
 
 		// Grenade Recording
 		this->grenade_record_hotkey = "Record Hotkey";
@@ -471,19 +644,13 @@ public:
 		this->visuals_bombcarrier = "Carrier";
 		this->visuals_bombdropped = "Dropped";
 
-		this->visuals_thickness = "Thickness";
 		this->visuals_rounding = "Rounding";
 		this->visuals_cornersize = "Corner Size";
-		this->visuals_filled = "Filled";
-		this->visuals_fillalpha = "Fill Alpha";
 		this->visuals_headdot = "Head Dot";
 		this->visuals_dotsize = "Dot Size";
 		this->visuals_length = "Length";
-		this->visuals_barwidth = "Bar Width";
 		this->visuals_armorbar = "Armor Bar";
-		this->visuals_size = "Size";
 		this->visuals_origin = "Origin";
-		this->visuals_width = "Width";
 
 		this->armorbar_typeselect[0] = "Right"; this->armorbar_typeselect[1] = "Top";
 		this->snapline_originselect[0] = "Top"; this->snapline_originselect[1] = "Center"; this->snapline_originselect[2] = "Bottom";
@@ -506,13 +673,18 @@ public:
 		this->safezone_skip_headdot = "Skip Head Dot";
 		this->safezone_skip_distance = "Skip Distance";
 
-		this->visuals_spectatorlist = "Show Spectator List";
 		this->settings_perfmonitor = "Performance Monitor";
 
 		this->settings_menuhotkey = "Menu Hotkey";
 
 		this->settings_debuglog = "Debug Log";
 		this->settings_debuglog_tip = "Enable verbose TRACE/DEBUG logging for troubleshooting (impacts performance)";
+
+		this->header_player_health = "Data Health";
+		this->settings_player_count_check = "Player Count Check";
+		this->settings_player_count_check_tip = "Auto-detect DMA read failures that cause players to disappear. If the number of players read is less than expected, the system automatically refreshes the DMA cache to recover missing players.";
+		this->settings_expected_player_count = "Expected Player Count";
+		this->settings_expected_player_count_tip = "Total number of players in the game (default 10 for 5v5). The system uses this to detect read anomalies. Adjust for other game modes (e.g. 16 for Deathmatch).";
 
 		this->settings_vsync = "VSync";
 		this->settings_maxfps = "Max FPS";
@@ -571,7 +743,6 @@ public:
 		this->webradar_local_access = "Local / LAN Access";
 		this->webradar_clients = "Clients";
 		this->webradar_copy_url = "Copy";
-		this->webradar_copied = "Copied!";
 		this->webradar_not_running = "Server not running";
 		this->webradar_password_enable = "Enable Password";
 		this->webradar_password = "Password";
@@ -595,12 +766,20 @@ public:
 		this->hotkey_action_labels[7] = "Snapline";
 		this->hotkey_action_labels[8] = "C4 ESP";
 		this->hotkey_action_labels[9] = "Projectile ESP";
-		this->hotkey_action_labels[10] = "Spectator List";
-		this->hotkey_action_labels[11] = "Hide Teammates";
-		this->hotkey_action_labels[12] = "Web Radar";
-		this->hotkey_action_labels[13] = "Safe Zone";
-		this->hotkey_action_labels[14] = "Crosshair Overlay";
-		this->hotkey_action_labels[15] = "Reconnect";
+		this->hotkey_action_labels[10] = "Hide Teammates";
+		this->hotkey_action_labels[11] = "Web Radar";
+		this->hotkey_action_labels[12] = "Safe Zone";
+		this->hotkey_action_labels[13] = "Crosshair Overlay";
+		this->hotkey_action_labels[14] = "Reconnect";
+#ifdef AIMBOT_ENABLED
+		this->hotkey_action_labels[15] = "AimBot";
+		this->hotkey_action_labels[16] = "TriggerBot";
+		this->hotkey_action_labels[17] = "Magnet Trigger";
+#else
+		this->hotkey_action_labels[15] = nullptr;
+		this->hotkey_action_labels[16] = nullptr;
+		this->hotkey_action_labels[17] = nullptr;
+#endif
 
 		this->header_crosshair = "Crosshair Overlay";
 		this->crosshair_enable = "Enable Crosshair";
@@ -630,7 +809,6 @@ public:
 		this->visuals_footstep_esp = "Footstep ESP";
 		this->visuals_footstep_color = "Footstep Color";
 		this->visuals_bomb_timer = "C4 Bomb Timer";
-		this->visuals_world_esp = "World ESP";
 		this->visuals_world_timers = "Projectile Timers";
 		this->visuals_world_smoke_timer = "Smoke Timer";
 		this->visuals_world_inferno_timer = "Inferno Timer";
@@ -659,7 +837,6 @@ public:
 		this->visuals_armor_text = "Armor Text";
 		this->visuals_bar_label_fontsize = "Label Font Size";
 		this->visuals_interpolation = "Position Interpolation";
-		this->visuals_bone_reliability = "Bone Reliability Check";
 
 		// Task 18: independent color labels
 		this->visuals_headdot_color = "Head Dot Color";
@@ -746,6 +923,83 @@ public:
 		this->tab_grenade = u8"\u6295\u63b7\u7269";
 		this->tab_hotkeys = u8"\u5feb\u6377\u952e";
 		this->tab_contact = u8"\u8054\u7cfb\u4f5c\u8005";
+#ifdef AIMBOT_ENABLED
+		this->tab_aimbot = u8"\u81ea\u7784";
+		this->aim_global = u8"\u5168\u5c40\u8bbe\u7f6e";
+		this->aim_hw_config = u8"\u786c\u4ef6\u914d\u7f6e";
+		this->aim_hw_type = u8"\u8bbe\u5907\u7c7b\u578b";
+		this->aim_hw_test = u8"\u6d4b\u8bd5\u8fde\u63a5/\u91cd\u8fde";
+		this->aim_hw_connected = u8"\u5df2\u8fde\u63a5";
+		this->aim_hw_not_connected = u8"\u672a\u8fde\u63a5";
+		this->aim_hw_ip = u8"IP \u5730\u5740";
+		this->aim_hw_port = u8"\u7aef\u53e3";
+		this->aim_hw_uuid = u8"UUID / MAC";
+		this->aim_hw_comport = u8"COM \u7aef\u53e3";
+		this->aim_hw_baudrate = u8"\u6ce2\u7279\u7387";
+		this->aim_aimbot = u8"AimBot";
+		this->aim_enable_aimbot = u8"\u542f\u7528 AimBot";
+		this->aim_hotkey = u8"\u70ed\u952e";
+		this->aim_fov = u8"FOV";
+		this->aim_smooth = u8"\u5e73\u6ed1";
+		this->aim_bone = u8"\u9aa8\u9abc";
+		this->aim_visual_check = u8"\u53ef\u89c1\u6027\u68c0\u67e5";
+		this->aim_bone_fallback = u8"\u90e8\u4f4d\u964d\u7ea7 (\u6f0f\u6253)";
+		this->aim_team_check = u8"\u961f\u4f0d\u68c0\u67e5";
+		this->aim_ignore_on_shot = u8"\u5f00\u706b\u65f6\u5ffd\u7565";
+		this->aim_spray = u8"\u81ea\u52a8\u538b\u67aa";
+		this->aim_enable_spray = u8"\u542f\u7528\u81ea\u52a8\u538b\u67aa";
+		this->aim_spray_strength = u8"\u538b\u67aa\u5f3a\u5ea6";
+		this->aim_spray_strength_tip = u8"\u63a8\u8350\u503c = 1.0 / \u4f60\u7684\u6e38\u620f\u7075\u654f\u5ea6\u3002\u542f\u7528\u540e\u81ea\u7784\u4f1a\u5728\u5f00\u706b\u65f6\u7ee7\u7eed\u8fd0\u884c\uff08\u538b\u67aa+\u81ea\u7784\u53e0\u52a0\uff09";
+		this->aim_spray_dpi = u8"\u9f20\u6807 DPI";
+		this->aim_spray_sensitivity = u8"\u6e38\u620f\u7075\u654f\u5ea6";
+		this->aim_spray_auto_calc = u8"\u81ea\u52a8\u8ba1\u7b97";
+		this->aim_spray_recommended = u8"\u63a8\u8350\u503c";
+		this->aim_spray_show_impact = u8"\u9884\u4f30\u843d\u70b9\u53ef\u89c6\u5316";
+		this->aim_autoshot = u8"\u81ea\u52a8\u5f00\u706b";
+		this->aim_enable_autoshot = u8"\u542f\u7528\u81ea\u52a8\u5f00\u706b";
+		this->aim_autoshot_threshold = u8"\u51c6\u661f\u9608\u503c";
+		this->aim_fov_circle = u8"FOV \u5706\u5708";
+		this->aim_show_fov_circle = u8"\u663e\u793a FOV \u5706\u5708";
+		this->aim_fov_circle_color = u8"\u5706\u5708\u989c\u8272";
+		this->aim_target_switch_delay = u8"\u76ee\u6807\u5207\u6362\u5ef6\u8fdf (ms)";
+		this->aim_prediction_time = u8"\u901f\u5ea6\u9884\u6d4b (ms)";
+		this->aim_per_weapon = u8"\u6309\u6b66\u5668\u7c7b\u578b\u7ec6\u5206";
+		this->aim_weapon_rifles = u8"\u6b65\u67aa";
+		this->aim_weapon_pistols = u8"\u624b\u67aa";
+		this->aim_weapon_snipers = u8"\u72d9\u51fb\u67aa";
+		this->aim_weapon_shotguns = u8"\u9730\u5f39\u67aa";
+		this->aim_weapon_smg = u8"\u51b2\u950b\u67aa";
+		this->aim_weapon_machinegun = u8"\u673a\u67aa";
+		this->aim_per_weapon_fov = u8"FOV";
+		this->aim_per_weapon_smooth = u8"\u5e73\u6ed1";
+		this->aim_triggerbot = u8"TriggerBot";
+		this->aim_enable_triggerbot = u8"\u542f\u7528 TriggerBot";
+		this->aim_hotkey_triggerbot = u8"\u81ea\u52a8\u6273\u673a\u70ed\u952e";
+		this->aim_mode = u8"\u6a21\u5f0f";
+		this->aim_mode_always = u8"\u59cb\u7ec8";
+		this->aim_mode_onkey = u8"\u6309\u952e";
+		this->aim_delay = u8"\u5ef6\u8fdf (ms)";
+		this->aim_jitter = u8"\u6296\u52a8 (ms)";
+		this->aim_hold_ms = u8"\u6309\u4f4f\u65f6\u957f (ms)";
+		this->aim_force_fire = u8"\u5f3a\u5236\u5f00\u706b";
+		this->aim_magnet = u8"\u78c1\u529b\u81ea\u7784";
+		this->aim_enable_magnet = u8"\u542f\u7528\u78c1\u529b\u81ea\u7784";
+		this->aim_hotkey_auto = u8"\u70ed\u952e (0 = \u81ea\u52a8)";
+		this->aim_magnet_fov = u8"\u78c1\u529b FOV";
+		this->aim_magnet_smooth = u8"\u78c1\u529b\u5e73\u6ed1";
+		this->aim_magnet_delay = u8"\u78c1\u529b\u5ef6\u8fdf (ms)";
+		this->aim_magnet_force_fire = u8"\u78c1\u529b\u5f3a\u5236\u5f00\u706b";
+		this->aim_mutex_disabled_hint = u8"\u5df2\u81ea\u52a8\u5173\u95ed: \u4e0e\u5df2\u5f00\u542f\u529f\u80fd\u4e92\u65a5";
+		this->aim_magnet_visual_check = u8"\u78c1\u529b\u53ef\u89c1\u6027\u68c0\u67e5";
+		this->aim_magnet_bone_fallback = u8"\u78c1\u529b\u90e8\u4f4d\u964d\u7ea7";
+		this->aim_magnet_switch_delay = u8"\u78c1\u529b\u76ee\u6807\u5207\u6362\u5ef6\u8fdf (ms)";
+		this->aim_triggerbot_team_check = u8"TriggerBot \u961f\u4f0d\u68c0\u67e5";
+		this->aim_presets = u8"\u9884\u8bbe";
+		this->aim_preset_safe = u8"\u5b89\u5168";
+		this->aim_preset_competitive = u8"\u7ade\u6280";
+		this->aim_preset_stealth = u8"\u9690\u853d";
+		this->aim_warning_high_risk = u8"\u9ad8\u5c01\u53f7\u98ce\u9669!";
+#endif
 
 		this->visuals_showbox = u8"\u663e\u793a\u900f\u89c6\u6846";
 		this->visuals_boxcolor = u8"\u6846\u989c\u8272";
@@ -764,7 +1018,6 @@ public:
 
 		this->utilities_teamcheck = u8"\u9690\u85cf\u53cb\u519b";
 		this->utilities_closehack = u8"\u5173\u95ed\u8f6f\u4ef6";
-		this->utilities_language = u8"\u9009\u62e9\u8bed\u8a00";
 		this->utilities_reloadhack = u8"\u91cd\u65b0\u8fde\u63a5";
 		this->utilities_help = u8"\u5e2e\u52a9";
 
@@ -786,9 +1039,7 @@ public:
 		this->grenade_showname = u8"\u663e\u793a\u540d\u79f0";
 		this->grenade_showbox = u8"\u663e\u793a\u65b9\u6846";
 		this->grenade_showline = u8"\u663e\u793a\u8fde\u7ebf";
-		this->grenade_autoaim = u8"\u81ea\u52a8\u7784\u51c6";
 		this->grenade_maxdistance = u8"\u6700\u5927\u8ddd\u79bb";
-		this->grenade_triggerdistance = u8"\u89e6\u53d1\u8ddd\u79bb";
 		this->grenade_boxsize = u8"\u65b9\u6846\u5927\u5c0f";
 		this->grenade_currentmap = u8"\u5f53\u524d\u5730\u56fe";
 		this->grenade_availablethrows = u8"\u53ef\u7528\u6295\u63b7\u70b9";
@@ -797,6 +1048,20 @@ public:
 		this->grenade_smoke = u8"\u70df\u96fe";
 		this->grenade_he = u8"\u624b\u96f7";
 		this->grenade_molotov = u8"\u71c3\u70e7";
+
+		// Aim crosshair
+		this->grenade_aim_header = u8"\u7784\u51c6\u51c6\u661f";
+		this->grenade_aim_showall = u8"\u8303\u56f4\u5185\u663e\u793a\u5168\u90e8\u51c6\u661f";
+		this->grenade_aim_showall_tip = u8"\u5f00\u542f\u540e\u6240\u6709\u8fdb\u5165\u89e6\u53d1\u8ddd\u79bb\u7684\u6295\u63b7\u70b9\u90fd\u663e\u793a\u51c6\u661f\uff1b\u5173\u95ed\u5219\u53ea\u663e\u793a\u6700\u8fd1\u4e00\u4e2a";
+		this->grenade_aim_indicatordist = u8"\u7784\u51c6\u89e6\u53d1\u8ddd\u79bb";
+		this->grenade_aim_style = u8"\u51c6\u661f\u5f62\u72b6";
+		this->grenade_aim_color = u8"\u51c6\u661f\u989c\u8272";
+		this->grenade_aim_size = u8"\u51c6\u661f\u5927\u5c0f";
+		this->grenade_aim_len = u8"\u5341\u5b57\u957f\u5ea6";
+		this->grenade_aim_gap = u8"\u4e2d\u5fc3\u95f4\u9699";
+		this->grenade_aim_thick = u8"\u7ebf\u6761\u7c97\u7ec6";
+		this->grenade_aim_maxcount = u8"\u540c\u65f6\u663e\u793a\u4e0a\u9650";
+		this->grenade_aim_styleselect[0] = u8"\u5706\u73af+\u5341\u5b57"; this->grenade_aim_styleselect[1] = u8"\u4ec5\u5341\u5b57"; this->grenade_aim_styleselect[2] = u8"\u4ec5\u5706\u73af"; this->grenade_aim_styleselect[3] = u8"\u4ec5\u5706\u70b9";
 
 		// Grenade Recording
 		this->grenade_record_hotkey = u8"\u8bb0\u5f55\u5feb\u6301\u952e";
@@ -834,19 +1099,13 @@ public:
 		this->visuals_bombcarrier = u8"\u643a\u5e26\u8005";
 		this->visuals_bombdropped = u8"\u5df2\u6389\u843d";
 
-		this->visuals_thickness = u8"\u7c97\u7ec6";
 		this->visuals_rounding = u8"\u5706\u89d2";
 		this->visuals_cornersize = u8"\u62d0\u89d2\u5927\u5c0f";
-		this->visuals_filled = u8"\u586b\u5145";
-		this->visuals_fillalpha = u8"\u586b\u5145\u900f\u660e\u5ea6";
 		this->visuals_headdot = u8"\u5934\u90e8\u5706\u70b9";
 		this->visuals_dotsize = u8"\u5706\u70b9\u5927\u5c0f";
 		this->visuals_length = u8"\u957f\u5ea6";
-		this->visuals_barwidth = u8"\u8840\u6761\u5bbd\u5ea6";
 		this->visuals_armorbar = u8"\u62a4\u7532\u6761";
-		this->visuals_size = u8"\u5927\u5c0f";
 		this->visuals_origin = u8"\u8d77\u70b9";
-		this->visuals_width = u8"\u5bbd\u5ea6";
 
 		this->armorbar_typeselect[0] = u8"\u53f3\u4fa7"; this->armorbar_typeselect[1] = u8"\u4e0a\u65b9";
 		this->snapline_originselect[0] = u8"\u4e0a\u65b9"; this->snapline_originselect[1] = u8"\u4e2d\u95f4"; this->snapline_originselect[2] = u8"\u4e0b\u65b9";
@@ -869,13 +1128,18 @@ public:
 		this->safezone_skip_headdot = u8"\u8df3\u8fc7\u5934\u90e8\u5706\u70b9";
 		this->safezone_skip_distance = u8"\u8df3\u8fc7\u8ddd\u79bb";
 
-		this->visuals_spectatorlist = u8"\u663e\u793a\u89c2\u4f17\u5217\u8868";
 		this->settings_perfmonitor = u8"\u6027\u80fd\u76d1\u63a7";
 
 		this->settings_menuhotkey = u8"\u83dc\u5355\u5feb\u6301\u952e";
 
 		this->settings_debuglog = u8"\u8c03\u8bd5\u65e5\u5fd7";
 		this->settings_debuglog_tip = u8"\u542f\u7528\u8be6\u7ec6\u7684 TRACE/DEBUG \u65e5\u5fd7\u8f93\u51fa\u7528\u4e8e\u95ee\u9898\u5b9a\u4f4d\uff08\u5f71\u54cd\u6027\u80fd\uff09";
+
+		this->header_player_health = u8"\u6570\u636e\u5065\u5eb7";
+		this->settings_player_count_check = u8"\u6e38\u620f\u4eba\u6570\u68c0\u67e5";
+		this->settings_player_count_check_tip = u8"\u81ea\u52a8\u68c0\u6d4b DMA \u8bfb\u53d6\u5f02\u5e38\u5bfc\u81f4\u73a9\u5bb6\u6d88\u5931\u3002\u5f53\u8bfb\u53d6\u5230\u7684\u73a9\u5bb6\u6570\u5c11\u4e8e\u9884\u671f\u65f6\uff0c\u7cfb\u7edf\u4f1a\u81ea\u52a8\u5237\u65b0 DMA \u7f13\u5b58\u6062\u590d\u4e22\u5931\u7684\u73a9\u5bb6\u3002";
+		this->settings_expected_player_count = u8"\u9884\u671f\u6e38\u620f\u4eba\u6570";
+		this->settings_expected_player_count_tip = u8"\u6e38\u620f\u4e2d\u7684\u603b\u4eba\u6570\uff085v5 \u9ed8\u8ba410\u4eba\uff09\u3002\u7cfb\u7edf\u7528\u6b64\u503c\u68c0\u6d4b\u8bfb\u53d6\u5f02\u5e38\uff0c\u5176\u4ed6\u6a21\u5f0f\u8bf7\u81ea\u884c\u8c03\u6574\uff08\u5982\u6b7b\u659716\u4eba\uff09\u3002";
 
 		this->settings_vsync = u8"\u5782\u76f4\u540c\u6b65";
 		this->settings_maxfps = u8"\u6700\u5927\u5e27\u7387";
@@ -934,7 +1198,6 @@ public:
 		this->webradar_local_access = u8"\u5c40\u57df\u7f51\u8bbf\u95ee";
 		this->webradar_clients = u8"\u8fde\u63a5\u6570";
 		this->webradar_copy_url = u8"\u590d\u5236";
-		this->webradar_copied = u8"\u5df2\u590d\u5236!";
 		this->webradar_not_running = u8"\u670d\u52a1\u5668\u672a\u8fd0\u884c";
 		this->webradar_password_enable = u8"\u542f\u7528\u5bc6\u7801";
 		this->webradar_password = u8"\u5bc6\u7801";
@@ -958,12 +1221,20 @@ public:
 		this->hotkey_action_labels[7] = u8"\u6307\u793a\u7ebf";
 		this->hotkey_action_labels[8] = u8"C4 ESP";
 		this->hotkey_action_labels[9] = u8"\u6295\u63b7\u7269 ESP";
-		this->hotkey_action_labels[10] = u8"\u89c2\u4f17\u5217\u8868";
-		this->hotkey_action_labels[11] = u8"\u9690\u85cf\u53cb\u519b";
-		this->hotkey_action_labels[12] = u8"\u7f51\u9875\u96f7\u8fbe";
-		this->hotkey_action_labels[13] = u8"\u51c6\u661f\u5b89\u5168\u533a";
-		this->hotkey_action_labels[14] = u8"\u51c6\u661f\u8986\u76d6\u5c42";
-		this->hotkey_action_labels[15] = u8"\u91cd\u65b0\u8fde\u63a5";
+		this->hotkey_action_labels[10] = u8"\u9690\u85cf\u53cb\u519b";
+		this->hotkey_action_labels[11] = u8"\u7f51\u9875\u96f7\u8fbe";
+		this->hotkey_action_labels[12] = u8"\u51c6\u661f\u5b89\u5168\u533a";
+		this->hotkey_action_labels[13] = u8"\u51c6\u661f\u8986\u76d6\u5c42";
+		this->hotkey_action_labels[14] = u8"\u91cd\u65b0\u8fde\u63a5";
+#ifdef AIMBOT_ENABLED
+		this->hotkey_action_labels[15] = u8"\u81ea\u7784";
+		this->hotkey_action_labels[16] = u8"\u81ea\u52a8\u5f00\u706b";
+		this->hotkey_action_labels[17] = u8"\u78c1\u529b\u677f\u673a";
+#else
+		this->hotkey_action_labels[15] = nullptr;
+		this->hotkey_action_labels[16] = nullptr;
+		this->hotkey_action_labels[17] = nullptr;
+#endif
 
 		this->header_crosshair = u8"\u51c6\u661f\u8986\u76d6\u5c42";
 		this->crosshair_enable = u8"\u542f\u7528\u51c6\u661f";
@@ -993,7 +1264,6 @@ public:
 		this->visuals_footstep_esp = u8"\u811a\u6b65 ESP";
 		this->visuals_footstep_color = u8"\u811a\u6b65\u989c\u8272";
 		this->visuals_bomb_timer = u8"C4 \u5012\u8ba1\u65f6\u7a97\u53e3";
-		this->visuals_world_esp = u8"\u4e16\u754c ESP";
 		this->visuals_world_timers = u8"\u6295\u63b7\u7269\u8ba1\u65f6\u5668";
 		this->visuals_world_smoke_timer = u8"\u70df\u96fe\u8ba1\u65f6\u5668";
 		this->visuals_world_inferno_timer = u8"\u706b\u7130\u8ba1\u65f6\u5668";
@@ -1022,7 +1292,6 @@ public:
 		this->visuals_armor_text = u8"\u62a4\u7532\u6570\u503c";
 		this->visuals_bar_label_fontsize = u8"\u6807\u7b7e\u5b57\u53f7";
 		this->visuals_interpolation = u8"\u4f4d\u7f6e\u63d2\u503c\u5e73\u6ed1";
-		this->visuals_bone_reliability = u8"\u9aa8\u9abc\u53ef\u9760\u6027\u68c0\u67e5";
 
 		// Task 18: independent color labels
 		this->visuals_headdot_color = u8"\u5934\u90e8\u5706\u70b9\u989c\u8272";

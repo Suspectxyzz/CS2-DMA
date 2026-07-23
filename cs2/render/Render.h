@@ -25,7 +25,10 @@ namespace Render
 
 
 
-	void DrawBone(const CEntity& Entity, ImColor Color, float Thickness);
+	void DrawBone(const CEntity& Entity, ImColor Color, float Thickness,
+	              const bool* boneVisibility = nullptr,
+	              ImColor visColor = ImColor(0, 255, 0, 255),
+	              ImColor hidColor = ImColor(255, 0, 0, 255));
 	void ShowLosLine(const CEntity& Entity, const float Length, ImColor Color, float Thickness, const float Matrix[4][4]);
 	ImVec4 Get2DBoneRect(const CEntity& Entity);
 
@@ -58,7 +61,6 @@ private:
 	void DrawCornerBox(ImVec4 Rect, ImColor Color, float Thickness, float CornerFrac);
 	void DrawHeadDot(const CEntity& Entity, ImColor Color, float Radius);
 	void DrawArmorBar(int Armor, ImVec4 Rect, ImColor Color, float BarWidth, int Type);
-	void DrawBoxFill(ImVec4 Rect, ImColor Color, float FillAlpha);
 	void LineToEnemyEx(ImVec4 Rect, ImColor Color, float Thickness, int Origin);
 	void DrawBombESP(const BombData& bomb, const float matrix[4][4]);
 	void DrawProjectileESP(const std::vector<GrenadeProjectile>& projectiles, const float matrix[4][4], const Vec3& localPos);
@@ -150,11 +152,4 @@ private:
 	// uses the ProjectileESP table (all 5 types, Decoy=0s/no timer).
 	bool ComputeProjectileTimer(const GrenadeProjectile& proj, bool worldMode,
 	                            const char** label, float* maxDuration, float* remaining);
-
-	// ESP Preview: renders a mock player silhouette showing the current ESP
-	// configuration in its own ImGui window. Toggle via Render::EspPreviewOpen.
-	// Single-color mode draws 1 player (BoxColor); tri-color mode draws 3
-	// (Default/Visible/Hidden) when VisibilityColoring is enabled.
-	inline bool EspPreviewOpen = false;
-	void RenderEspPreview();
 }

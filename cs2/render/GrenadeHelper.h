@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 #include <vector>
@@ -73,6 +73,27 @@ namespace GrenadeHelper
     inline int ThrowCounter = 0;
     inline bool NeedSave = false;
 
+    // Aim crosshair style presets
+    enum AimCrosshairStyle {
+        RingCross = 0,   // Ring + Cross
+        CrossOnly = 1,   // Cross only
+        RingOnly  = 2,   // Ring only
+        DotOnly   = 3    // Dot only
+    };
+
+    // Aim crosshair customization
+    inline int   CrosshairStyle       = RingCross;
+    inline float CrosshairColorR      = 255.0f;
+    inline float CrosshairColorG      = 0.0f;
+    inline float CrosshairColorB      = 0.0f;
+    inline float CrosshairColorA      = 240.0f;
+    inline float CrosshairSize        = 24.0f;   // Outer ring radius
+    inline float CrosshairLen         = 20.0f;   // Crosshair arm length
+    inline float CrosshairGap         = 4.0f;    // Center gap
+    inline float CrosshairThickness   = 2.0f;    // Line thickness
+    inline bool  ShowAllAimInDistance = true;    // Show all aim crosshairs in range (false = nearest only)
+    inline int   MaxSimultaneousAims  = 5;       // Cap simultaneous aim crosshairs
+
     // Data storage
     inline std::map<std::string, MapData> MapsData;
     inline std::string CurrentMap;
@@ -112,6 +133,7 @@ namespace GrenadeHelper
     Vec3 AngleToDirection(float pitch, float yaw);
     bool DirectionToScreen(const Vec3& dir, Vec2& screenPos);
     void DrawDirectionArrow(ImDrawList* drawList, Vec2 screenCenter, Vec2 targetScreen, ImColor color, float distance);
+    void DrawAimCrosshair(ImDrawList* drawList, Vec2 aimScreen, float screenDistFromCenter);
     void DrawThrowPos(const ThrowPos& t, const CEntity& LocalPlayer, ImDrawList* drawList);
     const char* GetGrenadeTypeName(int type);
     const char* GetStyleName(int style);

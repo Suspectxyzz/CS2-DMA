@@ -5,7 +5,7 @@
 #include <atomic>
 
 // Current software version (loaded from data/version.json at runtime)
-inline std::string PROJECT_VERSION = "1.2.0";         // fallback if version.json missing
+inline std::string PROJECT_VERSION = "1.4.5";         // fallback if version.json missing
 
 enum class AppState {
 	DMA_INITIALIZING,
