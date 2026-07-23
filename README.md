@@ -15,6 +15,8 @@ An external CS2 (Counter-Strike 2) tool built with C++, using DMA (Direct Memory
 > ⭐ If you like this project, please give it a Star to support the author's continued updates!
 > Join QQ group: 965428002 for the latest updates and help.
 
+> **Full Version** (includes AimBot, TriggerBot, SprayControl, etc., via KMBox hardware): [Purchase Now](https://shop.95fk.net/shop/OJ3QCIOK)
+
 ---
 
 ## Features
@@ -210,9 +212,9 @@ After each CS2 update, game offsets may become invalid, causing ESP to not displ
 
 ---
 
-## Advanced Features (Not Open-Sourced)
+## Full Version
 
-The open-source version is read-only DMA and does not include any write or aimbot functionality. The following advanced features are implemented via KMBox and similar hardware devices and are **not open-sourced** - only feature descriptions are provided:
+The open-source version is read-only DMA. The following features are included in the **Full Version** (implemented via KMBox and similar hardware, not open-sourced) - feature descriptions only:
 
 - **AimBot** - FOV circle / smoothing / bone selection (Head/Neck/Chest/Pelvis) / visibility check / bone fallback / target switch delay / 6 weapon-class specific configs
 - **TriggerBot** - Auto-fire (always/hold mode, delay, jitter, hold duration)
@@ -223,7 +225,9 @@ The open-source version is read-only DMA and does not include any write or aimbo
 - **Preset System** - Safe / Competitive / Stealth one-click presets
 - **FOV Circle & Predicted Landing Point On-Screen Visualization**
 
-> To get the advanced version, please join QQ group **965428002**.
+> **Get the Full Version**: [Purchase Now](https://shop.95fk.net/shop/OJ3QCIOK)
+>
+> For questions, join QQ group **965428002**.
 
 ---
 

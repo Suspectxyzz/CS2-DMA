@@ -92,6 +92,8 @@
         .btn-ghost:hover{background:rgba(255,255,255,.07);border-color:var(--border-h);transform:translateY(-2px)}
         .btn-star-hero{background:linear-gradient(135deg,rgba(124,92,252,.12),rgba(0,255,157,.08));color:var(--accent);border:1px solid rgba(0,255,157,.18)}
         .btn-star-hero:hover{background:linear-gradient(135deg,rgba(124,92,252,.22),rgba(0,255,157,.18));border-color:rgba(0,255,157,.35);box-shadow:0 0 30px rgba(0,255,157,.12);transform:translateY(-2px)}
+        .btn-pro{background:linear-gradient(135deg,#7c5cfc,#5a3fd6);color:#fff;box-shadow:0 0 30px rgba(124,92,252,.3),inset 0 1px 0 rgba(255,255,255,.2)}
+        .btn-pro:hover{box-shadow:0 0 50px rgba(124,92,252,.5);transform:translateY(-2px)}
 
         .hero-meta{position:relative;z-index:1;display:flex;gap:1rem;margin-top:3rem;flex-wrap:wrap;justify-content:center}
         .meta-chip{display:inline-flex;align-items:center;gap:.5rem;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:.45rem .9rem;font-size:.78rem;color:var(--text2);transition:all .2s}
@@ -153,9 +155,12 @@
             background:rgba(124,92,252,.1);border:1px solid rgba(124,92,252,.2);position:relative;z-index:1}
         .adv-card h3{font-size:.95rem;font-weight:700;margin-bottom:.4rem;position:relative;z-index:1;color:#c8b8ff}
         .adv-card p{color:var(--text2);font-size:.82rem;line-height:1.6;position:relative;z-index:1}
-        .adv-note{margin-top:2.5rem;text-align:center;background:rgba(124,92,252,.06);border:1px solid rgba(124,92,252,.18);border-radius:var(--r);padding:1.25rem 1.5rem;font-size:.88rem;color:#b8a5ff}
+        .adv-note{margin-top:2.5rem;text-align:center;background:rgba(124,92,252,.06);border:1px solid rgba(124,92,252,.18);border-radius:var(--r);padding:1.5rem;font-size:.88rem;color:#b8a5ff}
         .adv-note a{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:2px}
         .adv-note .qq{font-family:'JetBrains Mono',monospace;color:#fff;font-weight:700}
+        .adv-buy{display:inline-flex;align-items:center;gap:.5rem;margin:.6rem 0 .4rem;padding:.7rem 1.5rem;border-radius:10px;font-size:.92rem;font-weight:700;background:var(--accent);color:#0a0a0a;text-decoration:none;transition:all .3s}
+        .adv-buy:hover{background:#33ffb1;transform:translateY(-2px);box-shadow:0 0 30px rgba(0,255,157,.3)}
+        .adv-sub{font-size:.78rem;color:var(--text3);margin-top:.4rem}
 
         /* ── SHOWCASE ── */
         .showcase-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem}
@@ -319,6 +324,10 @@
     </p>
 
     <div class="hero-actions reveal">
+        <a class="btn btn-pro" href="https://shop.95fk.net/shop/OJ3QCIOK" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <span data-i18n="hero_pro">Full Version</span>
+        </a>
         <a class="btn btn-star-hero" href="https://github.com/chao-shushu/CS2-DMA" target="_blank">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <span data-i18n="hero_star">Star on GitHub</span>
@@ -751,10 +760,10 @@
     // ── i18n ──
     const T = {
         en: {
-            nav_features:'Features', nav_screenshots:'Screenshots', nav_architecture:'Architecture', nav_advanced:'Advanced', nav_quickstart:'Quick Start', nav_author:'Author',
+            nav_features:'Features', nav_screenshots:'Screenshots', nav_architecture:'Architecture', nav_advanced:'Full Version', nav_quickstart:'Quick Start', nav_author:'Author',
             hero_badge:'Free & Open Source \u2022 Actively Maintained \u2022 Zero Data Upload', hero_title:'External ESP Tool',
             hero_desc:'A free, read-only external CS2 tool built with C++, using DMA hardware via FPGA devices. ESP, Web Radar, Grenade Helper \u2014 zero data upload, no telemetry. Actively maintained with continuous updates and bug fixes.',
-            hero_star:'Star on GitHub', hero_download:'Download', hero_source:'Source Code',
+            hero_star:'Star on GitHub', hero_download:'Download', hero_source:'Source Code', hero_pro:'Full Version',
             rel_ver:'Version', rel_date:'Updated', rel_dl:'Downloads',
             beta_banner:'A new beta version is available!', beta_link:'View Release',
             feat_tag:'Features', feat_title:'Everything You Need',
@@ -779,15 +788,15 @@
             arch_desc:'Clean separation of concerns with lock-free rendering and sub-frame data latency.',
             st1:'Language Standard', st2:'Camera Worker', st3:'Frame Data Latency', st4:'Redundant Read Reduction',
             arch_pre: ARCH_EN,
-            adv_tag:'Advanced', adv_title:'Advanced Features (Not Open-Sourced)',
-            adv_desc:'The open-source version is read-only DMA. The following advanced features are implemented via KMBox and similar hardware and are not open-sourced.',
+            adv_tag:'Full Version', adv_title:'Full Version',
+            adv_desc:'The open-source version is read-only DMA. The following features are included in the Full Version (via KMBox hardware, not open-sourced).',
             a1t:'AimBot', a1d:'FOV circle, smoothing, bone selection (Head/Neck/Chest/Pelvis), visibility check, bone fallback, 6 weapon-class configs.',
             a2t:'TriggerBot', a2d:'Auto-fire with always/hold mode, delay, jitter, and hold duration control.',
             a3t:'Magnet TriggerBot', a3d:'Magnetic assist \u2014 pure auto or hold, FOV, smoothing, 6 weapon-class specific configs.',
             a4t:'SprayControl', a4d:'Auto recoil control with predicted landing-point visualization. Intensity auto-calculated from sensitivity.',
             a5t:'Hardware Support', a5d:'KMBox NET / KMBox NET+ / KMBox B Pro / MAKCU device integration.',
             a6t:'Preset System', a6d:'Safe / Competitive / Stealth one-click presets, plus velocity prediction and FOV circle visualization.',
-            adv_note:'To get the advanced version, please join QQ group <span class="qq">965428002</span>. <a href="https://github.com/chao-shushu/CS2-DMA" target="_blank">View on GitHub \u2192</a>',
+            adv_note:'<div style="font-size:.96rem;margin-bottom:.25rem">Get the Full Version:</div><a class="adv-buy" href="https://shop.95fk.net/shop/OJ3QCIOK" target="_blank">Purchase Now \u2192</a><div class="adv-sub">For questions, join QQ group <span class="qq">965428002</span></div>',
             qs_tag:'Quick Start', qs_title:'Get Started in Minutes',
             qs_desc:'Download the release package and start using immediately \u2014 no build required.',
             qs1t:'Download the Latest Release', qs1d:'Go to the <a href="https://github.com/chao-shushu/CS2-DMA/releases" target="_blank">Releases</a> page and download CS2-DMA-Release.zip.',
@@ -801,10 +810,10 @@
             disclaimer:'This project is for educational and research purposes only. The authors are not responsible for any misuse. Do not use in real competitive matches. Use at your own risk.'
         },
         zh: {
-            nav_features:'\u529f\u80fd', nav_screenshots:'\u622a\u56fe', nav_architecture:'\u67b6\u6784', nav_advanced:'\u9ad8\u7ea7\u529f\u80fd', nav_quickstart:'\u5feb\u901f\u5f00\u59cb', nav_author:'\u4f5c\u8005\u4e3b\u9875',
+            nav_features:'\u529f\u80fd', nav_screenshots:'\u622a\u56fe', nav_architecture:'\u67b6\u6784', nav_advanced:'\u5168\u529f\u80fd\u7248\u672c', nav_quickstart:'\u5feb\u901f\u5f00\u59cb', nav_author:'\u4f5c\u8005\u4e3b\u9875',
             hero_badge:'\u514d\u8d39\u5f00\u6e90 \u2022 \u6301\u7eed\u66f4\u65b0 \u2022 \u96f6\u6570\u636e\u4e0a\u4f20', hero_title:'\u5916\u90e8 ESP \u5de5\u5177',
             hero_desc:'\u514d\u8d39\u3001\u53ea\u8bfb\u7684 CS2 \u5916\u90e8\u5de5\u5177\uff0c\u57fa\u4e8e C++ + FPGA DMA \u786c\u4ef6\u3002ESP\u3001\u7f51\u9875\u96f7\u8fbe\u3001\u6295\u63b7\u7269\u52a9\u624b \u2014\u2014 \u96f6\u6570\u636e\u4e0a\u4f20\u3001\u65e0\u9065\u6d4b\u3002\u6301\u7eed\u66f4\u65b0\u4e0e Bug \u4fee\u590d\uff0c\u6ce8\u91cd\u9690\u79c1\u4fdd\u62a4\u3002',
-            hero_star:'\u5728 GitHub \u4e0a Star', hero_download:'\u4e0b\u8f7d', hero_source:'\u67e5\u770b\u6e90\u7801',
+            hero_star:'\u5728 GitHub \u4e0a Star', hero_download:'\u4e0b\u8f7d', hero_source:'\u67e5\u770b\u6e90\u7801', hero_pro:'\u5168\u529f\u80fd\u7248\u672c',
             rel_ver:'\u7248\u672c', rel_date:'\u66f4\u65b0\u65e5\u671f', rel_dl:'\u4e0b\u8f7d\u6b21\u6570',
             beta_banner:'\u6709\u65b0\u7684\u6d4b\u8bd5\u7248\u672c\uff01', beta_link:'\u67e5\u770b\u53d1\u5e03',
             feat_tag:'\u529f\u80fd\u7279\u6027', feat_title:'\u5168\u529f\u80fd\u8986\u76d6',
@@ -829,15 +838,15 @@
             arch_desc:'\u6e05\u6670\u7684\u804c\u8d23\u5206\u79bb\uff0c\u65e0\u9501\u6e32\u67d3\uff0c\u6570\u636e\u5ef6\u8fdf\u4f4e\u4e8e 1 \u5e27\u3002',
             st1:'\u8bed\u8a00\u6807\u51c6', st2:'Camera \u7ebf\u7a0b', st3:'\u5e27\u6570\u636e\u5ef6\u8fdf', st4:'\u5197\u4f59\u8bfb\u53d6\u51cf\u5c11',
             arch_pre: ARCH_ZH,
-            adv_tag:'\u9ad8\u7ea7\u529f\u80fd', adv_title:'\u9ad8\u7ea7\u529f\u80fd\uff08\u4e0d\u5f00\u6e90\uff09',
-            adv_desc:'\u5f00\u6e90\u7248\u672c\u4e3a\u7eaf\u53ea\u8bfb DMA\u3002\u4ee5\u4e0b\u9ad8\u7ea7\u529f\u80fd\u57fa\u4e8e KMBox \u7b49\u786c\u4ef6\u5b9e\u73b0\uff0c\u4e0d\u5f00\u6e90\u3002',
+            adv_tag:'\u5168\u529f\u80fd\u7248\u672c', adv_title:'\u5168\u529f\u80fd\u7248\u672c',
+            adv_desc:'\u5f00\u6e90\u7248\u672c\u4e3a\u7eaf\u53ea\u8bfb DMA\u3002\u4ee5\u4e0b\u529f\u80fd\u5305\u542b\u5728\u5168\u529f\u80fd\u7248\u672c\u4e2d\uff08\u57fa\u4e8e KMBox \u786c\u4ef6\uff0c\u4e0d\u5f00\u6e90\uff09\u3002',
             a1t:'\u81ea\u7784 AimBot', a1d:'FOV \u5708\u3001\u5e73\u6ed1\u3001\u9aa8\u9abc\u9009\u62e9\uff08\u5934/\u9888/\u80f8/\u76c6\u9aa8\uff09\u3001\u53ef\u89c1\u6027\u68c0\u67e5\u3001\u90e8\u4f4d\u964d\u7ea7\u30016 \u7c7b\u6b66\u5668\u7ec6\u5206\u53c2\u6570\u3002',
             a2t:'\u81ea\u52a8\u5f00\u706b TriggerBot', a2d:'\u81ea\u52a8\u5f00\u706b\uff0c\u652f\u6301\u59cb\u7ec8/\u6309\u952e\u6a21\u5f0f\u3001\u5ef6\u8fdf\u3001\u6296\u52a8\u3001\u6309\u4f4f\u65f6\u957f\u3002',
             a3t:'\u78c1\u529b\u5438\u9644 Magnet', a3d:'\u78c1\u529b\u5438\u9644 \u2014\u2014 \u7eaf\u81ea\u52a8\u6216\u6309\u952e\u3001FOV\u3001\u5e73\u6ed1\u30016 \u7c7b\u6b66\u5668\u7ec6\u5206\u53c2\u6570\u3002',
             a4t:'\u81ea\u52a8\u538b\u67aa SprayControl', a4d:'\u81ea\u52a8\u538b\u67aa\uff0c\u9884\u4f30\u843d\u70b9\u53ef\u89c6\u5316\uff0c\u5f3a\u5ea6\u6309\u7075\u654f\u5ea6\u81ea\u52a8\u8ba1\u7b97\u3002',
             a5t:'\u786c\u4ef6\u652f\u6301', a5d:'\u652f\u6301 KMBox NET / KMBox NET+ / KMBox B Pro / MAKCU \u8bbe\u5907\u96c6\u6210\u3002',
             a6t:'\u9884\u8bbe\u7cfb\u7edf', a6d:'\u5b89\u5168 / \u7ade\u6280 / \u9690\u853d \u4e00\u952e\u9884\u8bbe\uff0c\u53ca\u901f\u5ea6\u9884\u6d4b\u4e0e FOV \u5708\u53ef\u89c6\u5316\u3002',
-            adv_note:'\u83b7\u53d6\u9ad8\u7ea7\u7248\u672c\uff0c\u8bf7\u52a0\u5165 QQ \u7fa4 <span class="qq">965428002</span>\u3002 <a href="https://github.com/chao-shushu/CS2-DMA" target="_blank">\u5728 GitHub \u67e5\u770b \u2192</a>',
+            adv_note:'<div style="font-size:.96rem;margin-bottom:.25rem">\u83b7\u53d6\u5168\u529f\u80fd\u7248\u672c\uff1a</div><a class="adv-buy" href="https://shop.95fk.net/shop/OJ3QCIOK" target="_blank">\u7acb\u5373\u8d2d\u4e70 \u2192</a><div class="adv-sub">\u5982\u9700\u54a8\u8be2\uff0c\u8bf7\u52a0\u5165 QQ \u7fa4 <span class="qq">965428002</span></div>',
             qs_tag:'\u5feb\u901f\u5f00\u59cb', qs_title:'\u51e0\u5206\u949f\u5373\u53ef\u4e0a\u624b',
             qs_desc:'\u4e0b\u8f7d Release \u5305\u5373\u53ef\u76f4\u63a5\u4f7f\u7528\uff0c\u65e0\u9700\u7f16\u8bd1\u3002',
             qs1t:'\u4e0b\u8f7d\u6700\u65b0\u7248\u672c', qs1d:'\u524d\u5f80 <a href="https://github.com/chao-shushu/CS2-DMA/releases" target="_blank">Releases</a> \u9875\u9762\u4e0b\u8f7d CS2-DMA-Release.zip\u3002',
