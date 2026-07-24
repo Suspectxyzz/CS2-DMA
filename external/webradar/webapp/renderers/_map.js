@@ -103,13 +103,22 @@ document.addEventListener("configchange", function(event) {
 	}
 })
 
-// +90 雷达旋转
+// Rotire hartă: 0 → 90 → 180 → 270 → 0 (fiecare click +90°)
+function getRotateDegrees() {
+	let v = global.config && global.config.radar && global.config.radar.rotate90
+	// compat: vechi boolean true/false din localStorage
+	if (v === true) return 90
+	if (v === false || v == null) return 0
+	let deg = Number(v) || 0
+	return ((deg % 360) + 360) % 360
+}
+
 function updateRotate90() {
 	let container = document.getElementById("container")
 	if (!container) return
-	let rotate90 = !!(global.config && global.config.radar && global.config.radar.rotate90)
-	if (rotate90) {
-		container.style.transform = "rotate(90deg)"
+	let deg = getRotateDegrees()
+	if (deg) {
+		container.style.transform = "rotate(" + deg + "deg)"
 		container.style.transformOrigin = "center center"
 	} else {
 		container.style.transform = ""
@@ -117,13 +126,13 @@ function updateRotate90() {
 	}
 }
 
-// 按钮点击切换 +90 旋转
+// Buton: fiecare click +90° (4 poziții)
 document.addEventListener("DOMContentLoaded", function() {
 	let btn = document.getElementById("rotate90-toggle")
 	if (btn) {
 		btn.addEventListener("click", function() {
-			let current = !!(global.config && global.config.radar && global.config.radar.rotate90)
-			applySetting("radar.rotate90", !current)
+			let next = (getRotateDegrees() + 90) % 360
+			applySetting("radar.rotate90", next)
 		})
 	}
 })
