@@ -28,14 +28,12 @@ socket.element.addEventListener("players", event => {
 		let playerLabel = global.playerLabels[player.num]
 		let classes = [player.team]
 
-		// CS2 游戏内玩家颜色 (color0-5)，覆盖队伍默认色
-		if (typeof player.color === "number" && player.color >= 0 && player.color <= 5) {
-			classes.push("color" + player.color)
-		}
-
-		// 敌方玩家外部红圈，不覆盖内部填充色
-		if (localTeam && player.team && player.team !== localTeam) {
+		// Inamici: doar clasa enemy (fill roșu din CSS). Aliați: culoare CS2 color0-5
+		let isEnemy = localTeam && player.team && player.team !== localTeam
+		if (isEnemy) {
 			classes.push("enemy")
+		} else if (typeof player.color === "number" && player.color >= 0 && player.color <= 5) {
+			classes.push("color" + player.color)
 		}
 
 		// Mark dead players with a cross (防抖：连续2帧 health<=0 才标记死亡)
