@@ -107,8 +107,9 @@ div.dot.color3 { background: #ff8200; }
 div.dot.color4 { background: #a647c7; }
 div.dot.color5 { background: #ffffff; }
 
-/* 敌方玩家外部红圈，不覆盖内部填充色 */
+/* Inamici: fill roșu + cerc (suprascrie CT/T) */
 div.dot.enemy {
+	background: #ff3030;
 	box-shadow: 0 0 0 1.2vmin rgba(255, 50, 50, 0.95), 0 0 1.6vmin .8vmin rgba(0, 0, 0, .2);
 }
 
